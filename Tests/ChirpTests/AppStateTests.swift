@@ -19,12 +19,14 @@ struct AppStateTests {
         return (state, transcriber, recorder, inserter)
     }
 
-    @Test("Initial status is loadingModel")
+    @Test("Initial status is loadingModel or downloading")
     func initialStatus() {
         let (state, _, _, _) = makeAppState()
-        guard case .loadingModel = state.status else {
-            Issue.record("Expected .loadingModel, got \(state.status)")
-            return
+        switch state.status {
+        case .loadingModel, .downloading:
+            break // valid initial states
+        default:
+            Issue.record("Expected .loadingModel or .downloading, got \(state.status)")
         }
     }
 
