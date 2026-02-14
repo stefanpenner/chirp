@@ -5,20 +5,20 @@ import Foundation
 let packageDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
 
 let package = Package(
-    name: "Yodel",
+    name: "Chirp",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "Yodel", targets: ["Yodel"]),
+        .executable(name: "Chirp", targets: ["Chirp"]),
     ],
     dependencies: [
         .package(url: "https://github.com/soffes/HotKey", from: "0.2.1"),
     ],
     targets: [
         .executableTarget(
-            name: "Yodel",
+            name: "Chirp",
             dependencies: ["HotKey", "CSherpaOnnx"],
-            path: "Sources/Yodel",
-            exclude: ["Info.plist", "Yodel.entitlements"],
+            path: "Sources/Chirp",
+            exclude: ["Info.plist", "Chirp.entitlements"],
             swiftSettings: [
                 .swiftLanguageMode(.v5),
             ],

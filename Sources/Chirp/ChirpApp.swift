@@ -31,11 +31,11 @@ final class AppState: ObservableObject {
     private func initializeTranscriber() {
         guard let modelDir = findModelDir() else {
             print("Warning: Model directory not found. Run 'make setup' to download the model.")
-            print("  Set YODEL_MODEL_DIR env var or place models in the working directory.")
+            print("  Set CHIRP_MODEL_DIR env var or place models in the working directory.")
             return
         }
 
-        NSLog("Yodel: Loading model from: %@", modelDir)
+        NSLog("Chirp: Loading model from: %@", modelDir)
         Task.detached { [weak self] in
             guard let self else { return }
             let ready = self.transcriber.initialize(modelDir: modelDir)
@@ -50,7 +50,7 @@ final class AppState: ObservableObject {
 
     private func findModelDir() -> String? {
         // Check environment variable first
-        if let envDir = ProcessInfo.processInfo.environment["YODEL_MODEL_DIR"],
+        if let envDir = ProcessInfo.processInfo.environment["CHIRP_MODEL_DIR"],
            FileManager.default.fileExists(atPath: envDir + "/encoder.int8.onnx") {
             return envDir
         }
@@ -126,12 +126,12 @@ final class AppState: ObservableObject {
 }
 
 @main
-struct YodelApp: App {
+struct ChirpApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
 
     var body: some Scene {
-        MenuBarExtra("Yodel", systemImage: "mic.fill") {
+        MenuBarExtra("Chirp", systemImage: "mic.fill") {
             if !appState.isTranscriberReady {
                 Text("Loading model...")
                     .font(.caption)
@@ -155,7 +155,7 @@ struct YodelApp: App {
 
             Divider()
 
-            Button("Quit Yodel") {
+            Button("Quit Chirp") {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q")

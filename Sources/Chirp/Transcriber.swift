@@ -74,11 +74,11 @@ final class Transcriber: @unchecked Sendable {
         recognizer = SherpaOnnxCreateOfflineRecognizer(&config)
 
         if recognizer == nil {
-            NSLog("Yodel: Failed to create offline recognizer")
+            NSLog("Chirp: Failed to create offline recognizer")
             return false
         }
 
-        NSLog("Yodel: Transcriber initialized successfully")
+        NSLog("Chirp: Transcriber initialized successfully")
         return true
     }
 

@@ -8,7 +8,7 @@ SHERPA_VERSION="v1.12.24"
 ONNXRUNTIME_VERSION="1.23.2"
 MODEL_NAME="sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
 
-echo "=== Yodel Setup ==="
+echo "=== Chirp Setup ==="
 echo ""
 
 # --- Download sherpa-onnx shared libraries ---
@@ -57,5 +57,5 @@ echo ""
 echo "=== Setup complete ==="
 echo ""
 echo "Next steps:"
-echo "  swift build       # Build Yodel"
+echo "  swift build       # Build Chirp"
 echo "  make run          # Build and run"

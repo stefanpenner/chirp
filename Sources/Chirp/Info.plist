@@ -5,9 +5,9 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Yodel needs microphone access to transcribe your speech to text.</string>
+    <string>Chirp needs microphone access to transcribe your speech to text.</string>
     <key>CFBundleName</key>
-    <string>Yodel</string>
+    <string>Chirp</string>
     <key>CFBundleIdentifier</key>
     <string>com.yodel.app</string>
     <key>CFBundleVersion</key>

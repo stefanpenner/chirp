@@ -12,8 +12,8 @@ build:
 
 run: build
 	DYLD_LIBRARY_PATH="$(LIB_DIR)" \
-	YODEL_MODEL_DIR="$(MODEL_DIR)" \
-		swift run Yodel
+	CHIRP_MODEL_DIR="$(MODEL_DIR)" \
+		swift run Chirp
 
 clean:
 	swift package clean
