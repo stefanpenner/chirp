@@ -1,8 +1,8 @@
 import AppKit
-import ApplicationServices
+@preconcurrency import ApplicationServices
 
 @MainActor
-final class TextInserter {
+final class TextInserter: TextInserting {
     private var savedClipboard: String?
 
     func saveClipboard() {

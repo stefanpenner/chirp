@@ -1,10 +1,10 @@
 import Foundation
 import CSherpaOnnx
 
-final class Transcriber: @unchecked Sendable {
-    private var recognizer: OpaquePointer?
-    private var vad: OpaquePointer?
-    private let lock = NSLock()
+actor Transcriber: TranscriberProtocol {
+    // nonisolated(unsafe) so deinit can clean up C resources
+    nonisolated(unsafe) private var recognizer: OpaquePointer?
+    nonisolated(unsafe) private var vad: OpaquePointer?
     private var pendingAudio: [Float] = []
 
     private func toCString(_ s: String) -> UnsafeMutablePointer<CChar> {
@@ -138,10 +138,7 @@ final class Transcriber: @unchecked Sendable {
         return vad != nil
     }
 
-    /// Feed audio to VAD and return completed speech segments' transcriptions.
     func feedAudio(samples: [Float]) -> [String] {
-        lock.lock()
-        defer { lock.unlock() }
         guard let vad = vad, recognizer != nil else { return [] }
 
         pendingAudio.append(contentsOf: samples)
@@ -174,21 +171,13 @@ final class Transcriber: @unchecked Sendable {
         return results
     }
 
-    /// Speculatively transcribe buffered audio for live preview.
-    /// Returns nil if not enough audio accumulated yet.
     func peekTranscription() -> String? {
-        lock.lock()
-        defer { lock.unlock() }
-        // Need at least ~0.3s of audio (4800 samples at 16kHz)
         guard pendingAudio.count >= 4800 else { return nil }
         let text = transcribeSamples(pendingAudio)
         return text.isEmpty ? nil : text
     }
 
-    /// Flush any remaining audio in the VAD and transcribe it.
     func flush() -> String {
-        lock.lock()
-        defer { lock.unlock() }
         guard let vad = vad else { return "" }
 
         SherpaOnnxVoiceActivityDetectorFlush(vad)
@@ -214,10 +203,7 @@ final class Transcriber: @unchecked Sendable {
         return allText
     }
 
-    /// Reset VAD state for a new recording session.
     func resetVAD() {
-        lock.lock()
-        defer { lock.unlock() }
         pendingAudio.removeAll()
         if let vad = vad {
             SherpaOnnxVoiceActivityDetectorReset(vad)

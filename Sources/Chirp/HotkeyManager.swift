@@ -1,12 +1,12 @@
 import AppKit
-import CoreGraphics
+@preconcurrency import CoreGraphics
 
 private let kFnKeyCode: UInt16 = 0x3F  // Globe/fn key
 
 @MainActor
 final class HotkeyManager {
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
+    nonisolated(unsafe) private var eventTap: CFMachPort?
+    nonisolated(unsafe) private var runLoopSource: CFRunLoopSource?
     private let onPress: @MainActor () -> Void
     private let onRelease: @MainActor () -> Void
 
@@ -63,11 +63,11 @@ final class HotkeyManager {
 
                 if pressed && !mgr.fnDown {
                     mgr.fnDown = true
-                    DispatchQueue.main.async { mgr.onPress() }
+                    Task { @MainActor in mgr.onPress() }
                     return nil
                 } else if !pressed && mgr.fnDown {
                     mgr.fnDown = false
-                    DispatchQueue.main.async { mgr.onRelease() }
+                    Task { @MainActor in mgr.onRelease() }
                     return nil
                 }
 
@@ -87,11 +87,11 @@ final class HotkeyManager {
     }
 
     deinit {
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        let tap = eventTap
+        let source = runLoopSource
+        MainActor.assumeIsolated {
+            if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
+            if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         }
         HotkeyManager.current = nil
     }

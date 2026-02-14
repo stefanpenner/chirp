@@ -1,11 +1,5 @@
 import Foundation
 
-struct ModelPaths {
-    let modelDir: String
-    let vadPath: String
-    let variant: ModelVariant
-}
-
 final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDelegate {
     static let vadURL = URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx")!
 

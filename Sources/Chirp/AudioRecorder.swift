@@ -1,14 +1,11 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 
 @MainActor
-final class AudioRecorder {
+final class AudioRecorder: AudioRecording {
     private var audioEngine: AVAudioEngine?
     private let sampleRate: Double = 16000
-    private var onSamples: (([Float]) -> Void)?
 
-    /// Start recording. Each chunk of resampled 16kHz mono audio calls `onSamples`.
-    func startRecording(onSamples: @escaping ([Float]) -> Void) {
-        self.onSamples = onSamples
+    func startRecording(onSamples: @escaping @Sendable ([Float]) -> Void) {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
@@ -21,13 +18,11 @@ final class AudioRecorder {
         )!
 
         let converter = AVAudioConverter(from: inputFormat, to: targetFormat)!
+        let rate = sampleRate
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) {
-            [weak self] buffer, _ in
-            guard let self else { return }
-
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { buffer, _ in
             let frameCount = AVAudioFrameCount(
-                Double(buffer.frameLength) * self.sampleRate / inputFormat.sampleRate
+                Double(buffer.frameLength) * rate / inputFormat.sampleRate
             )
             guard frameCount > 0 else { return }
 
@@ -48,7 +43,7 @@ final class AudioRecorder {
                     start: channelData[0],
                     count: count
                 ))
-                self.onSamples?(chunk)
+                onSamples(chunk)
             }
         }
 
@@ -64,6 +59,5 @@ final class AudioRecorder {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
-        onSamples = nil
     }
 }

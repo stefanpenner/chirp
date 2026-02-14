@@ -129,7 +129,7 @@ struct GlowBorder: View {
 // MARK: - Island View
 
 struct IslandView: View {
-    @ObservedObject var appState: AppState
+    var appState: AppState
 
     private var isRecording: Bool {
         if case .recording = appState.status { return true }

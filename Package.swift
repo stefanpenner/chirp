@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 import Foundation
 
@@ -6,7 +6,7 @@ let packageDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().pat
 
 let package = Package(
     name: "Chirp",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v26)],
     products: [
         .executable(name: "Chirp", targets: ["Chirp"]),
     ],
@@ -18,7 +18,7 @@ let package = Package(
             path: "Sources/Chirp",
             exclude: ["Info.plist", "Chirp.entitlements"],
             swiftSettings: [
-                .swiftLanguageMode(.v5),
+                .swiftLanguageMode(.v6),
             ],
             linkerSettings: [
                 .linkedFramework("AVFoundation"),
@@ -29,6 +29,14 @@ let package = Package(
                     "-lonnxruntime",
                     "-Xlinker", "-rpath", "-Xlinker", "\(packageDir)/Frameworks/lib",
                 ], .when(platforms: [.macOS])),
+            ]
+        ),
+        .testTarget(
+            name: "ChirpTests",
+            dependencies: ["Chirp"],
+            path: "Tests/ChirpTests",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
             ]
         ),
         .target(

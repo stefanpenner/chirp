@@ -2,7 +2,8 @@ import SwiftUI
 import Foundation
 
 @MainActor
-final class AppState: ObservableObject {
+@Observable
+final class AppState {
     enum Status {
         case downloading(Double)
         case loadingModel
@@ -12,22 +13,29 @@ final class AppState: ObservableObject {
         case error(String)
     }
 
-    @Published var status: Status = .loadingModel
-    @Published var transcribedText: String = ""
-    @Published var speculativeText: String = ""
-    @Published var audioLevel: Float = 0
-    @Published var selectedVariant: ModelVariant
+    var status: Status = .loadingModel
+    var transcribedText: String = ""
+    var speculativeText: String = ""
+    var audioLevel: Float = 0
+    var selectedVariant: ModelVariant
 
-    let audioRecorder = AudioRecorder()
-    private(set) var transcriber = Transcriber()
-    let textInserter = TextInserter()
+    let audioRecorder: any AudioRecording
+    private(set) var transcriber: any TranscriberProtocol
+    let textInserter: any TextInserting
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
     private var modelManager: ModelManager?
     private var peekTask: Task<Void, Never>?
     private var commitGen = 0
 
-    init() {
+    init(
+        audioRecorder: any AudioRecording = AudioRecorder(),
+        transcriber: any TranscriberProtocol = Transcriber(),
+        textInserter: any TextInserting = TextInserter()
+    ) {
+        self.audioRecorder = audioRecorder
+        self.transcriber = transcriber
+        self.textInserter = textInserter
         selectedVariant = ModelVariant.saved
         overlayPanel = OverlayPanel(appState: self)
         hotkeyManager = HotkeyManager(
@@ -45,7 +53,6 @@ final class AppState: ObservableObject {
         selectedVariant = variant
         ModelVariant.saved = variant
 
-        // Create a fresh transcriber and load the new model
         transcriber = Transcriber()
         ensureModel(variant: variant)
     }
@@ -80,43 +87,37 @@ final class AppState: ObservableObject {
     private func loadTranscriber(paths: ModelPaths) {
         status = .loadingModel
         let transcriber = self.transcriber
-        Task.detached {
-            let ok = transcriber.initialize(paths: paths)
-            await MainActor.run { [weak self] in
-                self?.status = ok ? .ready : .error("Failed to initialize transcriber")
-            }
+        Task {
+            let ok = await transcriber.initialize(paths: paths)
+            self.status = ok ? .ready : .error("Failed to initialize transcriber")
         }
     }
 
-    private func startRecording() {
+    func startRecording() {
         guard case .ready = status else { return }
         transcribedText = ""
         speculativeText = ""
         commitGen = 0
-        transcriber.resetVAD()
+        let transcriber = self.transcriber
+        Task { await transcriber.resetVAD() }
         status = .recording
         overlayPanel?.showOverlay()
-
-        let transcriber = self.transcriber
-        let textInserter = self.textInserter
 
         audioRecorder.startRecording { [weak self] samples in
             let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
             let level = min(rms * 6, 1)
 
-            Task.detached {
-                let segments = transcriber.feedAudio(samples: samples)
-                await MainActor.run {
-                    guard let self else { return }
-                    self.audioLevel = level
-                    for text in segments {
-                        self.commitGen += 1
-                        self.speculativeText = ""
-                        let needsSpace = !self.transcribedText.isEmpty
-                        if needsSpace { self.transcribedText += " " }
-                        self.transcribedText += text
-                        textInserter.typeText(needsSpace ? " \(text)" : text)
-                    }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let segments = await transcriber.feedAudio(samples: samples)
+                self.audioLevel = level
+                for text in segments {
+                    self.commitGen += 1
+                    self.speculativeText = ""
+                    let needsSpace = !self.transcribedText.isEmpty
+                    if needsSpace { self.transcribedText += " " }
+                    self.transcribedText += text
+                    self.textInserter.typeText(needsSpace ? " \(text)" : text)
                 }
             }
         }
@@ -128,11 +129,11 @@ final class AppState: ObservableObject {
         let transcriber = self.transcriber
         peekTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 400_000_000) // 0.4s
+                try? await Task.sleep(nanoseconds: 400_000_000)
                 guard !Task.isCancelled else { break }
                 guard let self, case .recording = self.status else { break }
                 let gen = self.commitGen
-                let preview = await Task.detached { transcriber.peekTranscription() }.value
+                let preview = await transcriber.peekTranscription()
                 guard case .recording = self.status else { break }
                 guard self.commitGen == gen else { continue }
                 self.speculativeText = preview ?? ""
@@ -140,7 +141,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func stopRecording() {
+    func stopRecording() {
         guard case .recording = status else { return }
         peekTask?.cancel()
         peekTask = nil
@@ -149,29 +150,25 @@ final class AppState: ObservableObject {
         speculativeText = ""
 
         let transcriber = self.transcriber
-        let textInserter = self.textInserter
 
-        Task.detached {
-            let remaining = transcriber.flush()
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                if !remaining.isEmpty {
-                    let needsSpace = !self.transcribedText.isEmpty
-                    if needsSpace { self.transcribedText += " " }
-                    self.transcribedText += remaining
-                    textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
-                }
-                self.audioLevel = 0
-                self.status = .ready
-                self.overlayPanel?.hideOverlay()
+        Task {
+            let remaining = await transcriber.flush()
+            if !remaining.isEmpty {
+                let needsSpace = !self.transcribedText.isEmpty
+                if needsSpace { self.transcribedText += " " }
+                self.transcribedText += remaining
+                self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
             }
+            self.audioLevel = 0
+            self.status = .ready
+            self.overlayPanel?.hideOverlay()
         }
     }
 }
 
 @main
 struct ChirpApp: App {
-    @StateObject private var appState = AppState()
+    @State private var appState = AppState()
 
     var body: some Scene {
         MenuBarExtra("Chirp", systemImage: "mic.fill") {
