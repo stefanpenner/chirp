@@ -16,9 +16,10 @@ final class AppState: ObservableObject {
     @Published var transcribedText: String = ""
     @Published var speculativeText: String = ""
     @Published var audioLevel: Float = 0
+    @Published var selectedVariant: ModelVariant
 
     let audioRecorder = AudioRecorder()
-    let transcriber = Transcriber()
+    private(set) var transcriber = Transcriber()
     let textInserter = TextInserter()
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
@@ -27,23 +28,37 @@ final class AppState: ObservableObject {
     private var commitGen = 0
 
     init() {
+        selectedVariant = ModelVariant.saved
         overlayPanel = OverlayPanel(appState: self)
         hotkeyManager = HotkeyManager(
             onPress: { [weak self] in self?.startRecording() },
             onRelease: { [weak self] in self?.stopRecording() }
         )
         textInserter.checkAccessibilityPermission()
-        ensureModel()
+        ensureModel(variant: selectedVariant)
     }
 
-    private func ensureModel() {
-        if let paths = ModelManager.findExisting() {
+    func switchVariant(_ variant: ModelVariant) {
+        guard variant != selectedVariant else { return }
+        guard case .ready = status else { return }
+
+        selectedVariant = variant
+        ModelVariant.saved = variant
+
+        // Create a fresh transcriber and load the new model
+        transcriber = Transcriber()
+        ensureModel(variant: variant)
+    }
+
+    private func ensureModel(variant: ModelVariant) {
+        if let paths = ModelManager.findExisting(variant: variant) {
             loadTranscriber(paths: paths)
             return
         }
 
         status = .downloading(0)
         modelManager = ModelManager(
+            variant: variant,
             onProgress: { [weak self] progress in
                 Task { @MainActor in self?.status = .downloading(progress) }
             },
@@ -66,7 +81,7 @@ final class AppState: ObservableObject {
         status = .loadingModel
         let transcriber = self.transcriber
         Task.detached {
-            let ok = transcriber.initialize(modelDir: paths.modelDir, vadPath: paths.vadPath)
+            let ok = transcriber.initialize(paths: paths)
             await MainActor.run { [weak self] in
                 self?.status = ok ? .ready : .error("Failed to initialize transcriber")
             }
@@ -162,6 +177,8 @@ struct ChirpApp: App {
         MenuBarExtra("Chirp", systemImage: "mic.fill") {
             statusView
             Divider()
+            modelPicker
+            Divider()
             Button("Quit Chirp") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
         }
@@ -191,5 +208,29 @@ struct ChirpApp: App {
         case .error(let msg):
             Text("Error: \(msg)").font(.caption).foregroundColor(.red)
         }
+    }
+
+    @ViewBuilder
+    private var modelPicker: some View {
+        Text("Model").font(.caption).foregroundColor(.secondary)
+        ForEach(ModelVariant.allCases, id: \.self) { variant in
+            Button {
+                appState.switchVariant(variant)
+            } label: {
+                HStack {
+                    Text(variant.displayName)
+                    if variant == appState.selectedVariant {
+                        Spacer()
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+            .disabled(!isReady)
+        }
+    }
+
+    private var isReady: Bool {
+        if case .ready = appState.status { return true }
+        return false
     }
 }

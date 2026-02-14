@@ -98,6 +98,34 @@ struct LiveWaves: View {
     }
 }
 
+// MARK: - Animated Border
+
+struct GlowBorder: View {
+    let active: Bool
+    let level: Float
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            Canvas { ctx, size in
+                guard active else { return }
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let amp = Double(min(level * 2.5, 1))
+                let rect = CGRect(origin: .zero, size: size)
+                let path = RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .path(in: rect)
+
+                ctx.opacity = 0.15 + amp * 0.4
+                ctx.stroke(path, with: .conicGradient(
+                    Gradient(colors: [cBlue, cPurple, cCyan, cBlue]),
+                    center: CGPoint(x: size.width / 2, y: size.height / 2),
+                    angle: .degrees(t * 40)
+                ), style: StrokeStyle(lineWidth: 1.5))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 // MARK: - Island View
 
 struct IslandView: View {
@@ -108,6 +136,10 @@ struct IslandView: View {
         return false
     }
 
+    private var breathe: CGFloat {
+        isRecording ? 1.0 + CGFloat(min(appState.audioLevel * 0.8, 1)) * 0.015 : 1.0
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if isRecording {
@@ -116,12 +148,14 @@ struct IslandView: View {
                     .padding(.horizontal, 12)
                     .padding(.top, 10)
                     .padding(.bottom, 6)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
             } else {
                 Circle()
                     .fill(cBlue.opacity(0.5))
                     .frame(width: 6, height: 6)
                     .padding(.top, 12)
                     .padding(.bottom, 6)
+                    .transition(.opacity.combined(with: .scale(scale: 0.5)))
             }
 
             Group {
@@ -145,6 +179,7 @@ struct IslandView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white.opacity(0.2))
                     .padding(.bottom, 8)
+                    .transition(.opacity)
             }
         }
         .frame(width: 320)
@@ -154,10 +189,14 @@ struct IslandView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(.white.opacity(0.06), lineWidth: 0.5)
+                .strokeBorder(.white.opacity(isRecording ? 0.03 : 0.06), lineWidth: 0.5)
         )
+        .overlay(GlowBorder(active: isRecording, level: appState.audioLevel))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .scaleEffect(breathe)
         .shadow(color: .black.opacity(0.3), radius: 20, y: 6)
+        .animation(.easeInOut(duration: 0.1), value: breathe)
+        .animation(.smooth(duration: 0.35), value: isRecording)
     }
 
     private var committed: Text {

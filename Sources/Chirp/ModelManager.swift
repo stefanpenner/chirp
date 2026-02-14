@@ -3,39 +3,41 @@ import Foundation
 struct ModelPaths {
     let modelDir: String
     let vadPath: String
+    let variant: ModelVariant
 }
 
 final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDelegate {
-    static let modelName = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
-    static let modelURL = URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/\(modelName).tar.bz2")!
     static let vadURL = URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx")!
 
+    private let variant: ModelVariant
     private let onProgress: @Sendable (Double) -> Void
     private let onComplete: @Sendable (Result<ModelPaths, Error>) -> Void
     private var session: URLSession?
 
     init(
+        variant: ModelVariant,
         onProgress: @escaping @Sendable (Double) -> Void,
         onComplete: @escaping @Sendable (Result<ModelPaths, Error>) -> Void
     ) {
+        self.variant = variant
         self.onProgress = onProgress
         self.onComplete = onComplete
     }
 
-    static func findExisting() -> ModelPaths? {
-        guard let modelDir = findModelDir() else { return nil }
+    static func findExisting(variant: ModelVariant) -> ModelPaths? {
+        guard let modelDir = findModelDir(variant: variant) else { return nil }
         guard let vadPath = findVADPath() else { return nil }
-        return ModelPaths(modelDir: modelDir, vadPath: vadPath)
+        return ModelPaths(modelDir: modelDir, vadPath: vadPath, variant: variant)
     }
 
-    private static func findModelDir() -> String? {
+    private static func findModelDir(variant: ModelVariant) -> String? {
         if let envDir = ProcessInfo.processInfo.environment["CHIRP_MODEL_DIR"],
-           FileManager.default.fileExists(atPath: envDir + "/encoder.int8.onnx") {
+           FileManager.default.fileExists(atPath: envDir + "/\(variant.checkFile)") {
             return envDir
         }
 
-        for path in searchPaths(suffix: "models/\(modelName)") {
-            if FileManager.default.fileExists(atPath: path + "/encoder.int8.onnx") {
+        for path in searchPaths(suffix: "models/\(variant.modelDirName)") {
+            if FileManager.default.fileExists(atPath: path + "/\(variant.checkFile)") {
                 return path
             }
         }
@@ -84,7 +86,7 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         let config = URLSessionConfiguration.default
         session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
 
-        let modelTask = session!.downloadTask(with: Self.modelURL)
+        let modelTask = session!.downloadTask(with: variant.downloadURL)
         let vadTask = session!.downloadTask(with: Self.vadURL)
 
         modelTask.taskDescription = "model"
@@ -165,17 +167,17 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
             return
         }
 
-        let modelDir = "\(Self.installBase)/\(Self.modelName)"
+        let modelDir = "\(Self.installBase)/\(variant.modelDirName)"
         let vadPath = "\(Self.installBase)/silero_vad.onnx"
 
-        guard FileManager.default.fileExists(atPath: modelDir + "/encoder.int8.onnx"),
+        guard FileManager.default.fileExists(atPath: modelDir + "/\(variant.checkFile)"),
               FileManager.default.fileExists(atPath: vadPath) else {
             onComplete(.failure(ChirpError.modelFilesNotFound))
             return
         }
 
         onProgress(1.0)
-        onComplete(.success(ModelPaths(modelDir: modelDir, vadPath: vadPath)))
+        onComplete(.success(ModelPaths(modelDir: modelDir, vadPath: vadPath, variant: variant)))
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

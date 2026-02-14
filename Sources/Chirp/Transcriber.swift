@@ -11,29 +11,44 @@ final class Transcriber: @unchecked Sendable {
         return strdup(s)!
     }
 
-    func initialize(modelDir: String, vadPath: String) -> Bool {
+    func initialize(paths: ModelPaths) -> Bool {
+        let modelDir = paths.modelDir
+        let variant = paths.variant
+
         // --- Offline recognizer ---
-        let encoderPath = toCString("\(modelDir)/encoder.int8.onnx")
-        let decoderPath = toCString("\(modelDir)/decoder.int8.onnx")
-        let joinerPath = toCString("\(modelDir)/joiner.int8.onnx")
         let tokensPath = toCString("\(modelDir)/tokens.txt")
         let providerStr = toCString("cpu")
-        let modelTypeStr = toCString("nemo_transducer")
+        let modelTypeStr = toCString(variant.modelType)
         let emptyStr = toCString("")
         let decodingMethodStr = toCString("greedy_search")
 
+        // Variant-specific paths
+        let encoderPath = toCString("\(modelDir)/encoder.int8.onnx")
+        let decoderPath = toCString("\(modelDir)/decoder.int8.onnx")
+        let joinerPath = toCString("\(modelDir)/joiner.int8.onnx")
+        let ctcModelPath = toCString("\(modelDir)/model.int8.onnx")
+
         defer {
-            free(encoderPath); free(decoderPath); free(joinerPath); free(tokensPath)
-            free(providerStr); free(modelTypeStr); free(emptyStr); free(decodingMethodStr)
+            free(encoderPath); free(decoderPath); free(joinerPath); free(ctcModelPath)
+            free(tokensPath); free(providerStr); free(modelTypeStr); free(emptyStr)
+            free(decodingMethodStr)
         }
 
-        var transducerConfig = SherpaOnnxOfflineTransducerModelConfig()
-        transducerConfig.encoder = UnsafePointer(encoderPath)
-        transducerConfig.decoder = UnsafePointer(decoderPath)
-        transducerConfig.joiner = UnsafePointer(joinerPath)
-
         var modelConfig = SherpaOnnxOfflineModelConfig()
-        modelConfig.transducer = transducerConfig
+
+        switch variant {
+        case .tdt:
+            var transducerConfig = SherpaOnnxOfflineTransducerModelConfig()
+            transducerConfig.encoder = UnsafePointer(encoderPath)
+            transducerConfig.decoder = UnsafePointer(decoderPath)
+            transducerConfig.joiner = UnsafePointer(joinerPath)
+            modelConfig.transducer = transducerConfig
+        case .ctc:
+            var ctcConfig = SherpaOnnxOfflineNemoEncDecCtcModelConfig()
+            ctcConfig.model = UnsafePointer(ctcModelPath)
+            modelConfig.nemo_ctc = ctcConfig
+        }
+
         modelConfig.tokens = UnsafePointer(tokensPath)
         modelConfig.num_threads = 4
         modelConfig.debug = 0
@@ -77,7 +92,7 @@ final class Transcriber: @unchecked Sendable {
         }
 
         // --- VAD ---
-        if !initializeVAD(vadPath: vadPath) {
+        if !initializeVAD(vadPath: paths.vadPath) {
             NSLog("Chirp: Failed to create VAD")
             return false
         }
