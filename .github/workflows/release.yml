@@ -15,6 +15,8 @@ permissions:
 jobs:
   release:
     runs-on: macos-26
+    env:
+      DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,9 +75,7 @@ jobs:
           git push origin HEAD:main || true
 
       - name: Update Homebrew tap
-        if: "${{ secrets.HOMEBREW_TAP_DEPLOY_KEY != '' }}"
-        env:
-          DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+        if: env.DEPLOY_KEY != ''
         run: |
           eval "$(ssh-agent -s)"
           echo "$DEPLOY_KEY" | ssh-add -
