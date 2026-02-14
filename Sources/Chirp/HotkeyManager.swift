@@ -1,16 +1,25 @@
-import Carbon
-import HotKey
+import AppKit
 
 @MainActor
 final class HotkeyManager {
-    private let hotKey: HotKey
-    private let action: () -> Void
+    private var monitor: Any?
+    private var fnDown = false
 
-    init(action: @escaping @MainActor () -> Void) {
-        self.action = action
-        self.hotKey = HotKey(key: .space, modifiers: [.option])
-        self.hotKey.keyDownHandler = { [action] in
-            action()
+    init(onPress: @escaping @MainActor () -> Void, onRelease: @escaping @MainActor () -> Void) {
+        monitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            guard let self else { return }
+            let pressed = event.modifierFlags.contains(.function)
+            if pressed && !self.fnDown {
+                self.fnDown = true
+                onPress()
+            } else if !pressed && self.fnDown {
+                self.fnDown = false
+                onRelease()
+            }
         }
+    }
+
+    deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
     }
 }

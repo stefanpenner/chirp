@@ -3,12 +3,16 @@ import CSherpaOnnx
 
 final class Transcriber: @unchecked Sendable {
     private var recognizer: OpaquePointer?
+    private var vad: OpaquePointer?
+    private let lock = NSLock()
+    private var pendingAudio: [Float] = []
 
     private func toCString(_ s: String) -> UnsafeMutablePointer<CChar> {
         return strdup(s)!
     }
 
-    func initialize(modelDir: String) -> Bool {
+    func initialize(modelDir: String, vadPath: String) -> Bool {
+        // --- Offline recognizer ---
         let encoderPath = toCString("\(modelDir)/encoder.int8.onnx")
         let decoderPath = toCString("\(modelDir)/decoder.int8.onnx")
         let joinerPath = toCString("\(modelDir)/joiner.int8.onnx")
@@ -19,14 +23,8 @@ final class Transcriber: @unchecked Sendable {
         let decodingMethodStr = toCString("greedy_search")
 
         defer {
-            free(encoderPath)
-            free(decoderPath)
-            free(joinerPath)
-            free(tokensPath)
-            free(providerStr)
-            free(modelTypeStr)
-            free(emptyStr)
-            free(decodingMethodStr)
+            free(encoderPath); free(decoderPath); free(joinerPath); free(tokensPath)
+            free(providerStr); free(modelTypeStr); free(emptyStr); free(decodingMethodStr)
         }
 
         var transducerConfig = SherpaOnnxOfflineTransducerModelConfig()
@@ -78,26 +76,143 @@ final class Transcriber: @unchecked Sendable {
             return false
         }
 
+        // --- VAD ---
+        if !initializeVAD(vadPath: vadPath) {
+            NSLog("Chirp: Failed to create VAD")
+            return false
+        }
+
         NSLog("Chirp: Transcriber initialized successfully")
         return true
     }
 
-    /// Transcribes audio samples. This is a blocking CPU-intensive call.
-    /// Call from a background thread.
-    func transcribe(samples: [Float]) -> String {
-        guard let recognizer = recognizer else {
-            print("Transcriber not initialized")
-            return ""
+    private func initializeVAD(vadPath: String) -> Bool {
+        let vadModelStr = toCString(vadPath)
+        let emptyStr = toCString("")
+        let providerStr = toCString("cpu")
+
+        defer {
+            free(vadModelStr); free(emptyStr); free(providerStr)
         }
 
-        guard !samples.isEmpty else {
-            return ""
+        var sileroConfig = SherpaOnnxSileroVadModelConfig()
+        sileroConfig.model = UnsafePointer(vadModelStr)
+        sileroConfig.threshold = 0.45
+        sileroConfig.min_silence_duration = 0.15
+        sileroConfig.min_speech_duration = 0.1
+        sileroConfig.window_size = 512
+        sileroConfig.max_speech_duration = 15.0
+
+        var tenVadConfig = SherpaOnnxTenVadModelConfig()
+        tenVadConfig.model = UnsafePointer(emptyStr)
+        tenVadConfig.threshold = 0.5
+        tenVadConfig.min_silence_duration = 0.3
+        tenVadConfig.min_speech_duration = 0.15
+        tenVadConfig.window_size = 512
+        tenVadConfig.max_speech_duration = 15.0
+
+        var vadConfig = SherpaOnnxVadModelConfig()
+        vadConfig.silero_vad = sileroConfig
+        vadConfig.ten_vad = tenVadConfig
+        vadConfig.sample_rate = 16000
+        vadConfig.num_threads = 1
+        vadConfig.provider = UnsafePointer(providerStr)
+        vadConfig.debug = 0
+
+        vad = SherpaOnnxCreateVoiceActivityDetector(&vadConfig, 30.0)
+        return vad != nil
+    }
+
+    /// Feed audio to VAD and return completed speech segments' transcriptions.
+    func feedAudio(samples: [Float]) -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let vad = vad, recognizer != nil else { return [] }
+
+        pendingAudio.append(contentsOf: samples)
+
+        samples.withUnsafeBufferPointer { ptr in
+            SherpaOnnxVoiceActivityDetectorAcceptWaveform(vad, ptr.baseAddress, Int32(samples.count))
         }
 
-        guard let stream = SherpaOnnxCreateOfflineStream(recognizer) else {
-            print("Failed to create offline stream")
-            return ""
+        var results: [String] = []
+        while SherpaOnnxVoiceActivityDetectorEmpty(vad) == 0 {
+            guard let segmentPtr = SherpaOnnxVoiceActivityDetectorFront(vad) else { break }
+            let segment = segmentPtr.pointee
+
+            if segment.n > 0, let samplesPtr = segment.samples {
+                let segmentSamples = Array(UnsafeBufferPointer(start: samplesPtr, count: Int(segment.n)))
+                let text = transcribeSamples(segmentSamples)
+                if !text.isEmpty {
+                    results.append(text)
+                }
+            }
+
+            SherpaOnnxDestroySpeechSegment(segmentPtr)
+            SherpaOnnxVoiceActivityDetectorPop(vad)
         }
+
+        if !results.isEmpty {
+            pendingAudio.removeAll()
+        }
+
+        return results
+    }
+
+    /// Speculatively transcribe buffered audio for live preview.
+    /// Returns nil if not enough audio accumulated yet.
+    func peekTranscription() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        // Need at least ~0.3s of audio (4800 samples at 16kHz)
+        guard pendingAudio.count >= 4800 else { return nil }
+        let text = transcribeSamples(pendingAudio)
+        return text.isEmpty ? nil : text
+    }
+
+    /// Flush any remaining audio in the VAD and transcribe it.
+    func flush() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let vad = vad else { return "" }
+
+        SherpaOnnxVoiceActivityDetectorFlush(vad)
+
+        var allText = ""
+        while SherpaOnnxVoiceActivityDetectorEmpty(vad) == 0 {
+            guard let segmentPtr = SherpaOnnxVoiceActivityDetectorFront(vad) else { break }
+            let segment = segmentPtr.pointee
+
+            if segment.n > 0, let samplesPtr = segment.samples {
+                let segmentSamples = Array(UnsafeBufferPointer(start: samplesPtr, count: Int(segment.n)))
+                let text = transcribeSamples(segmentSamples)
+                if !text.isEmpty {
+                    if !allText.isEmpty { allText += " " }
+                    allText += text
+                }
+            }
+
+            SherpaOnnxDestroySpeechSegment(segmentPtr)
+            SherpaOnnxVoiceActivityDetectorPop(vad)
+        }
+
+        return allText
+    }
+
+    /// Reset VAD state for a new recording session.
+    func resetVAD() {
+        lock.lock()
+        defer { lock.unlock() }
+        pendingAudio.removeAll()
+        if let vad = vad {
+            SherpaOnnxVoiceActivityDetectorReset(vad)
+        }
+    }
+
+    private func transcribeSamples(_ samples: [Float]) -> String {
+        guard let recognizer = recognizer, !samples.isEmpty else { return "" }
+
+        guard let stream = SherpaOnnxCreateOfflineStream(recognizer) else { return "" }
 
         samples.withUnsafeBufferPointer { ptr in
             SherpaOnnxAcceptWaveformOffline(stream, 16000, ptr.baseAddress, Int32(samples.count))
@@ -126,6 +241,9 @@ final class Transcriber: @unchecked Sendable {
     deinit {
         if let recognizer = recognizer {
             SherpaOnnxDestroyOfflineRecognizer(recognizer)
+        }
+        if let vad = vad {
+            SherpaOnnxDestroyVoiceActivityDetector(vad)
         }
     }
 }

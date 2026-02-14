@@ -1,0 +1,57 @@
+load("@rules_cc//cc:cc_import.bzl", "cc_import")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_swift//swift:swift.bzl", "swift_library", "swift_interop_hint")
+load("@rules_apple//apple:macos.bzl", "macos_application")
+
+# --- Prebuilt sherpa-onnx dynamic libraries (downloaded by scripts/setup.sh) ---
+
+cc_import(
+    name = "libsherpaonnx",
+    shared_library = "Frameworks/lib/libsherpa-onnx-c-api.dylib",
+)
+
+cc_import(
+    name = "libonnxruntime",
+    shared_library = "Frameworks/lib/libonnxruntime.dylib",
+)
+
+# --- CSherpaOnnx: C wrapper for sherpa-onnx API ---
+
+swift_interop_hint(
+    name = "CSherpaOnnx_interop",
+    module_name = "CSherpaOnnx",
+)
+
+cc_library(
+    name = "CSherpaOnnx",
+    hdrs = ["Sources/CSherpaOnnx/include/c-api.h"],
+    srcs = ["Sources/CSherpaOnnx/shim.c"],
+    includes = ["Sources/CSherpaOnnx/include"],
+    aspect_hints = [":CSherpaOnnx_interop"],
+    deps = [
+        ":libsherpaonnx",
+        ":libonnxruntime",
+    ],
+)
+
+# --- Chirp Swift application ---
+
+swift_library(
+    name = "ChirpLib",
+    srcs = glob(["Sources/Chirp/*.swift"]),
+    module_name = "Chirp",
+    deps = [":CSherpaOnnx"],
+    copts = [
+        "-swift-version", "5",
+        "-Xfrontend", "-solver-expression-time-threshold=120",
+    ],
+)
+
+macos_application(
+    name = "Chirp",
+    bundle_id = "com.chirp.app",
+    minimum_os_version = "14.0",
+    infoplists = ["Sources/Chirp/Info.plist"],
+    entitlements = "Sources/Chirp/Chirp.entitlements",
+    deps = [":ChirpLib"],
+)

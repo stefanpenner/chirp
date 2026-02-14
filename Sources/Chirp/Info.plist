@@ -2,14 +2,22 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleExecutable</key>
+    <string>Chirp</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSUIElement</key>
     <true/>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Chirp needs microphone access to transcribe your speech to text.</string>
     <key>CFBundleName</key>
     <string>Chirp</string>
     <key>CFBundleIdentifier</key>
-    <string>com.yodel.app</string>
+    <string>com.chirp.app</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>

@@ -3,11 +3,12 @@ import AVFoundation
 @MainActor
 final class AudioRecorder {
     private var audioEngine: AVAudioEngine?
-    private var samples: [Float] = []
     private let sampleRate: Double = 16000
+    private var onSamples: (([Float]) -> Void)?
 
-    func startRecording() {
-        samples = []
+    /// Start recording. Each chunk of resampled 16kHz mono audio calls `onSamples`.
+    func startRecording(onSamples: @escaping ([Float]) -> Void) {
+        self.onSamples = onSamples
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
@@ -43,13 +44,11 @@ final class AudioRecorder {
 
             if let channelData = convertedBuffer.floatChannelData {
                 let count = Int(convertedBuffer.frameLength)
-                let newSamples = Array(UnsafeBufferPointer(
+                let chunk = Array(UnsafeBufferPointer(
                     start: channelData[0],
                     count: count
                 ))
-                DispatchQueue.main.async {
-                    self.samples.append(contentsOf: newSamples)
-                }
+                self.onSamples?(chunk)
             }
         }
 
@@ -61,12 +60,10 @@ final class AudioRecorder {
         }
     }
 
-    func stopRecording() -> [Float] {
+    func stopRecording() {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
-        let result = samples
-        samples = []
-        return result
+        onSamples = nil
     }
 }

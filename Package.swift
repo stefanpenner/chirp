@@ -10,13 +10,11 @@ let package = Package(
     products: [
         .executable(name: "Chirp", targets: ["Chirp"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/soffes/HotKey", from: "0.2.1"),
-    ],
+    dependencies: [],
     targets: [
         .executableTarget(
             name: "Chirp",
-            dependencies: ["HotKey", "CSherpaOnnx"],
+            dependencies: ["CSherpaOnnx"],
             path: "Sources/Chirp",
             exclude: ["Info.plist", "Chirp.entitlements"],
             swiftSettings: [
@@ -24,7 +22,6 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedFramework("AVFoundation"),
-                .linkedFramework("Carbon"),
                 .linkedFramework("ApplicationServices"),
                 .unsafeFlags([
                     "-L\(packageDir)/Frameworks/lib",

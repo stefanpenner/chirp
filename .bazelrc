@@ -1,0 +1,2 @@
+build --macos_minimum_os=14.0
+build --verbose_failures

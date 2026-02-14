@@ -49,9 +49,23 @@ else
     echo "Parakeet model already present."
 fi
 
+# --- Download Silero VAD model ---
+if [ ! -f "$ROOT/models/silero_vad.onnx" ]; then
+    echo ""
+    echo "Downloading Silero VAD model..."
+    mkdir -p "$ROOT/models"
+    curl -L "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx" \
+        -o "$ROOT/models/silero_vad.onnx"
+    echo "VAD model installed to models/silero_vad.onnx"
+else
+    echo "Silero VAD model already present."
+fi
+
 echo ""
 echo "Model files:"
 ls -lh "$ROOT/models/${MODEL_NAME}/" 2>/dev/null || echo "  (not downloaded yet)"
+echo ""
+ls -lh "$ROOT/models/silero_vad.onnx" 2>/dev/null || echo "  (VAD model not downloaded yet)"
 
 echo ""
 echo "=== Setup complete ==="

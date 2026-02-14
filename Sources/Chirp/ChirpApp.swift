@@ -14,6 +14,8 @@ final class AppState: ObservableObject {
 
     @Published var status: Status = .loadingModel
     @Published var transcribedText: String = ""
+    @Published var speculativeText: String = ""
+    @Published var audioLevel: Float = 0
 
     let audioRecorder = AudioRecorder()
     let transcriber = Transcriber()
@@ -21,45 +23,36 @@ final class AppState: ObservableObject {
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
     private var modelManager: ModelManager?
-
-    var isReady: Bool {
-        if case .ready = status { return true }
-        return false
-    }
+    private var peekTask: Task<Void, Never>?
+    private var commitGen = 0
 
     init() {
         overlayPanel = OverlayPanel(appState: self)
-        hotkeyManager = HotkeyManager { [weak self] in
-            self?.toggleRecording()
-        }
+        hotkeyManager = HotkeyManager(
+            onPress: { [weak self] in self?.startRecording() },
+            onRelease: { [weak self] in self?.stopRecording() }
+        )
         textInserter.checkAccessibilityPermission()
         ensureModel()
     }
 
     private func ensureModel() {
-        if let modelDir = ModelManager.findExistingModel() {
-            loadTranscriber(modelDir: modelDir)
+        if let paths = ModelManager.findExisting() {
+            loadTranscriber(paths: paths)
             return
         }
 
-        // Model not found — download it
         status = .downloading(0)
-        NSLog("Chirp: Model not found, downloading...")
-
         modelManager = ModelManager(
             onProgress: { [weak self] progress in
-                Task { @MainActor in
-                    self?.status = .downloading(progress)
-                }
+                Task { @MainActor in self?.status = .downloading(progress) }
             },
             onComplete: { [weak self] result in
                 Task { @MainActor in
                     switch result {
-                    case .success(let modelDir):
-                        NSLog("Chirp: Download complete")
-                        self?.loadTranscriber(modelDir: modelDir)
+                    case .success(let paths):
+                        self?.loadTranscriber(paths: paths)
                     case .failure(let error):
-                        NSLog("Chirp: Download failed: %@", error.localizedDescription)
                         self?.status = .error(error.localizedDescription)
                     }
                     self?.modelManager = nil
@@ -69,55 +62,91 @@ final class AppState: ObservableObject {
         modelManager?.download()
     }
 
-    private func loadTranscriber(modelDir: String) {
+    private func loadTranscriber(paths: ModelPaths) {
         status = .loadingModel
-        NSLog("Chirp: Loading model from: %@", modelDir)
-        Task.detached { [weak self] in
-            guard let self else { return }
-            let ready = self.transcriber.initialize(modelDir: modelDir)
-            await MainActor.run {
-                if ready {
-                    self.status = .ready
-                } else {
-                    self.status = .error("Failed to initialize transcriber")
-                }
+        let transcriber = self.transcriber
+        Task.detached {
+            let ok = transcriber.initialize(modelDir: paths.modelDir, vadPath: paths.vadPath)
+            await MainActor.run { [weak self] in
+                self?.status = ok ? .ready : .error("Failed to initialize transcriber")
             }
         }
     }
 
-    func toggleRecording() {
-        switch status {
-        case .ready:
-            startRecording()
-        case .recording:
-            stopRecordingAndTranscribe()
-        default:
-            break
+    private func startRecording() {
+        guard case .ready = status else { return }
+        transcribedText = ""
+        speculativeText = ""
+        commitGen = 0
+        transcriber.resetVAD()
+        status = .recording
+        overlayPanel?.showOverlay()
+
+        let transcriber = self.transcriber
+        let textInserter = self.textInserter
+
+        audioRecorder.startRecording { [weak self] samples in
+            let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
+            let level = min(rms * 6, 1)
+
+            Task.detached {
+                let segments = transcriber.feedAudio(samples: samples)
+                await MainActor.run {
+                    guard let self else { return }
+                    self.audioLevel = level
+                    for text in segments {
+                        self.commitGen += 1
+                        self.speculativeText = ""
+                        let needsSpace = !self.transcribedText.isEmpty
+                        if needsSpace { self.transcribedText += " " }
+                        self.transcribedText += text
+                        textInserter.typeText(needsSpace ? " \(text)" : text)
+                    }
+                }
+            }
+        }
+
+        startPeeking()
+    }
+
+    private func startPeeking() {
+        let transcriber = self.transcriber
+        peekTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 400_000_000) // 0.4s
+                guard !Task.isCancelled else { break }
+                guard let self, case .recording = self.status else { break }
+                let gen = self.commitGen
+                let preview = await Task.detached { transcriber.peekTranscription() }.value
+                guard case .recording = self.status else { break }
+                guard self.commitGen == gen else { continue }
+                self.speculativeText = preview ?? ""
+            }
         }
     }
 
-    private func startRecording() {
-        transcribedText = ""
-        status = .recording
-        overlayPanel?.showOverlay()
-        audioRecorder.startRecording()
-    }
-
-    private func stopRecordingAndTranscribe() {
+    private func stopRecording() {
+        guard case .recording = status else { return }
+        peekTask?.cancel()
+        peekTask = nil
+        audioRecorder.stopRecording()
         status = .transcribing
-        let samples = audioRecorder.stopRecording()
+        speculativeText = ""
 
         let transcriber = self.transcriber
+        let textInserter = self.textInserter
+
         Task.detached {
-            let text = transcriber.transcribe(samples: samples)
+            let remaining = transcriber.flush()
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.transcribedText = text
-
-                if !text.isEmpty {
-                    self.textInserter.insertText(text)
+                if !remaining.isEmpty {
+                    let needsSpace = !self.transcribedText.isEmpty
+                    if needsSpace { self.transcribedText += " " }
+                    self.transcribedText += remaining
+                    textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
                 }
-
+                self.audioLevel = 0
                 self.status = .ready
                 self.overlayPanel?.hideOverlay()
             }
@@ -127,17 +156,14 @@ final class AppState: ObservableObject {
 
 @main
 struct ChirpApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
 
     var body: some Scene {
         MenuBarExtra("Chirp", systemImage: "mic.fill") {
             statusView
             Divider()
-            Button("Quit Chirp") {
-                NSApplication.shared.terminate(nil)
-            }
-            .keyboardShortcut("q")
+            Button("Quit Chirp") { NSApplication.shared.terminate(nil) }
+                .keyboardShortcut("q")
         }
     }
 
@@ -155,29 +181,15 @@ struct ChirpApp: App {
             }
             .padding(.horizontal, 4)
         case .loadingModel:
-            Text("Loading model...")
-                .font(.caption)
-                .foregroundColor(.orange)
+            Text("Loading model...").font(.caption).foregroundColor(.orange)
         case .ready:
-            Text("Ready (Option+Space)")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Text("Ready (hold fn)").font(.caption).foregroundColor(.secondary)
         case .recording:
-            Text("Recording...")
-                .font(.caption)
-                .foregroundColor(.red)
+            Text("Recording...").font(.caption).foregroundColor(.red)
         case .transcribing:
-            Text("Transcribing...")
-                .font(.caption)
-                .foregroundColor(.orange)
+            Text("Finalizing...").font(.caption).foregroundColor(.orange)
         case .error(let msg):
-            Text("Error: \(msg)")
-                .font(.caption)
-                .foregroundColor(.red)
+            Text("Error: \(msg)").font(.caption).foregroundColor(.red)
         }
     }
-}
-
-final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
-    func applicationDidFinishLaunching(_ notification: Notification) {}
 }
