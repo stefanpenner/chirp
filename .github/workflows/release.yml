@@ -51,15 +51,29 @@ jobs:
           generate_release_notes: true
           files: dist/Chirp-v${{ steps.version.outputs.version }}-macOS.dmg
 
-      - name: Update Homebrew cask and appcast
+      - name: Update Sparkle appcast
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          SHA="${{ steps.sha.outputs.sha256 }}"
-          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" HomebrewFormula/chirp.rb
-          sed -i '' "s/sha256 .*/sha256 \"${SHA}\"/" HomebrewFormula/chirp.rb
           scripts/update-appcast.sh "$VERSION" "dist/Chirp-v${VERSION}-macOS.dmg"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add HomebrewFormula/chirp.rb docs/appcast.xml
-          git commit -m "Update Homebrew cask and appcast for v${VERSION}" || true
+          git add docs/appcast.xml
+          git commit -m "Update appcast for v${VERSION}" || true
           git push origin HEAD:main || true
+
+      - name: Update Homebrew tap
+        if: "${{ secrets.HOMEBREW_TAP_TOKEN != '' }}"
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA="${{ steps.sha.outputs.sha256 }}"
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/stefanpenner/homebrew-chirp.git" /tmp/homebrew-chirp
+          cd /tmp/homebrew-chirp
+          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/chirp.rb
+          sed -i '' "s/sha256 .*/sha256 \"${SHA}\"/" Casks/chirp.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/chirp.rb
+          git commit -m "Update Chirp to v${VERSION}"
+          git push
