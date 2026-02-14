@@ -1,8 +1,21 @@
 # Chirp
 
-Offline voice-to-text for macOS. Hold **fn**, speak, text appears at your cursor. No cloud, no API keys — everything runs locally on your Mac.
+**Offline voice-to-text for macOS.** Hold `fn`, speak, release — text appears at your cursor.
 
-Uses [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with the Parakeet TDT 0.6b v2 model and Silero VAD for voice activity detection. The model auto-downloads on first launch (~240MB compressed, ~630MB extracted).
+## Privacy First
+
+Chirp runs entirely on your Mac. There are no servers, no API keys, no accounts, no telemetry, and no tracking. Your voice is processed locally and never recorded. Nothing leaves your machine — ever.
+
+Use it at work, at home, or anywhere privacy matters.
+
+## Features
+
+- **Hold-to-talk** — Press `fn` to record, release to transcribe
+- **Works everywhere** — Text is inserted at your cursor in any app
+- **Real-time feedback** — Live waveform overlay while you speak
+- **Fast and accurate** — Powered by [Parakeet TDT 0.6b v2](https://nvidia.github.io/NeMo/blogs/2025/01/parakeet-tdt-0.6b-v2/) with [Silero VAD](https://github.com/snakers4/silero-vad)
+- **Lightweight** — Lives in your menu bar, no dock icon, no clutter
+- **Zero configuration** — Model auto-downloads on first launch
 
 ## Requirements
 
@@ -10,23 +23,22 @@ Uses [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with the Parakeet TDT 
 - Microphone permission
 - Accessibility permission (for text insertion)
 
-## Build & Run
+## Getting Started
 
 ```
-make setup   # download sherpa-onnx libs + model (gitignored)
-make build   # swift build
+make setup   # download sherpa-onnx libs + model
+make build   # compile
 make run     # build and launch
 ```
 
+The speech model downloads automatically on first launch (~240MB compressed, ~630MB on disk).
+
 ## How It Works
 
-Chirp is a menu bar app (no dock icon). Hold **fn** to record, release to stop. Audio is captured at 16kHz mono, segmented by Silero VAD, and transcribed offline via sherpa-onnx. The result is inserted at the current cursor position in any app.
-
-A real-time waveform overlay is displayed while recording.
+Chirp captures audio at 16kHz mono, detects speech using Silero VAD, and transcribes it offline with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx). The transcribed text is inserted at your cursor position via the system clipboard. A real-time waveform overlay provides visual feedback while recording.
 
 ## Packaging
 
 ```
 make package
 ```
-# chirp
