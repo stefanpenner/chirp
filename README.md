@@ -1,6 +1,7 @@
 # Chirp
 
-**Offline voice-to-text for macOS.** Hold `fn`, speak, release — text appears at your cursor. All transcription runs on-device — no accounts, no servers, no data leaves your machine.
+**Offline voice-to-text for macOS.**
+Hold `fn`, speak, release — text appears at your cursor. All transcription runs on-device — no accounts, no servers, no data leaves your machine.
 
 ## Features
 
