@@ -6,9 +6,12 @@
 import Chirp
 #endif
 import SwiftUI
+@preconcurrency import Sparkle
+import Combine
 
 @main
 struct ChirpApp: App {
+    private let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
     @State private var appState = AppState()
 
     var body: some Scene {
@@ -16,6 +19,8 @@ struct ChirpApp: App {
             statusView
             Divider()
             modelPicker
+            Divider()
+            CheckForUpdatesView(updater: updaterController.updater)
             Divider()
             Button("Quit Chirp") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
@@ -70,5 +75,34 @@ struct ChirpApp: App {
     private var isReady: Bool {
         if case .ready = appState.status { return true }
         return false
+    }
+}
+
+struct CheckForUpdatesView: View {
+    @ObservedObject private var checkForUpdatesViewModel: CheckForUpdatesViewModel
+
+    init(updater: SPUUpdater) {
+        self.checkForUpdatesViewModel = CheckForUpdatesViewModel(updater: updater)
+    }
+
+    var body: some View {
+        Button("Check for Updates\u{2026}", action: checkForUpdatesViewModel.checkForUpdates)
+            .disabled(!checkForUpdatesViewModel.canCheckForUpdates)
+    }
+}
+
+@MainActor
+final class CheckForUpdatesViewModel: ObservableObject {
+    @Published var canCheckForUpdates = false
+    private let updater: SPUUpdater
+
+    init(updater: SPUUpdater) {
+        self.updater = updater
+        updater.publisher(for: \.canCheckForUpdates)
+            .assign(to: &$canCheckForUpdates)
+    }
+
+    func checkForUpdates() {
+        updater.checkForUpdates()
     }
 }

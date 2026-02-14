@@ -22,5 +22,7 @@
     <string>1</string>
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
+    <key>SUFeedURL</key>
+    <string>https://stefanpenner.github.io/chirp/appcast.xml</string>
 </dict>
 </plist>

@@ -106,9 +106,14 @@ Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`) ena
 
 `scripts/package.sh` creates a signed `.app` bundle + DMG:
 - Copies dylibs to `Frameworks/`, fixes rpaths to `@executable_path/../Frameworks`
+- Embeds Sparkle.framework from SPM build artifacts
 - Code-signs with hardened runtime
 - Entitlements: microphone access, library validation disabled (for unsigned dylibs)
 - `Info.plist` sets `LSUIElement: true` (no dock icon)
+
+**Auto-update** — Sparkle 2 (SPM binary dependency). `Main.swift` creates an `SPUStandardUpdaterController` and exposes a "Check for Updates..." menu item. The appcast feed is hosted at GitHub Pages (`docs/appcast.xml`), updated automatically by the release workflow.
+
+**Homebrew** — `HomebrewFormula/chirp.rb` is a cask formula pointing to the GitHub Releases DMG. The release workflow updates the version and SHA256 on each tag push.
 
 ## Files
 

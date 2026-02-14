@@ -40,6 +40,15 @@ cp "$ROOT/Frameworks/lib/libonnxruntime.1.23.2.dylib" "$FRAMEWORKS/"
 # Recreate the symlink (some code paths may dlopen the unversioned name)
 ln -sf libonnxruntime.1.23.2.dylib "$FRAMEWORKS/libonnxruntime.dylib"
 
+# Copy Sparkle.framework from SPM build artifacts
+SPARKLE_FRAMEWORK=$(find "$(swift build -c release --show-bin-path)/../../.." -name "Sparkle.framework" -path "*/macos-*" | head -1)
+if [[ -n "$SPARKLE_FRAMEWORK" ]]; then
+    echo "==> Copying Sparkle.framework from $SPARKLE_FRAMEWORK"
+    cp -R "$SPARKLE_FRAMEWORK" "$FRAMEWORKS/"
+else
+    echo "Warning: Sparkle.framework not found in build artifacts"
+fi
+
 # Copy Info.plist, stamp the version
 cp "$ROOT/Sources/Chirp/Info.plist" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$CONTENTS/Info.plist"
@@ -82,6 +91,12 @@ codesign --force --sign "$SIGNING_IDENTITY" --timestamp \
     "$FRAMEWORKS/libonnxruntime.1.23.2.dylib"
 codesign --force --sign "$SIGNING_IDENTITY" --timestamp \
     "$FRAMEWORKS/libsherpa-onnx-c-api.dylib"
+
+# Sign Sparkle.framework if present
+if [[ -d "$FRAMEWORKS/Sparkle.framework" ]]; then
+    codesign --force --sign "$SIGNING_IDENTITY" --timestamp --deep \
+        "$FRAMEWORKS/Sparkle.framework"
+fi
 
 # Sign the app bundle with entitlements and hardened runtime
 codesign --force --sign "$SIGNING_IDENTITY" --timestamp \
