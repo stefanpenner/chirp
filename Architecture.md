@@ -95,7 +95,14 @@ Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`) ena
 
 ## Build & Distribution
 
-SPM package with a `CSherpaOnnx` C target (modulemap wrapping the sherpa-onnx header). The `Chirp` executable links against `libsherpa-onnx-c-api` and `libonnxruntime` via rpath.
+**SPM** — Single `Chirp` target containing all Swift sources (including `Main.swift`). `CSherpaOnnx` C target wraps the sherpa-onnx header via modulemap. The executable links against `libsherpa-onnx-c-api` and `libonnxruntime` via rpath.
+
+**Bazel** — Two-module split for testability:
+- `ChirpLib` (module name `Chirp`): all sources except `Main.swift`, no `@main` entry point
+- `ChirpMain`: only `Main.swift` with `@main`, imports `Chirp` via `#if BAZEL_BUILD` conditional
+- `ChirpTests`: `swift_test` depending on `ChirpLib`
+- The `-DBAZEL_BUILD` flag is passed via `copts = ["-Xfrontend", "-DBAZEL_BUILD"]`
+- Types used by `Main.swift` (`AppState`, `Status`, `ModelVariant`, etc.) are `public` to cross the module boundary
 
 `scripts/package.sh` creates a signed `.app` bundle + DMG:
 - Copies dylibs to `Frameworks/`, fixes rpaths to `@executable_path/../Frameworks`
@@ -107,7 +114,8 @@ SPM package with a `CSherpaOnnx` C target (modulemap wrapping the sherpa-onnx he
 
 | File | Purpose |
 |------|---------|
-| `ChirpApp.swift` | App entry point, AppState state machine |
+| `ChirpApp.swift` | AppState state machine (public API for cross-module access) |
+| `Main.swift` | `@main` SwiftUI app entry point (menu bar UI) |
 | `Protocols.swift` | DI boundaries: TranscriberProtocol, AudioRecording, TextInserting |
 | `Transcriber.swift` | Actor wrapping sherpa-onnx offline recognizer + VAD |
 | `AudioRecorder.swift` | AVAudioEngine mic capture with sample-rate conversion |

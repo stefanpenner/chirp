@@ -27,8 +27,8 @@ import Foundation
 
 @MainActor
 @Observable
-final class AppState {
-    enum Status {
+public final class AppState {
+    public enum Status {
         case downloading(Double)   // 0.0 … 1.0
         case loadingModel
         case ready
@@ -37,11 +37,11 @@ final class AppState {
         case error(String)
     }
 
-    var status: Status = .loadingModel
-    var transcribedText: String = ""
-    var speculativeText: String = ""
-    var audioLevel: Float = 0
-    var selectedVariant: ModelVariant
+    public var status: Status = .loadingModel
+    public var transcribedText: String = ""
+    public var speculativeText: String = ""
+    public var audioLevel: Float = 0
+    public var selectedVariant: ModelVariant
 
     let audioRecorder: any AudioRecording
     private(set) var transcriber: any TranscriberProtocol
@@ -62,10 +62,14 @@ final class AppState {
     /// Peek previews that were started before the latest commit are discarded.
     private var commitGen = 0
 
+    public convenience init() {
+        self.init(audioRecorder: AudioRecorder(), transcriber: Transcriber(), textInserter: TextInserter())
+    }
+
     init(
-        audioRecorder: any AudioRecording = AudioRecorder(),
-        transcriber: any TranscriberProtocol = Transcriber(),
-        textInserter: any TextInserting = TextInserter()
+        audioRecorder: any AudioRecording,
+        transcriber: any TranscriberProtocol,
+        textInserter: any TextInserting
     ) {
         self.audioRecorder = audioRecorder
         self.transcriber = transcriber
@@ -80,7 +84,7 @@ final class AppState {
         ensureModel(variant: selectedVariant)
     }
 
-    func switchVariant(_ variant: ModelVariant) {
+    public func switchVariant(_ variant: ModelVariant) {
         guard variant != selectedVariant else { return }
         guard case .ready = status else { return }
 
@@ -242,70 +246,3 @@ final class AppState {
     }
 }
 
-// MARK: - App
-
-@main
-struct ChirpApp: App {
-    @State private var appState = AppState()
-
-    var body: some Scene {
-        MenuBarExtra("Chirp", systemImage: "mic.fill") {
-            statusView
-            Divider()
-            modelPicker
-            Divider()
-            Button("Quit Chirp") { NSApplication.shared.terminate(nil) }
-                .keyboardShortcut("q")
-        }
-    }
-
-    @ViewBuilder
-    private var statusView: some View {
-        switch appState.status {
-        case .downloading(let progress):
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Downloading model...")
-                    .font(.caption)
-                ProgressView(value: progress)
-                Text("\(Int(progress * 100))%")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 4)
-        case .loadingModel:
-            Text("Loading model...").font(.caption).foregroundColor(.orange)
-        case .ready:
-            Text("Ready (hold fn)").font(.caption).foregroundColor(.secondary)
-        case .recording:
-            Text("Recording...").font(.caption).foregroundColor(.red)
-        case .transcribing:
-            Text("Finalizing...").font(.caption).foregroundColor(.orange)
-        case .error(let msg):
-            Text("Error: \(msg)").font(.caption).foregroundColor(.red)
-        }
-    }
-
-    @ViewBuilder
-    private var modelPicker: some View {
-        Text("Model").font(.caption).foregroundColor(.secondary)
-        ForEach(ModelVariant.allCases, id: \.self) { variant in
-            Button {
-                appState.switchVariant(variant)
-            } label: {
-                HStack {
-                    Text(variant.displayName)
-                    if variant == appState.selectedVariant {
-                        Spacer()
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-            .disabled(!isReady)
-        }
-    }
-
-    private var isReady: Bool {
-        if case .ready = appState.status { return true }
-        return false
-    }
-}

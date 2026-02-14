@@ -4,11 +4,11 @@
 
 import Foundation
 
-enum ModelVariant: String, CaseIterable {
+public enum ModelVariant: String, CaseIterable, Sendable {
     case tdt   // Parakeet TDT 0.6b v2 (3-file transducer, best quality)
     case ctc   // Parakeet TDT-CTC 110m (single file, faster/smaller)
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .tdt: return "Parakeet TDT 0.6b (Best Quality)"
         case .ctc: return "Parakeet CTC 110m (Faster)"
