@@ -38,7 +38,6 @@ final class OverlayPanel {
         panel.hasShadow = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
-        // Remove standard window buttons
         panel.standardWindowButton(.closeButton)?.isHidden = true
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
@@ -46,7 +45,6 @@ final class OverlayPanel {
         let hostingView = NSHostingView(rootView: OverlayView(appState: appState))
         panel.contentView = hostingView
 
-        // Center horizontally, upper third of screen
         if let screen = NSScreen.main {
             let screenFrame = screen.visibleFrame
             let x = screenFrame.midX - 140
@@ -62,10 +60,15 @@ struct OverlayView: View {
     @ObservedObject var appState: AppState
     @State private var isPulsing = false
 
+    private var isRecording: Bool {
+        if case .recording = appState.status { return true }
+        return false
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Circle()
-                .fill(appState.recordingState == .recording ? Color.red : Color.orange)
+                .fill(isRecording ? Color.red : Color.orange)
                 .frame(width: 12, height: 12)
                 .scaleEffect(isPulsing ? 1.3 : 1.0)
                 .animation(
@@ -79,7 +82,7 @@ struct OverlayView: View {
 
             Spacer()
 
-            if appState.recordingState == .recording {
+            if isRecording {
                 Text("⌥Space to stop")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -94,10 +97,10 @@ struct OverlayView: View {
     }
 
     private var statusText: String {
-        switch appState.recordingState {
-        case .idle: return "Ready"
+        switch appState.status {
         case .recording: return "Listening..."
         case .transcribing: return "Transcribing..."
+        default: return "Ready"
         }
     }
 }

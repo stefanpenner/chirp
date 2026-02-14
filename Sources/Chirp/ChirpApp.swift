@@ -3,21 +3,29 @@ import Foundation
 
 @MainActor
 final class AppState: ObservableObject {
-    enum RecordingState {
-        case idle
+    enum Status {
+        case downloading(Double)
+        case loadingModel
+        case ready
         case recording
         case transcribing
+        case error(String)
     }
 
-    @Published var recordingState: RecordingState = .idle
+    @Published var status: Status = .loadingModel
     @Published var transcribedText: String = ""
-    @Published var isTranscriberReady: Bool = false
 
     let audioRecorder = AudioRecorder()
     let transcriber = Transcriber()
     let textInserter = TextInserter()
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
+    private var modelManager: ModelManager?
+
+    var isReady: Bool {
+        if case .ready = status { return true }
+        return false
+    }
 
     init() {
         overlayPanel = OverlayPanel(appState: self)
@@ -25,86 +33,78 @@ final class AppState: ObservableObject {
             self?.toggleRecording()
         }
         textInserter.checkAccessibilityPermission()
-        initializeTranscriber()
+        ensureModel()
     }
 
-    private func initializeTranscriber() {
-        guard let modelDir = findModelDir() else {
-            print("Warning: Model directory not found. Run 'make setup' to download the model.")
-            print("  Set CHIRP_MODEL_DIR env var or place models in the working directory.")
+    private func ensureModel() {
+        if let modelDir = ModelManager.findExistingModel() {
+            loadTranscriber(modelDir: modelDir)
             return
         }
 
+        // Model not found — download it
+        status = .downloading(0)
+        NSLog("Chirp: Model not found, downloading...")
+
+        modelManager = ModelManager(
+            onProgress: { [weak self] progress in
+                Task { @MainActor in
+                    self?.status = .downloading(progress)
+                }
+            },
+            onComplete: { [weak self] result in
+                Task { @MainActor in
+                    switch result {
+                    case .success(let modelDir):
+                        NSLog("Chirp: Download complete")
+                        self?.loadTranscriber(modelDir: modelDir)
+                    case .failure(let error):
+                        NSLog("Chirp: Download failed: %@", error.localizedDescription)
+                        self?.status = .error(error.localizedDescription)
+                    }
+                    self?.modelManager = nil
+                }
+            }
+        )
+        modelManager?.download()
+    }
+
+    private func loadTranscriber(modelDir: String) {
+        status = .loadingModel
         NSLog("Chirp: Loading model from: %@", modelDir)
         Task.detached { [weak self] in
             guard let self else { return }
             let ready = self.transcriber.initialize(modelDir: modelDir)
             await MainActor.run {
-                self.isTranscriberReady = ready
-                if !ready {
-                    print("Warning: Transcriber failed to initialize.")
+                if ready {
+                    self.status = .ready
+                } else {
+                    self.status = .error("Failed to initialize transcriber")
                 }
             }
         }
     }
 
-    private func findModelDir() -> String? {
-        // Check environment variable first
-        if let envDir = ProcessInfo.processInfo.environment["CHIRP_MODEL_DIR"],
-           FileManager.default.fileExists(atPath: envDir + "/encoder.int8.onnx") {
-            return envDir
-        }
-
-        // Look for model relative to the working directory
-        let modelName = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
-        let cwd = FileManager.default.currentDirectoryPath
-        let candidates = [
-            "\(cwd)/models/\(modelName)",
-            "\(cwd)/../models/\(modelName)",
-            "\(cwd)/../../models/\(modelName)",
-        ]
-
-        for candidate in candidates {
-            if FileManager.default.fileExists(atPath: candidate + "/encoder.int8.onnx") {
-                return candidate
-            }
-        }
-
-        // Check next to the executable
-        if let resourcePath = Bundle.main.resourcePath {
-            let bundleCandidate = "\(resourcePath)/models/\(modelName)"
-            if FileManager.default.fileExists(atPath: bundleCandidate + "/encoder.int8.onnx") {
-                return bundleCandidate
-            }
-        }
-
-        return nil
-    }
-
     func toggleRecording() {
-        switch recordingState {
-        case .idle:
+        switch status {
+        case .ready:
             startRecording()
         case .recording:
             stopRecordingAndTranscribe()
-        case .transcribing:
+        default:
             break
         }
     }
 
     private func startRecording() {
-        guard isTranscriberReady else {
-            print("Transcriber not ready — cannot record")
-            return
-        }
         transcribedText = ""
-        recordingState = .recording
+        status = .recording
         overlayPanel?.showOverlay()
         audioRecorder.startRecording()
     }
 
     private func stopRecordingAndTranscribe() {
-        recordingState = .transcribing
+        status = .transcribing
         let samples = audioRecorder.stopRecording()
 
         let transcriber = self.transcriber
@@ -118,7 +118,7 @@ final class AppState: ObservableObject {
                     self.textInserter.insertText(text)
                 }
 
-                self.recordingState = .idle
+                self.status = .ready
                 self.overlayPanel?.hideOverlay()
             }
         }
@@ -132,39 +132,52 @@ struct ChirpApp: App {
 
     var body: some Scene {
         MenuBarExtra("Chirp", systemImage: "mic.fill") {
-            if !appState.isTranscriberReady {
-                Text("Loading model...")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-            } else {
-                switch appState.recordingState {
-                case .idle:
-                    Text("Ready (Option+Space)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                case .recording:
-                    Text("Recording...")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                case .transcribing:
-                    Text("Transcribing...")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
-            }
-
+            statusView
             Divider()
-
             Button("Quit Chirp") {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q")
         }
     }
+
+    @ViewBuilder
+    private var statusView: some View {
+        switch appState.status {
+        case .downloading(let progress):
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Downloading model...")
+                    .font(.caption)
+                ProgressView(value: progress)
+                Text("\(Int(progress * 100))%")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 4)
+        case .loadingModel:
+            Text("Loading model...")
+                .font(.caption)
+                .foregroundColor(.orange)
+        case .ready:
+            Text("Ready (Option+Space)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        case .recording:
+            Text("Recording...")
+                .font(.caption)
+                .foregroundColor(.red)
+        case .transcribing:
+            Text("Transcribing...")
+                .font(.caption)
+                .foregroundColor(.orange)
+        case .error(let msg):
+            Text("Error: \(msg)")
+                .font(.caption)
+                .foregroundColor(.red)
+        }
+    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        // App setup happens in AppState init via @StateObject
-    }
+    func applicationDidFinishLaunching(_ notification: Notification) {}
 }
