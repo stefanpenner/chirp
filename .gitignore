@@ -7,3 +7,5 @@ xcuserdata/
 DerivedData/
 .DS_Store
 dist/
+bazel-*
+MODULE.bazel.lock
