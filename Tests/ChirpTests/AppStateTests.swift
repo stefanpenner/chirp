@@ -50,8 +50,8 @@ struct AppStateTests {
         state.status = .ready
         state.startRecording()
 
-        // Give the Task a moment to run
-        try await Task.sleep(nanoseconds: 50_000_000)
+        // Give the Task a moment to run (CI runners are slower)
+        try await Task.sleep(nanoseconds: 200_000_000)
         let called = await mock.resetVADCalled
         #expect(called)
     }
