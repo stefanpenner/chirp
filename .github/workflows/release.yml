@@ -3,6 +3,11 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.2.0)"
+        required: true
 
 permissions:
   contents: write
@@ -13,9 +18,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract version from tag
+      - name: Extract version
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Cache sherpa-onnx libraries
         uses: actions/cache@v4
@@ -50,6 +60,7 @@ jobs:
         with:
           generate_release_notes: true
           files: dist/Chirp-v${{ steps.version.outputs.version }}-macOS.dmg
+          tag_name: v${{ steps.version.outputs.version }}
 
       - name: Update Sparkle appcast
         run: |
@@ -62,13 +73,17 @@ jobs:
           git push origin HEAD:main || true
 
       - name: Update Homebrew tap
-        if: "${{ secrets.HOMEBREW_TAP_TOKEN != '' }}"
+        if: "${{ secrets.HOMEBREW_TAP_DEPLOY_KEY != '' }}"
         env:
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
+          eval "$(ssh-agent -s)"
+          echo "$DEPLOY_KEY" | ssh-add -
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
           VERSION="${{ steps.version.outputs.version }}"
           SHA="${{ steps.sha.outputs.sha256 }}"
-          git clone "https://x-access-token:${TAP_TOKEN}@github.com/stefanpenner/homebrew-chirp.git" /tmp/homebrew-chirp
+          git clone git@github.com:stefanpenner/homebrew-chirp.git /tmp/homebrew-chirp
           cd /tmp/homebrew-chirp
           sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/chirp.rb
           sed -i '' "s/sha256 .*/sha256 \"${SHA}\"/" Casks/chirp.rb
