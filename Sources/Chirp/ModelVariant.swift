@@ -1,3 +1,7 @@
+// ModelVariant.swift — Available speech recognition model variants.
+// Holds download URLs, directory names, and size metadata for each model.
+// Used by ModelManager (download/locate) and Transcriber (model configuration).
+
 import Foundation
 
 enum ModelVariant: String, CaseIterable {
@@ -29,7 +33,7 @@ enum ModelVariant: String, CaseIterable {
         }
     }
 
-    /// sherpa-onnx model_type string
+    /// sherpa-onnx model_type string for recognizer config.
     var modelType: String {
         switch self {
         case .tdt: return "nemo_transducer"
@@ -37,13 +41,15 @@ enum ModelVariant: String, CaseIterable {
         }
     }
 
-    /// The file to check for to determine if model is downloaded
+    /// File to check when determining if a model is already downloaded.
     var checkFile: String {
         switch self {
         case .tdt: return "encoder.int8.onnx"
         case .ctc: return "model.int8.onnx"
         }
     }
+
+    // MARK: - Persistence
 
     static let defaultsKey = "selectedModelVariant"
 

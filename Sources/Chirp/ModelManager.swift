@@ -1,3 +1,8 @@
+// ModelManager.swift — Downloads model and VAD files from GitHub releases.
+// Handles parallel download, tar extraction, progress reporting, and
+// on-disk model discovery. Used by AppState.ensureModel() on first launch
+// or when switching model variants.
+
 import Foundation
 
 final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDelegate {
@@ -18,6 +23,9 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         self.onComplete = onComplete
     }
 
+    // MARK: - Model discovery
+
+    /// Searches well-known locations for an already-downloaded model.
     static func findExisting(variant: ModelVariant) -> ModelPaths? {
         guard let modelDir = findModelDir(variant: variant) else { return nil }
         guard let vadPath = findVADPath() else { return nil }
@@ -47,6 +55,7 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         return nil
     }
 
+    /// Search paths in priority order: App Support, cwd relatives, bundle resources.
     private static func searchPaths(suffix: String) -> [String] {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -76,6 +85,9 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         return "\(appSupport)/models"
     }
 
+    // MARK: - Download
+
+    /// Starts parallel downloads of the model archive and VAD file.
     func download() {
         let config = URLSessionConfiguration.default
         session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
@@ -90,10 +102,13 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         vadTask.resume()
     }
 
+    // MARK: - Delegate state
+
     private var modelDone = false
     private var vadDone = false
     private var downloadError: Error?
 
+    /// Reports model download progress (0→0.7). VAD is small and not tracked separately.
     func urlSession(
         _ session: URLSession,
         downloadTask: URLSessionDownloadTask,
@@ -133,6 +148,7 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
             return
         }
 
+        // Model archive: extract tar.bz2
         onProgress(0.7)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
@@ -153,6 +169,7 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         checkAllDone()
     }
 
+    /// Called when both downloads finish. Validates extracted files and reports result.
     private func checkAllDone() {
         guard modelDone && vadDone else { return }
 

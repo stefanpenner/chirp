@@ -1,3 +1,7 @@
+// Protocols.swift — Dependency injection boundaries.
+// AppState depends on these protocols rather than concrete types,
+// enabling mock-based testing without audio hardware or ML models.
+
 import Foundation
 
 struct ModelPaths: Sendable {

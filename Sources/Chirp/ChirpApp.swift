@@ -1,11 +1,35 @@
+// ChirpApp.swift — App entry point and core state machine.
+// AppState owns the full lifecycle: model download → loading → ready ⇄ recording.
+// ChirpApp renders the menu bar extra (status, model picker, quit).
+//
+// State machine (AppState.Status):
+//
+//   ┌─────────────┐   model found   ┌──────────────┐  success  ┌───────┐
+//   │ downloading  │───────────────→ │ loadingModel  │────────→ │ ready │
+//   │  (progress)  │                 └──────────────┘  failure  │       │
+//   └─────────────┘                         │          ┌───────→│       │
+//         │ failure                          ▼          │        └───┬───┘
+//         ▼                             ┌────────┐     │     fn press│
+//     ┌────────┐                        │ error  │     │            ▼
+//     │ error  │                        └────────┘     │     ┌───────────┐
+//     └────────┘                                       │     │ recording │
+//                                                      │     └─────┬─────┘
+//                                                      │     fn release│
+//                                                      │           ▼
+//                                                      │   ┌──────────────┐
+//                                                      └───│ transcribing │
+//                                                          └──────────────┘
+
 import SwiftUI
 import Foundation
+
+// MARK: - AppState
 
 @MainActor
 @Observable
 final class AppState {
     enum Status {
-        case downloading(Double)
+        case downloading(Double)   // 0.0 … 1.0
         case loadingModel
         case ready
         case recording
@@ -26,6 +50,9 @@ final class AppState {
     var overlayPanel: OverlayPanel?
     private var modelManager: ModelManager?
     private var peekTask: Task<Void, Never>?
+
+    /// Generation counter — incremented each time a committed segment arrives.
+    /// Peek previews that were started before the latest commit are discarded.
     private var commitGen = 0
 
     init(
@@ -57,6 +84,9 @@ final class AppState {
         ensureModel(variant: variant)
     }
 
+    // MARK: - Model lifecycle
+
+    /// If the model is on disk, load it immediately; otherwise download first.
     private func ensureModel(variant: ModelVariant) {
         if let paths = ModelManager.findExisting(variant: variant) {
             loadTranscriber(paths: paths)
@@ -67,17 +97,21 @@ final class AppState {
         modelManager = ModelManager(
             variant: variant,
             onProgress: { [weak self] progress in
-                Task { @MainActor in self?.status = .downloading(progress) }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.status = .downloading(progress) }
+                }
             },
             onComplete: { [weak self] result in
-                Task { @MainActor in
-                    switch result {
-                    case .success(let paths):
-                        self?.loadTranscriber(paths: paths)
-                    case .failure(let error):
-                        self?.status = .error(error.localizedDescription)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        switch result {
+                        case .success(let paths):
+                            self?.loadTranscriber(paths: paths)
+                        case .failure(let error):
+                            self?.status = .error(error.localizedDescription)
+                        }
+                        self?.modelManager = nil
                     }
-                    self?.modelManager = nil
                 }
             }
         )
@@ -89,9 +123,15 @@ final class AppState {
         let transcriber = self.transcriber
         Task {
             let ok = await transcriber.initialize(paths: paths)
-            self.status = ok ? .ready : .error("Failed to initialize transcriber")
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.status = ok ? .ready : .error("Failed to initialize transcriber")
+                }
+            }
         }
     }
+
+    // MARK: - Recording
 
     func startRecording() {
         guard case .ready = status else { return }
@@ -107,17 +147,23 @@ final class AppState {
             let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
             let level = min(rms * 6, 1)
 
-            Task { @MainActor [weak self] in
-                guard let self else { return }
+            Task {
                 let segments = await transcriber.feedAudio(samples: samples)
-                self.audioLevel = level
-                for text in segments {
-                    self.commitGen += 1
-                    self.speculativeText = ""
-                    let needsSpace = !self.transcribedText.isEmpty
-                    if needsSpace { self.transcribedText += " " }
-                    self.transcribedText += text
-                    self.textInserter.typeText(needsSpace ? " \(text)" : text)
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.audioLevel = level
+                        for raw in segments {
+                            let text = TextPostProcessor.process(raw)
+                            guard !text.isEmpty else { continue }
+                            self.commitGen += 1
+                            self.speculativeText = ""
+                            let needsSpace = !self.transcribedText.isEmpty
+                            if needsSpace { self.transcribedText += " " }
+                            self.transcribedText += text
+                            self.textInserter.typeText(needsSpace ? " \(text)" : text)
+                        }
+                    }
                 }
             }
         }
@@ -125,6 +171,9 @@ final class AppState {
         startPeeking()
     }
 
+    /// Polls the transcriber every 400 ms for a speculative preview of
+    /// the current (uncommitted) audio. Discarded if a committed segment
+    /// arrives in the meantime (checked via commitGen).
     private func startPeeking() {
         let transcriber = self.transcriber
         peekTask = Task { [weak self] in
@@ -134,9 +183,17 @@ final class AppState {
                 guard let self, case .recording = self.status else { break }
                 let gen = self.commitGen
                 let preview = await transcriber.peekTranscription()
-                guard case .recording = self.status else { break }
-                guard self.commitGen == gen else { continue }
-                self.speculativeText = preview ?? ""
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard let self, case .recording = self.status else { return }
+                        guard self.commitGen == gen else { return }
+                        if let preview {
+                            self.speculativeText = TextPostProcessor.process(preview)
+                        } else {
+                            self.speculativeText = ""
+                        }
+                    }
+                }
             }
         }
     }
@@ -152,19 +209,27 @@ final class AppState {
         let transcriber = self.transcriber
 
         Task {
-            let remaining = await transcriber.flush()
-            if !remaining.isEmpty {
-                let needsSpace = !self.transcribedText.isEmpty
-                if needsSpace { self.transcribedText += " " }
-                self.transcribedText += remaining
-                self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
+            let raw = await transcriber.flush()
+            let remaining = TextPostProcessor.process(raw)
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if !remaining.isEmpty {
+                        let needsSpace = !self.transcribedText.isEmpty
+                        if needsSpace { self.transcribedText += " " }
+                        self.transcribedText += remaining
+                        self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
+                    }
+                    self.audioLevel = 0
+                    self.status = .ready
+                    self.overlayPanel?.hideOverlay()
+                }
             }
-            self.audioLevel = 0
-            self.status = .ready
-            self.overlayPanel?.hideOverlay()
         }
     }
 }
+
+// MARK: - App
 
 @main
 struct ChirpApp: App {

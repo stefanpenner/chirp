@@ -1,3 +1,8 @@
+// OverlayPanel.swift — Floating HUD that appears during recording.
+// Shows live audio waveforms, committed + speculative transcript text,
+// and a glowing border. Themed with a Catppuccin-inspired palette.
+// Managed by AppState.showOverlay() / hideOverlay().
+
 import AppKit
 import SwiftUI
 
@@ -51,6 +56,7 @@ private struct WaveConfig {
     let c1: Color, c2: Color, h2: Double, h3: Double
 }
 
+/// Four layered sine waves with harmonics, creating an organic waveform effect.
 private let waveConfigs: [WaveConfig] = [
     WaveConfig(freq: 3.5, speed: 1.6, opacity: 0.25, width: 1.5, c1: cPurple, c2: cCyan,   h2: 0.4,  h3: 0.2),
     WaveConfig(freq: 2.2, speed: 2.5, opacity: 0.45, width: 2.0, c1: cCyan,   c2: cBlue,   h2: 0.3,  h3: 0.15),
@@ -160,7 +166,7 @@ struct IslandView: View {
 
             Group {
                 if !appState.transcribedText.isEmpty || !appState.speculativeText.isEmpty {
-                    (committed + speculative)
+                    Text("\(committed)\(speculative)")
                         .lineLimit(2)
                         .truncationMode(.head)
                 } else {

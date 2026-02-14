@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache sherpa-onnx libraries
+        uses: actions/cache@v4
+        with:
+          path: Frameworks/lib
+          key: sherpa-onnx-libs-v1.12.24
+
+      - name: Download dependencies
+        run: |
+          # Only need the shared libraries for build+test (models are mocked in tests)
+          if [ ! -f Frameworks/lib/libsherpa-onnx-c-api.dylib ]; then
+            mkdir -p Frameworks/lib
+            curl -L "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.24/sherpa-onnx-v1.12.24-onnxruntime-1.23.2-osx-universal2-shared.tar.bz2" \
+              -o /tmp/sherpa-onnx-shared.tar.bz2
+            tar xjf /tmp/sherpa-onnx-shared.tar.bz2 -C /tmp/
+            cp /tmp/sherpa-onnx-v1.12.24-onnxruntime-1.23.2-osx-universal2-shared/lib/libsherpa-onnx-c-api.dylib Frameworks/lib/
+            cp /tmp/sherpa-onnx-v1.12.24-onnxruntime-1.23.2-osx-universal2-shared/lib/libonnxruntime.1.23.2.dylib Frameworks/lib/
+            ln -sf libonnxruntime.1.23.2.dylib Frameworks/lib/libonnxruntime.dylib
+          fi
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test

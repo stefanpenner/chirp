@@ -1,3 +1,8 @@
+// HotkeyManager.swift — Intercepts the fn/Globe key via CGEvent tap.
+// Suppresses the key from reaching the system (no emoji picker),
+// and calls onPress/onRelease closures on the main actor.
+// Created by AppState.init; lives for the app's lifetime.
+
 import AppKit
 @preconcurrency import CoreGraphics
 
@@ -10,7 +15,9 @@ final class HotkeyManager {
     private let onPress: @MainActor () -> Void
     private let onRelease: @MainActor () -> Void
 
-    private var fnDown = false
+    /// Tracks fn key state. Accessed from the event tap callback thread
+    /// and read from @MainActor context, so marked nonisolated(unsafe).
+    nonisolated(unsafe) private var fnDown = false
     nonisolated(unsafe) private static var current: HotkeyManager?
 
     init(onPress: @escaping @MainActor () -> Void, onRelease: @escaping @MainActor () -> Void) {
@@ -21,7 +28,6 @@ final class HotkeyManager {
     }
 
     private func setupEventTap() {
-        // Intercept flagsChanged, keyDown, and keyUp to fully suppress fn/Globe
         let mask = CGEventMask(
             (1 << CGEventType.flagsChanged.rawValue) |
             (1 << CGEventType.keyDown.rawValue) |
@@ -34,7 +40,6 @@ final class HotkeyManager {
             options: .defaultTap,
             eventsOfInterest: mask,
             callback: { _, type, event, _ -> Unmanaged<CGEvent>? in
-                // Re-enable tap if system disabled it
                 if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                     if let mgr = HotkeyManager.current, let tap = mgr.eventTap {
                         CGEvent.tapEnable(tap: tap, enable: true)
@@ -49,9 +54,7 @@ final class HotkeyManager {
                 // Suppress fn/Globe keyDown and keyUp (prevents emoji picker)
                 if type == .keyDown || type == .keyUp {
                     let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-                    if keyCode == kFnKeyCode {
-                        return nil
-                    }
+                    if keyCode == kFnKeyCode { return nil }
                     return Unmanaged.passRetained(event)
                 }
 

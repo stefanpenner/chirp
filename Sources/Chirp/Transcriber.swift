@@ -1,3 +1,10 @@
+// Transcriber.swift — Offline speech recognition via sherpa-onnx C API.
+// Actor wrapping an offline recognizer (Parakeet TDT or CTC) and Silero VAD.
+// Conforms to TranscriberProtocol; used by AppState to process audio:
+//   feedAudio()  → returns committed segments when VAD detects speech end
+//   peekTranscription() → speculative preview of current pending audio
+//   flush()      → transcribes any remaining audio at recording end
+
 import Foundation
 import CSherpaOnnx
 
@@ -11,18 +18,20 @@ actor Transcriber: TranscriberProtocol {
         return strdup(s)!
     }
 
+    // MARK: - Initialization
+
+    /// Configures the offline recognizer and VAD from model files on disk.
+    /// Returns false if either fails to initialize.
     func initialize(paths: ModelPaths) -> Bool {
         let modelDir = paths.modelDir
         let variant = paths.variant
 
-        // --- Offline recognizer ---
         let tokensPath = toCString("\(modelDir)/tokens.txt")
         let providerStr = toCString("cpu")
         let modelTypeStr = toCString(variant.modelType)
         let emptyStr = toCString("")
         let decodingMethodStr = toCString("greedy_search")
 
-        // Variant-specific paths
         let encoderPath = toCString("\(modelDir)/encoder.int8.onnx")
         let decoderPath = toCString("\(modelDir)/decoder.int8.onnx")
         let joinerPath = toCString("\(modelDir)/joiner.int8.onnx")
@@ -91,7 +100,6 @@ actor Transcriber: TranscriberProtocol {
             return false
         }
 
-        // --- VAD ---
         if !initializeVAD(vadPath: paths.vadPath) {
             NSLog("Chirp: Failed to create VAD")
             return false
@@ -138,6 +146,10 @@ actor Transcriber: TranscriberProtocol {
         return vad != nil
     }
 
+    // MARK: - Audio processing
+
+    /// Feeds raw audio into the VAD. Returns transcriptions for any
+    /// complete speech segments the VAD has detected.
     func feedAudio(samples: [Float]) -> [String] {
         guard let vad = vad, recognizer != nil else { return [] }
 
@@ -171,12 +183,19 @@ actor Transcriber: TranscriberProtocol {
         return results
     }
 
+    /// Returns a speculative transcription of pending (uncommitted) audio,
+    /// capped to the last 5 seconds so inference time stays constant.
     func peekTranscription() -> String? {
         guard pendingAudio.count >= 4800 else { return nil }
-        let text = transcribeSamples(pendingAudio)
+        let maxSamples = 16000 * 5
+        let samples = pendingAudio.count > maxSamples
+            ? Array(pendingAudio.suffix(maxSamples))
+            : pendingAudio
+        let text = transcribeSamples(samples)
         return text.isEmpty ? nil : text
     }
 
+    /// Flushes the VAD and transcribes any remaining speech segments.
     func flush() -> String {
         guard let vad = vad else { return "" }
 
@@ -210,6 +229,9 @@ actor Transcriber: TranscriberProtocol {
         }
     }
 
+    // MARK: - Inference
+
+    /// Runs offline recognition on a buffer of samples. Thread-safe via actor isolation.
     private func transcribeSamples(_ samples: [Float]) -> String {
         guard let recognizer = recognizer, !samples.isEmpty else { return "" }
 

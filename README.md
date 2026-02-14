@@ -1,44 +1,30 @@
 # Chirp
 
-**Offline voice-to-text for macOS.** Hold `fn`, speak, release — text appears at your cursor.
-
-## Privacy First
-
-Chirp runs entirely on your Mac. There are no servers, no API keys, no accounts, no telemetry, and no tracking. Your voice is processed locally and never recorded. Nothing leaves your machine — ever.
-
-Use it at work, at home, or anywhere privacy matters.
+**Offline voice-to-text for macOS.** Hold `fn`, speak, release — text appears at your cursor. No servers, no accounts, no data leaves your machine.
 
 ## Features
 
 - **Hold-to-talk** — Press `fn` to record, release to transcribe
-- **Works everywhere** — Text is inserted at your cursor in any app
-- **Real-time feedback** — Live waveform overlay while you speak
-- **Fast and accurate** — Powered by [Parakeet TDT 0.6b v2](https://nvidia.github.io/NeMo/blogs/2025/01/parakeet-tdt-0.6b-v2/) with [Silero VAD](https://github.com/snakers4/silero-vad)
-- **Lightweight** — Lives in your menu bar, no dock icon, no clutter
-- **Zero configuration** — Model auto-downloads on first launch
+- **Works everywhere** — Text is typed at your cursor in any app
+- **Speculative preview** — See partial transcription as you speak
+- **Fast** — Parakeet TDT 0.6b v2 with Silero VAD, all on-device
+- **Menu bar app** — No dock icon, no clutter
+
+## Install
+
+```
+./scripts/setup.sh      # download sherpa-onnx libs + model
+swift run               # build and launch
+```
+
+The model downloads automatically on first launch (~240 MB compressed).
 
 ## Requirements
 
-- macOS 14+
+- macOS 26+
 - Microphone permission
-- Accessibility permission (for text insertion)
+- Accessibility permission (for keystroke insertion)
 
-## Getting Started
+## Privacy
 
-```
-make setup   # download sherpa-onnx libs + model
-make build   # compile
-make run     # build and launch
-```
-
-The speech model downloads automatically on first launch (~240MB compressed, ~630MB on disk).
-
-## How It Works
-
-Chirp captures audio at 16kHz mono, detects speech using Silero VAD, and transcribes it offline with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx). The transcribed text is inserted at your cursor position via the system clipboard. A real-time waveform overlay provides visual feedback while recording.
-
-## Packaging
-
-```
-make package
-```
+Everything runs locally. No network calls, no telemetry, no tracking. Your audio is never recorded or stored.
