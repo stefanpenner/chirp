@@ -2,8 +2,17 @@
 set -euo pipefail
 
 VERSION="${1:?Usage: $0 <version> (e.g. 0.1.0)}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Support both direct invocation and `bazel run //:package -- <version>`
+if [[ -n "${BUILD_WORKSPACE_DIRECTORY:-}" ]]; then
+    ROOT="$BUILD_WORKSPACE_DIRECTORY"
+else
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
+# Ensure dependencies are present
+"$ROOT/scripts/setup.sh"
 
 SIGNING_IDENTITY="${CHIRP_SIGNING_IDENTITY:--}"
 NOTARIZE_PROFILE="${CHIRP_NOTARIZE_PROFILE:-}"

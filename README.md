@@ -27,8 +27,8 @@ brew install --cask stefanpenner/chirp/chirp
 ### Build from source
 
 ```
-./scripts/setup.sh      # download sherpa-onnx libs + model
-swift run               # build and launch
+brew install bazelisk    # install Bazel via Bazelisk
+bazel run //:Chirp       # build and launch
 ```
 
 ## Setup
@@ -97,10 +97,12 @@ All transcription runs locally. Your audio is processed in memory and never reco
 
 ## Development
 
+Install [Bazelisk](https://github.com/bazelbuild/bazelisk), which reads `.bazelversion` and fetches the right Bazel automatically:
+
 ```
-./scripts/setup.sh              # download sherpa-onnx libs + model
-swift build                     # build
-swift test                      # run tests
-swift run                       # launch
-./scripts/package.sh 0.2.0      # create DMG
+brew install bazelisk
+bazel build //:Chirp                  # build
+bazel run //:Chirp                    # build and launch
+bazel test //...                      # run tests
+bazel run //:package -- 0.3.0         # create signed DMG
 ```

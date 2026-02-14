@@ -3,6 +3,15 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_swift//swift:swift.bzl", "swift_library", "swift_interop_hint", "swift_test")
 load("@rules_apple//apple:macos.bzl", "macos_application")
 
+# --- Scripts ---
+# Package: bazel run //:package -- 0.3.0
+
+sh_binary(
+    name = "package",
+    srcs = ["scripts/package.sh"],
+    data = ["scripts/setup.sh"],
+)
+
 # --- Prebuilt sherpa-onnx dynamic libraries (downloaded by scripts/setup.sh) ---
 
 cc_import(

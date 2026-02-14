@@ -1,8 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
-ROOT="$(pwd)"
+# Support both direct invocation and `bazel run //:setup`
+if [[ -n "${BUILD_WORKSPACE_DIRECTORY:-}" ]]; then
+    ROOT="$BUILD_WORKSPACE_DIRECTORY"
+else
+    cd "$(dirname "$0")/.."
+    ROOT="$(pwd)"
+fi
 
 SHERPA_VERSION="v1.12.24"
 ONNXRUNTIME_VERSION="1.23.2"
