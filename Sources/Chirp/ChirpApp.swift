@@ -50,6 +50,13 @@ final class AppState {
     var overlayPanel: OverlayPanel?
     private var modelManager: ModelManager?
     private var peekTask: Task<Void, Never>?
+    private var audioConsumerTask: Task<Void, Never>?
+    private var audioContinuation: AsyncStream<[Float]>.Continuation?
+
+    /// Monotonically increasing session counter. Incremented each time
+    /// startRecording() is called. Checked after every await to discard
+    /// work from a previous recording session.
+    private var recordingSession: UInt64 = 0
 
     /// Generation counter — incremented each time a committed segment arrives.
     /// Peek previews that were started before the latest commit are discarded.
@@ -121,13 +128,9 @@ final class AppState {
     private func loadTranscriber(paths: ModelPaths) {
         status = .loadingModel
         let transcriber = self.transcriber
-        Task {
+        Task { [weak self] in
             let ok = await transcriber.initialize(paths: paths)
-            DispatchQueue.main.async { [weak self] in
-                MainActor.assumeIsolated {
-                    self?.status = ok ? .ready : .error("Failed to initialize transcriber")
-                }
-            }
+            self?.status = ok ? .ready : .error("Failed to initialize transcriber")
         }
     }
 
@@ -138,32 +141,45 @@ final class AppState {
         transcribedText = ""
         speculativeText = ""
         commitGen = 0
-        let transcriber = self.transcriber
-        Task { await transcriber.resetVAD() }
+        recordingSession &+= 1
+        let session = recordingSession
         status = .recording
         overlayPanel?.showOverlay()
 
-        audioRecorder.startRecording { [weak self] samples in
-            let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
-            let level = min(rms * 6, 1)
+        let (stream, continuation) = AsyncStream<[Float]>.makeStream()
+        audioContinuation = continuation
 
-            Task {
+        audioRecorder.startRecording { samples in
+            continuation.yield(samples)
+        }
+
+        let transcriber = self.transcriber
+        audioConsumerTask = Task { [weak self] in
+            // Guaranteed to run before first feedAudio — no ordering race.
+            await transcriber.resetVAD()
+
+            for await samples in stream {
+                guard !Task.isCancelled else { break }
+
+                let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
+                let level = min(rms * 6, 1)
+
                 let segments = await transcriber.feedAudio(samples: samples)
-                DispatchQueue.main.async { [weak self] in
-                    MainActor.assumeIsolated {
-                        guard let self else { return }
-                        self.audioLevel = level
-                        for raw in segments {
-                            let text = TextPostProcessor.process(raw)
-                            guard !text.isEmpty else { continue }
-                            self.commitGen += 1
-                            self.speculativeText = ""
-                            let needsSpace = !self.transcribedText.isEmpty
-                            if needsSpace { self.transcribedText += " " }
-                            self.transcribedText += text
-                            self.textInserter.typeText(needsSpace ? " \(text)" : text)
-                        }
-                    }
+
+                // After await, back on MainActor. Check session is still ours.
+                guard let self, self.recordingSession == session else { break }
+                guard case .recording = self.status else { break }
+
+                self.audioLevel = level
+                for raw in segments {
+                    let text = TextPostProcessor.process(raw)
+                    guard !text.isEmpty else { continue }
+                    self.commitGen += 1
+                    self.speculativeText = ""
+                    let needsSpace = !self.transcribedText.isEmpty
+                    if needsSpace { self.transcribedText += " " }
+                    self.transcribedText += text
+                    self.textInserter.typeText(needsSpace ? " \(text)" : text)
                 }
             }
         }
@@ -173,58 +189,55 @@ final class AppState {
 
     /// Polls the transcriber every 400 ms for a speculative preview of
     /// the current (uncommitted) audio. Discarded if a committed segment
-    /// arrives in the meantime (checked via commitGen).
+    /// arrives in the meantime (checked via commitGen and recordingSession).
     private func startPeeking() {
         let transcriber = self.transcriber
+        let session = recordingSession
         peekTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 400_000_000)
                 guard !Task.isCancelled else { break }
-                guard let self, case .recording = self.status else { break }
+                guard let self, self.recordingSession == session else { break }
+                guard case .recording = self.status else { break }
                 let gen = self.commitGen
                 let preview = await transcriber.peekTranscription()
-                DispatchQueue.main.async { [weak self] in
-                    MainActor.assumeIsolated {
-                        guard let self, case .recording = self.status else { return }
-                        guard self.commitGen == gen else { return }
-                        if let preview {
-                            self.speculativeText = TextPostProcessor.process(preview)
-                        } else {
-                            self.speculativeText = ""
-                        }
-                    }
-                }
+                guard self.recordingSession == session else { break }
+                guard case .recording = self.status else { break }
+                guard self.commitGen == gen else { continue }
+                self.speculativeText = preview.map { TextPostProcessor.process($0) } ?? ""
             }
         }
     }
 
     func stopRecording() {
         guard case .recording = status else { return }
+
+        // Cancel consumer + peek — no more audio processing after this point.
         peekTask?.cancel()
         peekTask = nil
+        audioConsumerTask?.cancel()
+        audioConsumerTask = nil
+        audioContinuation?.finish()
+        audioContinuation = nil
         audioRecorder.stopRecording()
+
         status = .transcribing
         speculativeText = ""
 
         let transcriber = self.transcriber
-
-        Task {
+        Task { [weak self] in
             let raw = await transcriber.flush()
             let remaining = TextPostProcessor.process(raw)
-            DispatchQueue.main.async { [weak self] in
-                MainActor.assumeIsolated {
-                    guard let self else { return }
-                    if !remaining.isEmpty {
-                        let needsSpace = !self.transcribedText.isEmpty
-                        if needsSpace { self.transcribedText += " " }
-                        self.transcribedText += remaining
-                        self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
-                    }
-                    self.audioLevel = 0
-                    self.status = .ready
-                    self.overlayPanel?.hideOverlay()
-                }
+            guard let self else { return }
+            if !remaining.isEmpty {
+                let needsSpace = !self.transcribedText.isEmpty
+                if needsSpace { self.transcribedText += " " }
+                self.transcribedText += remaining
+                self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
             }
+            self.audioLevel = 0
+            self.status = .ready
+            self.overlayPanel?.hideOverlay()
         }
     }
 }
