@@ -1,6 +1,6 @@
 # Chirp
 
-**Offline voice-to-text for macOS.** Hold `fn`, speak, release — text appears at your cursor. No servers, no accounts, no data leaves your machine.
+**Offline voice-to-text for macOS.** Hold `fn`, speak, release — text appears at your cursor. All transcription runs on-device — no accounts, no servers, no data leaves your machine.
 
 ## Features
 
@@ -27,4 +27,4 @@ The model downloads automatically on first launch (~240 MB compressed).
 
 ## Privacy
 
-Everything runs locally. No network calls, no telemetry, no tracking. Your audio is never recorded or stored.
+All transcription runs locally. Your audio is processed in memory and never recorded or stored. No telemetry, no tracking, no data leaves your machine. Other than downloading the open-source models, Chirp requires no network access.
