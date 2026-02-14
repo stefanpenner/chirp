@@ -18,8 +18,6 @@ struct ChirpApp: App {
         MenuBarExtra("Chirp", systemImage: "mic.fill") {
             statusView
             Divider()
-            modelPicker
-            Divider()
             CheckForUpdatesView(updater: updaterController.updater)
             Divider()
             Button("Quit Chirp") { NSApplication.shared.terminate(nil) }
@@ -53,29 +51,6 @@ struct ChirpApp: App {
         }
     }
 
-    @ViewBuilder
-    private var modelPicker: some View {
-        Text("Model").font(.caption).foregroundColor(.secondary)
-        ForEach(ModelVariant.allCases, id: \.self) { variant in
-            Button {
-                appState.switchVariant(variant)
-            } label: {
-                HStack {
-                    Text(variant.displayName)
-                    if variant == appState.selectedVariant {
-                        Spacer()
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-            .disabled(!isReady)
-        }
-    }
-
-    private var isReady: Bool {
-        if case .ready = appState.status { return true }
-        return false
-    }
 }
 
 struct CheckForUpdatesView: View {

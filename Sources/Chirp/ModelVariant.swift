@@ -6,20 +6,13 @@ import Foundation
 
 public enum ModelVariant: String, CaseIterable, Sendable {
     case tdt   // Parakeet TDT 0.6b v2 (3-file transducer, best quality)
-    case ctc   // Parakeet TDT-CTC 110m (single file, faster/smaller)
 
     public var displayName: String {
-        switch self {
-        case .tdt: return "Parakeet TDT 0.6b (Best Quality)"
-        case .ctc: return "Parakeet CTC 110m (Faster)"
-        }
+        "Parakeet TDT 0.6b (Best Quality)"
     }
 
     var modelDirName: String {
-        switch self {
-        case .tdt: return "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
-        case .ctc: return "sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8"
-        }
+        "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
     }
 
     var downloadURL: URL {
@@ -27,26 +20,17 @@ public enum ModelVariant: String, CaseIterable, Sendable {
     }
 
     var sizeDescription: String {
-        switch self {
-        case .tdt: return "~630MB"
-        case .ctc: return "~126MB"
-        }
+        "~630MB"
     }
 
     /// sherpa-onnx model_type string for recognizer config.
     var modelType: String {
-        switch self {
-        case .tdt: return "nemo_transducer"
-        case .ctc: return "nemo_ctc"
-        }
+        "nemo_transducer"
     }
 
     /// File to check when determining if a model is already downloaded.
     var checkFile: String {
-        switch self {
-        case .tdt: return "encoder.int8.onnx"
-        case .ctc: return "model.int8.onnx"
-        }
+        "encoder.int8.onnx"
     }
 
     // MARK: - Persistence

@@ -7,7 +7,6 @@ ROOT="$(pwd)"
 SHERPA_VERSION="v1.12.24"
 ONNXRUNTIME_VERSION="1.23.2"
 TDT_MODEL_NAME="sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
-CTC_MODEL_NAME="sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8"
 
 echo "=== Chirp Setup ==="
 echo ""
@@ -50,21 +49,6 @@ else
     echo "Parakeet TDT model already present."
 fi
 
-# --- Download Parakeet CTC model ---
-if [ ! -d "$ROOT/models/${CTC_MODEL_NAME}" ]; then
-    echo ""
-    echo "Downloading Parakeet CTC 110m (int8) model (~50MB compressed, ~126MB extracted)..."
-    mkdir -p "$ROOT/models"
-    MODEL_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/${CTC_MODEL_NAME}.tar.bz2"
-    curl -L "$MODEL_URL" -o /tmp/parakeet-ctc-model.tar.bz2
-    echo "Extracting model..."
-    tar xjf /tmp/parakeet-ctc-model.tar.bz2 -C "$ROOT/models/"
-    rm -f /tmp/parakeet-ctc-model.tar.bz2
-    echo "CTC model installed to models/${CTC_MODEL_NAME}/"
-else
-    echo "Parakeet CTC model already present."
-fi
-
 # --- Download Silero VAD model ---
 if [ ! -f "$ROOT/models/silero_vad.onnx" ]; then
     echo ""
@@ -79,10 +63,7 @@ fi
 
 echo ""
 echo "Model files:"
-echo "  TDT:"
-ls -lh "$ROOT/models/${TDT_MODEL_NAME}/" 2>/dev/null || echo "    (not downloaded yet)"
-echo "  CTC:"
-ls -lh "$ROOT/models/${CTC_MODEL_NAME}/" 2>/dev/null || echo "    (not downloaded yet)"
+ls -lh "$ROOT/models/${TDT_MODEL_NAME}/" 2>/dev/null || echo "  (not downloaded yet)"
 echo ""
 ls -lh "$ROOT/models/silero_vad.onnx" 2>/dev/null || echo "  (VAD model not downloaded yet)"
 

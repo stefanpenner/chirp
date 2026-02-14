@@ -98,25 +98,6 @@ struct AppStateTests {
         #expect(flushed)
         #expect(inserter.typedTexts.contains("hello world"))
     }
-
-    @Test("switchVariant no-ops when not ready")
-    func switchVariantNoOp() {
-        let (state, _, _, _) = makeAppState()
-        state.status = .loadingModel
-        let original = state.selectedVariant
-        let other: ModelVariant = original == .tdt ? .ctc : .tdt
-        state.switchVariant(other)
-        #expect(state.selectedVariant == original)
-    }
-
-    @Test("switchVariant changes selectedVariant when ready")
-    func switchVariantChanges() {
-        let (state, _, _, _) = makeAppState()
-        state.status = .ready
-        let other: ModelVariant = state.selectedVariant == .tdt ? .ctc : .tdt
-        state.switchVariant(other)
-        #expect(state.selectedVariant == other)
-    }
 }
 
 // Helper extension for setting mock values

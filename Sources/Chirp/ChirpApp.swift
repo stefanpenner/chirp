@@ -41,8 +41,6 @@ public final class AppState {
     public var transcribedText: String = ""
     public var speculativeText: String = ""
     public var audioLevel: Float = 0
-    public var selectedVariant: ModelVariant
-
     let audioRecorder: any AudioRecording
     private(set) var transcriber: any TranscriberProtocol
     let textInserter: any TextInserting
@@ -74,31 +72,20 @@ public final class AppState {
         self.audioRecorder = audioRecorder
         self.transcriber = transcriber
         self.textInserter = textInserter
-        selectedVariant = ModelVariant.saved
         overlayPanel = OverlayPanel(appState: self)
         hotkeyManager = HotkeyManager(
             onPress: { [weak self] in self?.startRecording() },
             onRelease: { [weak self] in self?.stopRecording() }
         )
         textInserter.checkAccessibilityPermission()
-        ensureModel(variant: selectedVariant)
-    }
-
-    public func switchVariant(_ variant: ModelVariant) {
-        guard variant != selectedVariant else { return }
-        guard case .ready = status else { return }
-
-        selectedVariant = variant
-        ModelVariant.saved = variant
-
-        transcriber = Transcriber()
-        ensureModel(variant: variant)
+        ensureModel()
     }
 
     // MARK: - Model lifecycle
 
     /// If the model is on disk, load it immediately; otherwise download first.
-    private func ensureModel(variant: ModelVariant) {
+    private func ensureModel() {
+        let variant = ModelVariant.tdt
         if let paths = ModelManager.findExisting(variant: variant) {
             loadTranscriber(paths: paths)
             return

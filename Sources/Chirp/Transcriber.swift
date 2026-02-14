@@ -1,5 +1,5 @@
 // Transcriber.swift — Offline speech recognition via sherpa-onnx C API.
-// Actor wrapping an offline recognizer (Parakeet TDT or CTC) and Silero VAD.
+// Actor wrapping an offline recognizer (Parakeet TDT 0.6b v2) and Silero VAD.
 // Conforms to TranscriberProtocol; used by AppState to process audio:
 //   feedAudio()  → returns committed segments when VAD detects speech end
 //   peekTranscription() → speculative preview of current pending audio
@@ -35,28 +35,20 @@ actor Transcriber: TranscriberProtocol {
         let encoderPath = toCString("\(modelDir)/encoder.int8.onnx")
         let decoderPath = toCString("\(modelDir)/decoder.int8.onnx")
         let joinerPath = toCString("\(modelDir)/joiner.int8.onnx")
-        let ctcModelPath = toCString("\(modelDir)/model.int8.onnx")
 
         defer {
-            free(encoderPath); free(decoderPath); free(joinerPath); free(ctcModelPath)
+            free(encoderPath); free(decoderPath); free(joinerPath)
             free(tokensPath); free(providerStr); free(modelTypeStr); free(emptyStr)
             free(decodingMethodStr)
         }
 
         var modelConfig = SherpaOnnxOfflineModelConfig()
 
-        switch variant {
-        case .tdt:
-            var transducerConfig = SherpaOnnxOfflineTransducerModelConfig()
-            transducerConfig.encoder = UnsafePointer(encoderPath)
-            transducerConfig.decoder = UnsafePointer(decoderPath)
-            transducerConfig.joiner = UnsafePointer(joinerPath)
-            modelConfig.transducer = transducerConfig
-        case .ctc:
-            var ctcConfig = SherpaOnnxOfflineNemoEncDecCtcModelConfig()
-            ctcConfig.model = UnsafePointer(ctcModelPath)
-            modelConfig.nemo_ctc = ctcConfig
-        }
+        var transducerConfig = SherpaOnnxOfflineTransducerModelConfig()
+        transducerConfig.encoder = UnsafePointer(encoderPath)
+        transducerConfig.decoder = UnsafePointer(decoderPath)
+        transducerConfig.joiner = UnsafePointer(joinerPath)
+        modelConfig.transducer = transducerConfig
 
         modelConfig.tokens = UnsafePointer(tokensPath)
         modelConfig.num_threads = 4
