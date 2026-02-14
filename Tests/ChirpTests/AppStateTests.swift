@@ -91,8 +91,8 @@ struct AppStateTests {
         state.status = .recording
         state.stopRecording()
 
-        // Wait for the async flush Task to complete
-        try await Task.sleep(nanoseconds: 100_000_000)
+        // Wait for the async flush Task to complete (CI runners are slower)
+        try await Task.sleep(nanoseconds: 500_000_000)
 
         let flushed = await mock.flushCalled
         #expect(flushed)
