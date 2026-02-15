@@ -61,16 +61,6 @@ brew upgrade chirp
 
 ## Troubleshooting
 
-### "Chirp" Not Opened / Apple could not verify Chirp
-
-This means the app isn't notarized yet. Run:
-
-```
-xattr -cr /Applications/Chirp.app
-```
-
-Then open Chirp normally. You only need to do this once.
-
 ### Text doesn't appear after transcription
 
 Accessibility permission isn't enabled. Go to **System Settings → Privacy & Security → Accessibility** and make sure Chirp is listed and toggled on. You may need to remove and re-add it if you moved the app.
