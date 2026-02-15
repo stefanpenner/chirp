@@ -52,6 +52,13 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
                 return path
             }
         }
+        // Check bundle resources directly (Bazel bundles VAD without models/ prefix)
+        if let resourcePath = Bundle.main.resourcePath {
+            let bundled = "\(resourcePath)/silero_vad.onnx"
+            if FileManager.default.fileExists(atPath: bundled) {
+                return bundled
+            }
+        }
         return nil
     }
 

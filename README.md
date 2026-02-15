@@ -47,7 +47,7 @@ If Chirp can transcribe but text doesn't appear, Accessibility permission is mis
 
 ### Model download
 
-On first launch, Chirp downloads the speech recognition model (~240 MB). This is a one-time download. After that, Chirp works fully offline.
+On first launch, Chirp downloads the Parakeet TDT 0.6b v2 speech recognition model (~240 MB compressed, ~631 MB on disk). This is a one-time download stored in `~/Library/Application Support/Chirp/`. After that, Chirp works fully offline.
 
 ## Updating
 
@@ -87,13 +87,25 @@ Chirp needs internet access for the initial model download. If it fails, check y
 ## Requirements
 
 - macOS 26+
-- ~500 MB disk space (app + model)
+- ~700 MB disk space (app + model)
 - Microphone permission
 - Accessibility permission
 
 ## Privacy
 
 All transcription runs locally. Your audio is processed in memory and never recorded or stored. No telemetry, no tracking, no data leaves your machine. Other than downloading the open-source models, Chirp requires no network access.
+
+## Acknowledgments
+
+Chirp is built on these open-source projects:
+
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) — speech recognition engine (Apache 2.0)
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime) — model inference runtime (MIT)
+- [NVIDIA Parakeet TDT 0.6b v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) — speech-to-text model ([CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/))
+- [Silero VAD](https://github.com/snakers4/silero-vad) — voice activity detection (MIT)
+- [Sparkle](https://github.com/sparkle-project/Sparkle) — auto-update framework (MIT)
+
+Full license texts are in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
 
 ## Development
 

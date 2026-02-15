@@ -1,8 +1,6 @@
-load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_swift//swift:swift.bzl", "swift_library", "swift_interop_hint", "swift_test")
 load("@rules_apple//apple:macos.bzl", "macos_application")
-load("@rules_apple//apple:apple.bzl", "apple_dynamic_framework_import")
 
 # --- Scripts ---
 # Setup:   bazel run //:setup
@@ -19,24 +17,10 @@ sh_binary(
     data = ["scripts/setup.sh"],
 )
 
-# --- Prebuilt sherpa-onnx dynamic libraries (downloaded by scripts/setup.sh) ---
-
-cc_import(
-    name = "libsherpaonnx",
-    shared_library = "Frameworks/lib/libsherpa-onnx-c-api.dylib",
-)
-
-cc_import(
-    name = "libonnxruntime",
-    shared_library = "Frameworks/lib/libonnxruntime.1.23.2.dylib",
-)
-
-# --- Prebuilt Sparkle.framework (downloaded by scripts/setup.sh) ---
-
-apple_dynamic_framework_import(
-    name = "Sparkle",
-    framework_imports = glob(["Frameworks/Sparkle.framework/**"]),
-)
+# Prebuilt dependencies are fetched by Bazel repo rules in deps.bzl:
+#   @sherpa_onnx  — sherpa-onnx + onnxruntime shared libraries
+#   @sparkle      — Sparkle.framework (auto-update)
+#   @silero_vad   — Silero VAD model (bundled in app)
 
 # --- CSherpaOnnx: C wrapper for sherpa-onnx API ---
 
@@ -52,8 +36,8 @@ cc_library(
     includes = ["Sources/CSherpaOnnx/include"],
     aspect_hints = [":CSherpaOnnx_interop"],
     deps = [
-        ":libsherpaonnx",
-        ":libonnxruntime",
+        "@sherpa_onnx//:sherpaonnx",
+        "@sherpa_onnx//:onnxruntime",
     ],
 )
 
@@ -80,7 +64,7 @@ swift_library(
     module_name = "ChirpMain",
     deps = [
         ":ChirpLib",
-        ":Sparkle",
+        "@sparkle//:Sparkle",
     ],
     copts = [
         "-swift-version", "6",
@@ -98,7 +82,11 @@ macos_application(
     minimum_os_version = "26.0",
     infoplists = ["Sources/Chirp/Info.plist"],
     entitlements = "Sources/Chirp/Chirp.entitlements",
-    resources = ["Sources/Chirp/AppIcon.icns"],
+    resources = [
+        "Sources/Chirp/AppIcon.icns",
+        "THIRD_PARTY_NOTICES",
+        "@silero_vad//file",
+    ],
     deps = [":ChirpMain"],
 )
 

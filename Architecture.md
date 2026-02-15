@@ -75,7 +75,7 @@ AppState owns all transitions. Only `ready → recording` (fn press) and `record
 - **Download**: parallel URLSession tasks for model archive + VAD, with progress (0→0.7 download, 0.7→0.95 extraction, 0.95→1.0 validation)
 - **Extraction**: `/usr/bin/tar xjf` to `~/Library/Application Support/Chirp/models/`
 
-For development, `scripts/setup.sh` downloads models and dylibs to the repo (gitignored).
+Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. For SPM development, `scripts/setup.sh` downloads models and dylibs to the repo (gitignored).
 
 ## Hotkey
 
@@ -101,7 +101,7 @@ Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`) ena
 - `ChirpLib` (module name `Chirp`): all sources except `Main.swift`, no `@main` entry point
 - `ChirpMain`: only `Main.swift` with `@main`, imports `Chirp` and `Sparkle`
 - `ChirpTests`: `swift_test` depending on `ChirpLib`
-- Prebuilt `Sparkle.framework` imported via `apple_dynamic_framework_import`
+- Prebuilt deps fetched via Bazel repo rules (`deps.bzl`): sherpa-onnx dylibs, Sparkle.framework, Silero VAD
 - Types used by `Main.swift` (`AppState`, `Status`, `ModelVariant`, etc.) are `public` to cross the module boundary
 
 `scripts/package.sh` creates a signed `.app` bundle + DMG:
