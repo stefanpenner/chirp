@@ -34,17 +34,17 @@ Chirp is a macOS 26+ menu bar app that performs offline speech-to-text. Hold the
 ## State Machine
 
 ```
-┌─────────────┐  model found  ┌──────────────┐ success ┌───────┐
-│ downloading  │─────────────→│ loadingModel  │────────→│ ready │
-│  (progress)  │              └──────────────┘ failure  │       │
-└─────────────┘                      │         ┌──────→│       │
+┌──────────────┐  model found ┌──────────────┐ success ┌───────┐
+│ downloading  │─────────────→│ loadingModel │────────→│ ready │
+│  (progress)  │              └──────────────┘ failure │       │
+└──────────────┘                      │        ┌──────→│       │
       │ failure                      ▼         │       └───┬───┘
-      ▼                         ┌────────┐     │    fn press│
+      ▼                         ┌────────┐     │   fn press│
   ┌────────┐                    │ error  │     │           ▼
   │ error  │                    └────────┘     │    ┌───────────┐
   └────────┘                                   │    │ recording │
                                                │    └─────┬─────┘
-                                               │    fn release│
+                                               │    fn release
                                                │          ▼
                                                │  ┌──────────────┐
                                                └──│ transcribing │
