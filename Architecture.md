@@ -27,26 +27,32 @@ fn key press/release          microphone
 ## State Machine
 
 ```
-┌──────────────┐  model found ┌──────────────┐ success ┌───────┐
-│ downloading  │─────────────→│ loadingModel │────────→│ ready │
-│  (progress)  │              └──────────────┘ failure │       │
-└──────────────┘                      │        ┌──────→│       │
-      ▲ failure                      ▼         │       └───┬───┘
-      │                         ┌────────┐     │   fn press│
-  ┌────────┐                    │ error  │     │           ▼
-  │ error  │                    └────────┘     │    ┌───────────┐
-  └────────┘                                   │    │ recording │
-                                               │    └─────┬─────┘
-                                               │    fn release
-                                               │          ▼
-                                               │  ┌──────────────┐
-                                               └──│ transcribing │
-                                                  └──────────────┘
+                      cancel
+  ┌──────────────┐──────────→┌─────────────┐
+  │ downloading  │           │ needsModel  │
+  │  (progress)  │           └──────┬──────┘
+  └──────┬───────┘          fn/menu │
+         │ model found              ▼
+         ▼                  ┌──────────────┐
+  ┌───────────────┐  ←──────│ downloading  │ (re-entry)
+  │ loadingModel  │         └──────────────┘
+  └───────┬───────┘
+   success│  failure
+    ┌─────┘    └──→ ┌────────┐
+    ▼                │ error  │
+  ┌───────┐  retry   └────────┘
+  │ ready │←────────────┘
+  └───┬───┘
+ fn press│
+       ▼
+  ┌───────────┐  fn release  ┌──────────────┐
+  │ recording │─────────────→│ transcribing │──→ ready
+  └───────────┘              └──────────────┘
 
   ready ──(fn press, model missing)──→ downloading
 ```
 
-AppState owns all transitions. Only `ready → recording` (fn press) and `recording → transcribing` (fn release) are user-initiated; the rest are automatic. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording. Pressing fn during `downloading` or `loadingModel` triggers a brief scale-pulse nudge on the overlay (via `downloadNudge`) instead of silently ignoring the press.
+AppState owns all transitions. Only `ready → recording` (fn press) and `recording → transcribing` (fn release) are user-initiated; the rest are automatic. Cancelling a download transitions to `needsModel` (clean idle state); from there, pressing fn or selecting a model from the menu re-enters `downloading`. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording. Pressing fn during `downloading` or `loadingModel` triggers a brief scale-pulse nudge on the overlay (via `downloadNudge`) instead of silently ignoring the press.
 
 ## Audio Pipeline
 
@@ -78,10 +84,10 @@ Both use the same `nemo_transducer` architecture and file layout (`encoder.int8.
 - **Discovery**: searches App Support, working directory, parent dirs, and bundle resources
 - **Download**: URLSession download task with progress (0→0.9 download, 0.9→1.0 extraction)
 - **Extraction**: `/usr/bin/tar xjf` to `~/Library/Application Support/Chirp/models/`
-- **Cancellation**: `cancel()` invalidates in-flight downloads (used during model switching)
-- **Deletion**: `deleteModel(variant:)` removes a non-active model from disk
+- **Cancellation**: `cancel()` invalidates in-flight downloads (used during model switching and user cancel)
+- **Deletion**: `deleteModel(variant:)` removes any model from disk (deleting the active model transitions to `needsModel`)
 
-**Model switching** is done via `AppState.switchModel(to:)`, which is only allowed from `.ready` or `.error` state. It cancels any in-flight download, creates a fresh transcriber, persists the selection to UserDefaults, and calls `ensureModel()` to download or load the new model. The menu bar shows a "Model" submenu listing all variants with a checkmark on the active one.
+**Model switching** is done via `AppState.switchModel(to:)`, which is only allowed from `.ready`, `.error`, or `.needsModel` state. It cancels any in-flight download, creates a fresh transcriber, persists the selection to UserDefaults, and calls `ensureModel()` to download or load the new model. The menu bar shows a "Model" submenu listing all variants with a checkmark on the active one.
 
 Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. For SPM development, `scripts/setup.sh` downloads models and dylibs to the repo (gitignored).
 
@@ -92,8 +98,9 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 ## Overlay
 
 `OverlayPanel` manages a borderless `NSPanel` hosting a SwiftUI `IslandView`:
-- **Download state**: progress bar (blue→cyan gradient, rescaled 0–0.9→0–100%), model name (clickable link to releases page), source host, filename, and size; pulsing full bar during extraction
+- **Download state**: progress bar (blue→cyan gradient, rescaled 0–0.9→0–100%), model name (clickable link), compressed size, and cancel button; pulsing full bar during extraction
 - **Loading state**: indeterminate spinner with model name and size
+- **needsModel state**: overlay hidden; menu shows "No model loaded" with download button
 - **Recording state**: animated sine-wave waveform driven by audio level
 - Committed text (white) + speculative text (gray)
 - Conic gradient glow border (active during recording, transcribing, and download)

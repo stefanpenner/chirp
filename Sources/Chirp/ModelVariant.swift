@@ -29,7 +29,7 @@ public enum ModelVariant: String, CaseIterable, Sendable {
     public var sizeDescription: String {
         switch self {
         case .tdt: return "~460MB"
-        case .tdtMultilingual: return "~460MB"
+        case .tdtMultilingual: return "~465MB"
         }
     }
 

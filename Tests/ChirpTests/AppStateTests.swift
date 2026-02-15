@@ -729,13 +729,135 @@ struct AppStateTests {
         #expect(state.activeVariant == .tdtMultilingual)
     }
 
-    @Test("deleteModel cannot delete active variant")
-    func deleteModelCannotDeleteActive() {
+    @Test("deleteModel active variant transitions to needsModel")
+    func deleteModelActiveVariant() {
         let (state, _, _, _) = makeAppState()
+        state.status = .ready
         state.activeVariant = .tdt
-        // Should be a no-op — no crash
         state.deleteModel(.tdt)
-        #expect(state.activeVariant == .tdt)
+
+        guard case .needsModel = state.status else {
+            Issue.record("Expected .needsModel, got \(state.status)")
+            return
+        }
+    }
+
+    @Test("deleteModel blocked during recording")
+    func deleteModelBlockedDuringRecording() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .recording
+        state.activeVariant = .tdt
+        let gen = state.modelCacheGeneration
+        state.deleteModel(.tdt)
+
+        guard case .recording = state.status else {
+            Issue.record("Expected .recording, got \(state.status)")
+            return
+        }
+        #expect(state.modelCacheGeneration == gen)
+    }
+
+    // MARK: - Cancel download
+
+    @Test("cancelDownload transitions from downloading to needsModel")
+    func cancelDownloadTransition() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .downloading(0.5)
+        state.cancelDownload()
+
+        guard case .needsModel = state.status else {
+            Issue.record("Expected .needsModel, got \(state.status)")
+            return
+        }
+    }
+
+    @Test("cancelDownload is no-op when not downloading")
+    func cancelDownloadNoOp() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .ready
+        state.cancelDownload()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready, got \(state.status)")
+            return
+        }
+    }
+
+    // MARK: - Retry / re-download
+
+    @Test("retryDownload from error triggers ensureModel")
+    func retryDownloadFromError() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .error("something failed")
+        state.retryDownload()
+
+        switch state.status {
+        case .downloading, .loadingModel:
+            break // expected — ensureModel was called
+        default:
+            Issue.record("Expected .downloading or .loadingModel, got \(state.status)")
+        }
+    }
+
+    @Test("retryDownload from needsModel triggers ensureModel")
+    func retryDownloadFromNeedsModel() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .needsModel
+        state.retryDownload()
+
+        switch state.status {
+        case .downloading, .loadingModel:
+            break // expected — ensureModel was called
+        default:
+            Issue.record("Expected .downloading or .loadingModel, got \(state.status)")
+        }
+    }
+
+    @Test("retryDownload is no-op when ready")
+    func retryDownloadNoOpWhenReady() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .ready
+        state.retryDownload()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready, got \(state.status)")
+            return
+        }
+    }
+
+    // MARK: - needsModel + fn press
+
+    @Test("fn press during needsModel starts download")
+    func fnPressDuringNeedsModelStartsDownload() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .needsModel
+        state.startRecording()
+
+        switch state.status {
+        case .downloading, .loadingModel:
+            break // expected — ensureModel was called
+        default:
+            Issue.record("Expected .downloading or .loadingModel, got \(state.status)")
+        }
+    }
+
+    @Test("canSwitchModel is true in needsModel")
+    func canSwitchModelInNeedsModel() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .needsModel
+        #expect(state.canSwitchModel)
+    }
+
+    // MARK: - Model cache generation
+
+    @Test("deleteModel increments modelCacheGeneration")
+    func deleteModelIncrementsGeneration() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .ready
+        state.activeVariant = .tdt
+        let gen = state.modelCacheGeneration
+        state.deleteModel(.tdtMultilingual)
+        #expect(state.modelCacheGeneration == gen + 1)
     }
 }
 

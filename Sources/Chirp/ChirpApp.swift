@@ -4,21 +4,27 @@
 //
 // State machine (AppState.Status):
 //
-//   ┌──────────────┐   model found   ┌───────────────┐  success  ┌───────┐
-//   │ downloading  │───────────────→ │ loadingModel  │─────────→ │ ready │
-//   │  (progress)  │                 └───────────────┘  failure  │       │
-//   └──────────────┘                         │         ┌────────→│       │
-//         │ failure                          ▼         │         └───┬───┘
-//         ▼                             ┌────────┐     │     fn press│
-//     ┌────────┐                        │ error  │     │            ▼
-//     │ error  │                        └────────┘     │     ┌───────────┐
-//     └────────┘                                       │     │ recording │
-//                                                      │     └─────┬─────┘
-//                                                      │     fn release
-//                                                      │           ▼
-//                                                      │   ┌──────────────┐
-//                                                      └───│ transcribing │
-//                                                          └──────────────┘
+//                       cancel
+//   ┌──────────────┐──────────→┌─────────────┐
+//   │ downloading  │           │ needsModel  │
+//   │  (progress)  │           └──────┬──────┘
+//   └──────┬───────┘          fn/menu │
+//          │ model found              ▼
+//          ▼                  ┌──────────────┐
+//   ┌───────────────┐  ←─────│ downloading  │ (re-entry)
+//   │ loadingModel  │        └──────────────┘
+//   └───────┬───────┘
+//    success│  failure
+//     ┌─────┘    └──→ ┌────────┐
+//     ▼                │ error  │
+//   ┌───────┐  retry   └────────┘
+//   │ ready │←────────────┘
+//   └───┬───┘
+//  fn press│
+//        ▼
+//   ┌───────────┐  fn release  ┌──────────────┐
+//   │ recording │─────────────→│ transcribing │──→ ready
+//   └───────────┘              └──────────────┘
 
 import SwiftUI
 import Foundation
@@ -29,6 +35,7 @@ import Foundation
 @Observable
 public final class AppState {
     public enum Status {
+        case needsModel            // no model on disk; idle until user initiates download
         case downloading(Double)   // 0.0 … 1.0
         case loadingModel
         case ready
@@ -46,6 +53,7 @@ public final class AppState {
     private(set) var transcriber: any TranscriberProtocol
     let textInserter: any TextInserting
     public var downloadNudge: Bool = false
+    public var modelCacheGeneration: Int = 0
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
     private var modelManager: ModelManager?
@@ -119,6 +127,7 @@ public final class AppState {
                     MainActor.assumeIsolated {
                         switch result {
                         case .success(let paths):
+                            self?.modelCacheGeneration += 1
                             self?.loadTranscriber(paths: paths)
                         case .failure(let error):
                             self?.status = .error(error.localizedDescription)
@@ -155,7 +164,7 @@ public final class AppState {
     /// Whether the model can be switched right now (not recording/transcribing/downloading/loading).
     public var canSwitchModel: Bool {
         switch status {
-        case .ready, .error: return true
+        case .ready, .error, .needsModel: return true
         default: return false
         }
     }
@@ -175,15 +184,37 @@ public final class AppState {
         ensureModel()
     }
 
-    /// Delete a non-active model's files from disk.
+    /// Delete a model's files from disk. Only allowed when the state machine is idle.
     public func deleteModel(_ variant: ModelVariant) {
-        guard variant != activeVariant else { return }
+        guard canSwitchModel else { return }
         try? ModelManager.deleteModel(variant: variant)
+        modelCacheGeneration += 1
+        if variant == activeVariant {
+            status = .needsModel
+        }
     }
 
     /// Whether a variant's model files exist on disk.
     public func isModelDownloaded(_ variant: ModelVariant) -> Bool {
-        ModelManager.findExisting(variant: variant) != nil
+        _ = modelCacheGeneration  // observation dependency for SwiftUI
+        return ModelManager.findExisting(variant: variant) != nil
+    }
+
+    /// Cancel an in-flight download. Returns to idle `.needsModel` state.
+    public func cancelDownload() {
+        guard case .downloading = status else { return }
+        modelManager?.cancel()
+        modelManager = nil
+        status = .needsModel
+        overlayPanel?.hideOverlay()
+    }
+
+    /// Start or retry downloading the active model.
+    public func retryDownload() {
+        switch status {
+        case .error, .needsModel: ensureModel()
+        default: break
+        }
     }
 
     // MARK: - Recording
@@ -202,6 +233,9 @@ public final class AppState {
         switch status {
         case .downloading, .loadingModel:
             triggerDownloadNudge()
+            return
+        case .needsModel:
+            ensureModel()
             return
         case .ready:
             break

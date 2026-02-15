@@ -74,6 +74,11 @@ struct ModelVariantTests {
         #expect(ModelVariant.tdtMultilingual.checkFile == "encoder.int8.onnx")
     }
 
+    @Test("Multilingual size description")
+    func multilingualSize() {
+        #expect(ModelVariant.tdtMultilingual.sizeDescription == "~465MB")
+    }
+
     @Test("Multilingual language description")
     func multilingualLanguage() {
         #expect(ModelVariant.tdtMultilingual.languageDescription == "25 European languages")

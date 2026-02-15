@@ -258,43 +258,29 @@ struct IslandView: View {
 
             if isDownloading || isLoadingModel {
                 VStack(spacing: 4) {
-                    HStack(spacing: 0) {
-                        if isDownloading && downloadProgress >= 0.9 {
-                            Text("Extracting ")
+                    if isDownloading && downloadProgress >= 0.9 {
+                        Text("Extracting\u{2026}")
+                            .foregroundStyle(.white.opacity(0.7))
+                    } else if isDownloading {
+                        HStack(spacing: 0) {
+                            Text("Downloading")
                                 .foregroundStyle(.white.opacity(0.7))
-                        } else if isDownloading {
-                            Text("Downloading ")
-                                .foregroundStyle(.white.opacity(0.7))
-                        } else {
-                            Text("Loading ")
-                                .foregroundStyle(.white.opacity(0.7))
-                        }
-
-                        Text(appState.activeVariant.displayName)
-                            .foregroundStyle(cBlue.opacity(0.8))
-                            .underline(color: cBlue.opacity(0.3))
-                            .onTapGesture { NSWorkspace.shared.open(appState.activeVariant.infoURL) }
-
-                        if isDownloading && downloadProgress < 0.9 {
                             Text("  \(Int(downloadProgress / 0.9 * 100))%")
-                                .foregroundStyle(.white.opacity(0.3))
+                                .foregroundStyle(.white.opacity(0.35))
                         }
+                    } else {
+                        Text("Loading\u{2026}")
+                            .foregroundStyle(.white.opacity(0.7))
                     }
 
-                    if isDownloading {
-                        Text("\(appState.activeVariant.downloadURL.host ?? "") · \(appState.activeVariant.sizeDescription)")
-                            .font(.system(size: 10, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.2))
-                        Text(appState.activeVariant.downloadURL.lastPathComponent)
-                            .font(.system(size: 9, weight: .regular, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.15))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    } else {
-                        Text(appState.activeVariant.sizeDescription)
-                            .font(.system(size: 10, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.2))
-                    }
+                    Text(appState.activeVariant.displayName)
+                        .foregroundStyle(cBlue.opacity(0.8))
+                        .underline(color: cBlue.opacity(0.3))
+                        .onTapGesture { NSWorkspace.shared.open(appState.activeVariant.infoURL) }
+
+                    Text("\(appState.activeVariant.sizeDescription) compressed")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.25))
                 }
                 .font(.system(size: 13, weight: .regular))
                 .multilineTextAlignment(.center)
@@ -320,9 +306,17 @@ struct IslandView: View {
             }
 
             if isDownloading {
-                Text("hold fn to dictate after download")
+                Text("Cancel")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.2))
+                    .foregroundStyle(.white.opacity(0.35))
+                    .onTapGesture { appState.cancelDownload() }
+                    .onHover { inside in
+                        if inside {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
                     .padding(.bottom, 8)
                     .transition(.opacity)
             } else if isRecording {

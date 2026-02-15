@@ -41,7 +41,7 @@ struct ChirpApp: App {
                 }
                 .disabled(!appState.canSwitchModel)
 
-                if isDownloaded && !isActive {
+                if isDownloaded {
                     Button("   Delete \(variant.displayName)\u{2026}") {
                         appState.deleteModel(variant)
                     }
@@ -54,16 +54,11 @@ struct ChirpApp: App {
     @ViewBuilder
     private var statusView: some View {
         switch appState.status {
-        case .downloading(let progress):
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Downloading model...")
-                    .font(.caption)
-                ProgressView(value: progress)
-                Text("\(Int(progress * 100))%")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 4)
+        case .needsModel:
+            Text("No model loaded").font(.caption).foregroundColor(.secondary)
+            Button("Download Model") { appState.retryDownload() }
+        case .downloading:
+            Text("Downloading model\u{2026}").font(.caption).foregroundColor(.secondary)
         case .loadingModel:
             Text("Loading model...").font(.caption).foregroundColor(.orange)
         case .ready:
@@ -74,6 +69,7 @@ struct ChirpApp: App {
             Text("Finalizing...").font(.caption).foregroundColor(.orange)
         case .error(let msg):
             Text("Error: \(msg)").font(.caption).foregroundColor(.red)
+            Button("Retry Download") { appState.retryDownload() }
         }
     }
 }
