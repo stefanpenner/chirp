@@ -654,6 +654,53 @@ struct AppStateTests {
 
     // MARK: - Model loading
 
+    @Test("Microphone permission denied transitions to error status")
+    func microphonePermissionDenied() async throws {
+        let mock = MockTranscriber()
+        await mock.setInitializeResult(true)
+        let recorder = MockAudioRecorder()
+        recorder.microphoneAccessGranted = false
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder)
+
+        let paths = ModelPaths(modelDir: "/test", vadPath: "/test", variant: .tdt)
+        state.loadTranscriber(paths: paths)
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if case .error = state.status { break }
+        }
+
+        guard case .error(let msg) = state.status else {
+            Issue.record("Expected .error, got \(state.status)")
+            return
+        }
+        #expect(msg.contains("Microphone"))
+        #expect(!recorder.prepareCalled)
+    }
+
+    @Test("Microphone permission granted transitions to ready")
+    func microphonePermissionGranted() async throws {
+        let mock = MockTranscriber()
+        await mock.setInitializeResult(true)
+        let recorder = MockAudioRecorder()
+        recorder.microphoneAccessGranted = true
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder)
+
+        let paths = ModelPaths(modelDir: "/test", vadPath: "/test", variant: .tdt)
+        state.loadTranscriber(paths: paths)
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if case .ready = state.status { break }
+        }
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready, got \(state.status)")
+            return
+        }
+        #expect(recorder.prepareCalled)
+    }
+
     @Test("Failed transcriber init transitions to error status")
     func failedTranscriberInitError() async throws {
         let mock = MockTranscriber()

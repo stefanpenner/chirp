@@ -31,6 +31,7 @@ actor MockTranscriber: TranscriberProtocol {
         return feedAudioResult
     }
 
+    func setInitializeResult(_ value: Bool) { initializeResult = value }
     func setFeedAudioResult(_ value: [String]) { feedAudioResult = value }
     func setFeedAudioDelay(_ value: UInt64) { feedAudioDelay = value }
     func setFlushDelay(_ value: UInt64) { flushDelay = value }
@@ -58,6 +59,11 @@ final class MockAudioRecorder: AudioRecording {
     var isRecording = false
     var lastOnSamples: (([Float]) -> Void)?
     var prepareCalled = false
+    var microphoneAccessGranted = true
+
+    func requestMicrophoneAccess() async -> Bool {
+        microphoneAccessGranted
+    }
 
     func prepare() {
         prepareCalled = true

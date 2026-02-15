@@ -19,6 +19,7 @@ protocol TranscriberProtocol: Sendable {
 }
 
 @MainActor protocol AudioRecording {
+    func requestMicrophoneAccess() async -> Bool
     func prepare()
     func startRecording(onSamples: @escaping @Sendable ([Float]) -> Void)
     func stopRecording()
@@ -26,6 +27,7 @@ protocol TranscriberProtocol: Sendable {
 
 extension AudioRecording {
     func prepare() {}
+    func requestMicrophoneAccess() async -> Bool { true }
 }
 
 @MainActor protocol TextInserting {

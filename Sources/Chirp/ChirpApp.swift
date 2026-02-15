@@ -148,9 +148,16 @@ public final class AppState {
             let ok = await transcriber.initialize(paths: paths)
             guard let self, self.activeVariant == expectedVariant else { return }
             if ok {
-                self.status = .ready
-                self.overlayPanel?.hideOverlay()
-                self.audioRecorder.prepare()
+                let micGranted = await self.audioRecorder.requestMicrophoneAccess()
+                guard self.activeVariant == expectedVariant else { return }
+                if micGranted {
+                    self.status = .ready
+                    self.overlayPanel?.hideOverlay()
+                    self.audioRecorder.prepare()
+                } else {
+                    self.status = .error("Microphone access denied — enable in System Settings → Privacy & Security → Microphone")
+                    self.overlayPanel?.hideOverlay()
+                }
             } else {
                 self.status = .error("Failed to initialize transcriber")
             }

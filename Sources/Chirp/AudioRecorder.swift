@@ -17,6 +17,20 @@ final class AudioRecorder: AudioRecording {
     private let sampleRate: Double = 16000
     private var configObserver: (any NSObjectProtocol)?
 
+    func requestMicrophoneAccess() async -> Bool {
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        switch status {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .audio)
+        case .denied, .restricted:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
     /// Creates the AVAudioEngine, converter, and starts the engine.
     /// Call once when the app is ready (e.g. after model loads).
     /// Subsequent calls are no-ops if the engine is already running.
