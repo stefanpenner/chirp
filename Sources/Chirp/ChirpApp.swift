@@ -49,6 +49,7 @@ public final class AppState {
     private var modelManager: ModelManager?
     private var peekTask: Task<Void, Never>?
     private var audioConsumerTask: Task<Void, Never>?
+    private var flushTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<[Float]>.Continuation?
 
     /// Monotonically increasing session counter. Incremented each time
@@ -131,6 +132,8 @@ public final class AppState {
 
     func startRecording() {
         guard case .ready = status else { return }
+        flushTask?.cancel()
+        flushTask = nil
         transcribedText = ""
         speculativeText = ""
         commitGen = 0
@@ -218,8 +221,9 @@ public final class AppState {
         speculativeText = ""
 
         let transcriber = self.transcriber
-        Task { [weak self] in
+        flushTask = Task { [weak self] in
             let raw = await transcriber.flush()
+            guard !Task.isCancelled else { return }
             let remaining = TextPostProcessor.process(raw)
             guard let self else { return }
             if !remaining.isEmpty {

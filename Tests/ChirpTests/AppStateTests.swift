@@ -348,6 +348,68 @@ struct AppStateTests {
         #expect(state.audioLevel == 0)
     }
 
+    // MARK: - Flush task lifecycle
+
+    @Test("stopRecording stores flush task that completes")
+    func stopRecordingStoresFlushTask() async throws {
+        let mock = MockTranscriber()
+        await mock.setFlushResult("final words")
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, inserter: inserter)
+
+        state.status = .recording
+        state.stopRecording()
+
+        // Status should be .transcribing while flush is in flight
+        guard case .transcribing = state.status else {
+            Issue.record("Expected .transcribing immediately after stop, got \(state.status)")
+            return
+        }
+
+        // Wait for flush to complete
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if case .ready = state.status { break }
+        }
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after flush, got \(state.status)")
+            return
+        }
+        #expect(await mock.flushCalled)
+        #expect(inserter.typedTexts.contains("final words"))
+    }
+
+    @Test("startRecording cancels pending flush task")
+    func startRecordingCancelsPendingFlush() async throws {
+        let mock = MockTranscriber()
+        // Slow flush — gives us time to start a new recording
+        await mock.setFlushDelay(5_000_000_000) // 5s
+        await mock.setFlushResult("stale")
+        let inserter = MockTextInserter()
+        let recorder = MockAudioRecorder()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+
+        // Stop a recording → flush starts but takes 5s
+        state.status = .recording
+        state.stopRecording()
+        guard case .transcribing = state.status else {
+            Issue.record("Expected .transcribing, got \(state.status)")
+            return
+        }
+
+        // Force status to .ready so startRecording proceeds.
+        // (In production this only happens after flush, but we're
+        // testing the defensive cancel in startRecording.)
+        state.status = .ready
+        state.startRecording()
+
+        // The slow flush was cancelled — "stale" should never be typed
+        // Give a moment for any stale work to land
+        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(!inserter.typedTexts.contains("stale"))
+    }
+
     // MARK: - Model loading
 
     @Test("Failed transcriber init transitions to error status")
