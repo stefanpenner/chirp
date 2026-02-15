@@ -410,6 +410,25 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("stale"))
     }
 
+    // MARK: - Model recovery
+
+    @Test("startRecording re-triggers ensureModel when model files are missing")
+    func startRecordingRecoversFromMissingModel() {
+        let (state, _, recorder, _) = makeAppState()
+        state.status = .ready
+        state.modelFileCheck = { false }
+
+        state.startRecording()
+
+        switch state.status {
+        case .downloading, .loadingModel:
+            break // recovery kicked in
+        default:
+            Issue.record("Expected .downloading or .loadingModel, got \(state.status)")
+        }
+        #expect(!recorder.isRecording)
+    }
+
     // MARK: - Model loading
 
     @Test("Failed transcriber init transitions to error status")

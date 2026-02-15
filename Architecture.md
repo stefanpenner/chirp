@@ -31,8 +31,8 @@ fn key press/release          microphone
 │ downloading  │─────────────→│ loadingModel │────────→│ ready │
 │  (progress)  │              └──────────────┘ failure │       │
 └──────────────┘                      │        ┌──────→│       │
-      │ failure                      ▼         │       └───┬───┘
-      ▼                         ┌────────┐     │   fn press│
+      ▲ failure                      ▼         │       └───┬───┘
+      │                         ┌────────┐     │   fn press│
   ┌────────┐                    │ error  │     │           ▼
   │ error  │                    └────────┘     │    ┌───────────┐
   └────────┘                                   │    │ recording │
@@ -42,9 +42,11 @@ fn key press/release          microphone
                                                │  ┌──────────────┐
                                                └──│ transcribing │
                                                   └──────────────┘
+
+  ready ──(fn press, model missing)──→ downloading
 ```
 
-AppState owns all transitions. Only `ready → recording` (fn press) and `recording → transcribing` (fn release) are user-initiated; the rest are automatic.
+AppState owns all transitions. Only `ready → recording` (fn press) and `recording → transcribing` (fn release) are user-initiated; the rest are automatic. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording.
 
 ## Audio Pipeline
 

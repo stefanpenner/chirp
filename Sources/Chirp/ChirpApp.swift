@@ -128,10 +128,18 @@ public final class AppState {
         }
     }
 
+    var modelFileCheck: () -> Bool = {
+        ModelManager.findExisting(variant: ModelVariant.tdt) != nil
+    }
+
     // MARK: - Recording
 
     func startRecording() {
         guard case .ready = status else { return }
+        if !modelFileCheck() {
+            ensureModel()
+            return
+        }
         flushTask?.cancel()
         flushTask = nil
         transcribedText = ""
