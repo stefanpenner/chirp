@@ -674,6 +674,69 @@ struct AppStateTests {
         }
         #expect(msg.contains("Failed to initialize"))
     }
+
+    // MARK: - Model switching
+
+    @Test("switchModel same variant is no-op")
+    func switchModelSameVariantIsNoOp() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .ready
+        state.activeVariant = .tdt
+        state.switchModel(to: .tdt)
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready, got \(state.status)")
+            return
+        }
+        #expect(state.activeVariant == .tdt)
+    }
+
+    @Test("switchModel blocked during recording")
+    func switchModelBlockedDuringRecording() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .recording
+        state.activeVariant = .tdt
+        state.switchModel(to: .tdtMultilingual)
+
+        guard case .recording = state.status else {
+            Issue.record("Expected .recording, got \(state.status)")
+            return
+        }
+        #expect(state.activeVariant == .tdt)
+    }
+
+    @Test("switchModel blocked during downloading")
+    func switchModelBlockedDuringDownloading() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .downloading(0.5)
+        state.activeVariant = .tdt
+        state.switchModel(to: .tdtMultilingual)
+
+        guard case .downloading = state.status else {
+            Issue.record("Expected .downloading, got \(state.status)")
+            return
+        }
+        #expect(state.activeVariant == .tdt)
+    }
+
+    @Test("switchModel from error updates activeVariant")
+    func switchModelFromError() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .error("something failed")
+        state.activeVariant = .tdt
+        state.switchModel(to: .tdtMultilingual)
+
+        #expect(state.activeVariant == .tdtMultilingual)
+    }
+
+    @Test("deleteModel cannot delete active variant")
+    func deleteModelCannotDeleteActive() {
+        let (state, _, _, _) = makeAppState()
+        state.activeVariant = .tdt
+        // Should be a no-op — no crash
+        state.deleteModel(.tdt)
+        #expect(state.activeVariant == .tdt)
+    }
 }
 
 // Helper extension for setting mock values

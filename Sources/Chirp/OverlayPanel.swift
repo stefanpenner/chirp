@@ -270,10 +270,10 @@ struct IslandView: View {
                                 .foregroundStyle(.white.opacity(0.7))
                         }
 
-                        Text(ModelVariant.tdt.displayName)
+                        Text(appState.activeVariant.displayName)
                             .foregroundStyle(cBlue.opacity(0.8))
                             .underline(color: cBlue.opacity(0.3))
-                            .onTapGesture { NSWorkspace.shared.open(ModelVariant.tdt.infoURL) }
+                            .onTapGesture { NSWorkspace.shared.open(appState.activeVariant.infoURL) }
 
                         if isDownloading && downloadProgress < 0.9 {
                             Text("  \(Int(downloadProgress / 0.9 * 100))%")
@@ -282,16 +282,16 @@ struct IslandView: View {
                     }
 
                     if isDownloading {
-                        Text("\(ModelVariant.tdt.downloadURL.host ?? "") · \(ModelVariant.tdt.sizeDescription)")
+                        Text("\(appState.activeVariant.downloadURL.host ?? "") · \(appState.activeVariant.sizeDescription)")
                             .font(.system(size: 10, weight: .regular))
                             .foregroundStyle(.white.opacity(0.2))
-                        Text(ModelVariant.tdt.downloadURL.lastPathComponent)
+                        Text(appState.activeVariant.downloadURL.lastPathComponent)
                             .font(.system(size: 9, weight: .regular, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.15))
                             .lineLimit(1)
                             .truncationMode(.middle)
                     } else {
-                        Text(ModelVariant.tdt.sizeDescription)
+                        Text(appState.activeVariant.sizeDescription)
                             .font(.system(size: 10, weight: .regular))
                             .foregroundStyle(.white.opacity(0.2))
                     }

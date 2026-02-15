@@ -64,11 +64,24 @@ AppState owns all transitions. Only `ready → recording` (fn press) and `record
 
 ## Model System
 
-`ModelVariant` enumerates available models (TDT, CTC) with download URLs, directory names, and check files. `ModelManager` handles:
+`ModelVariant` enumerates available models with download URLs, directory names, and check files:
+
+| Variant | Model | Languages |
+|---------|-------|-----------|
+| `.tdt` | Parakeet TDT 0.6b v2 int8 | English |
+| `.tdtMultilingual` | Parakeet TDT 0.6b v3 int8 | 25 European languages (auto-detect) |
+
+Both use the same `nemo_transducer` architecture and file layout (`encoder.int8.onnx`, `decoder.int8.onnx`, `joiner.int8.onnx`).
+
+`ModelManager` handles:
 
 - **Discovery**: searches App Support, working directory, parent dirs, and bundle resources
 - **Download**: URLSession download task with progress (0→0.9 download, 0.9→1.0 extraction)
 - **Extraction**: `/usr/bin/tar xjf` to `~/Library/Application Support/Chirp/models/`
+- **Cancellation**: `cancel()` invalidates in-flight downloads (used during model switching)
+- **Deletion**: `deleteModel(variant:)` removes a non-active model from disk
+
+**Model switching** is done via `AppState.switchModel(to:)`, which is only allowed from `.ready` or `.error` state. It cancels any in-flight download, creates a fresh transcriber, persists the selection to UserDefaults, and calls `ensureModel()` to download or load the new model. The menu bar shows a "Model" submenu listing all variants with a checkmark on the active one.
 
 Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. For SPM development, `scripts/setup.sh` downloads models and dylibs to the repo (gitignored).
 

@@ -76,6 +76,20 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         appSupportModelsPath()
     }
 
+    /// Cancels any in-flight download.
+    func cancel() {
+        session?.invalidateAndCancel()
+        session = nil
+    }
+
+    /// Removes a downloaded model from disk.
+    static func deleteModel(variant: ModelVariant) throws {
+        let path = "\(appSupportModelsPath())/\(variant.modelDirName)"
+        if FileManager.default.fileExists(atPath: path) {
+            try FileManager.default.removeItem(atPath: path)
+        }
+    }
+
     // MARK: - Download
 
     /// Starts download of the model archive.
@@ -151,6 +165,10 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error = error {
+            if (error as NSError).domain == NSURLErrorDomain,
+               (error as NSError).code == NSURLErrorCancelled {
+                return
+            }
             onComplete(.failure(error))
         }
     }

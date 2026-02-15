@@ -41,6 +41,7 @@ public final class AppState {
     public var transcribedText: String = ""
     public var speculativeText: String = ""
     public var audioLevel: Float = 0
+    public var activeVariant: ModelVariant = .saved
     let audioRecorder: any AudioRecording
     private(set) var transcriber: any TranscriberProtocol
     let textInserter: any TextInserting
@@ -48,6 +49,7 @@ public final class AppState {
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
     private var modelManager: ModelManager?
+    var transcriberFactory: () -> any TranscriberProtocol = { Transcriber() }
     private var peekTask: Task<Void, Never>?
     private var nudgeTask: Task<Void, Never>?
     private var audioConsumerTask: Task<Void, Never>?
@@ -68,6 +70,10 @@ public final class AppState {
 
     public convenience init() {
         self.init(audioRecorder: AudioRecorder(), transcriber: Transcriber(), textInserter: TextInserter())
+        self.modelFileCheck = { [weak self] in
+            guard let self else { return false }
+            return ModelManager.findExisting(variant: self.activeVariant) != nil
+        }
     }
 
     init(
@@ -93,7 +99,7 @@ public final class AppState {
 
     /// If the model is on disk, load it immediately; otherwise download first.
     private func ensureModel() {
-        let variant = ModelVariant.tdt
+        let variant = activeVariant
         if let paths = ModelManager.findExisting(variant: variant) {
             loadTranscriber(paths: paths)
             return
@@ -128,20 +134,56 @@ public final class AppState {
     func loadTranscriber(paths: ModelPaths) {
         status = .loadingModel
         let transcriber = self.transcriber
+        let expectedVariant = activeVariant
         Task { [weak self] in
             let ok = await transcriber.initialize(paths: paths)
+            guard let self, self.activeVariant == expectedVariant else { return }
             if ok {
-                self?.status = .ready
-                self?.overlayPanel?.hideOverlay()
-                self?.audioRecorder.prepare()
+                self.status = .ready
+                self.overlayPanel?.hideOverlay()
+                self.audioRecorder.prepare()
             } else {
-                self?.status = .error("Failed to initialize transcriber")
+                self.status = .error("Failed to initialize transcriber")
             }
         }
     }
 
-    var modelFileCheck: () -> Bool = {
-        ModelManager.findExisting(variant: ModelVariant.tdt) != nil
+    var modelFileCheck: () -> Bool = { true }
+
+    // MARK: - Model switching
+
+    /// Whether the model can be switched right now (not recording/transcribing/downloading/loading).
+    public var canSwitchModel: Bool {
+        switch status {
+        case .ready, .error: return true
+        default: return false
+        }
+    }
+
+    /// Switch to a different model variant. Only allowed from `.ready` or `.error` state.
+    public func switchModel(to variant: ModelVariant) {
+        guard canSwitchModel else { return }
+        guard variant != activeVariant else { return }
+
+        modelManager?.cancel()
+        modelManager = nil
+
+        activeVariant = variant
+        ModelVariant.saved = variant
+
+        self.transcriber = transcriberFactory()
+        ensureModel()
+    }
+
+    /// Delete a non-active model's files from disk.
+    public func deleteModel(_ variant: ModelVariant) {
+        guard variant != activeVariant else { return }
+        try? ModelManager.deleteModel(variant: variant)
+    }
+
+    /// Whether a variant's model files exist on disk.
+    public func isModelDownloaded(_ variant: ModelVariant) -> Bool {
+        ModelManager.findExisting(variant: variant) != nil
     }
 
     // MARK: - Recording

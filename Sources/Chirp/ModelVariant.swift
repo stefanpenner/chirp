@@ -5,22 +5,32 @@
 import Foundation
 
 public enum ModelVariant: String, CaseIterable, Sendable {
-    case tdt   // Parakeet TDT 0.6b v2 (3-file transducer, best quality)
+    case tdt              // Parakeet TDT 0.6b v2 (English)
+    case tdtMultilingual  // Parakeet TDT 0.6b v3 (25 European languages)
 
     public var displayName: String {
-        "Parakeet TDT 0.6b"
+        switch self {
+        case .tdt: return "Parakeet TDT English"
+        case .tdtMultilingual: return "Parakeet TDT Multilingual"
+        }
     }
 
     var modelDirName: String {
-        "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
+        switch self {
+        case .tdt: return "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
+        case .tdtMultilingual: return "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
+        }
     }
 
     var downloadURL: URL {
         URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/\(modelDirName).tar.bz2")!
     }
 
-    var sizeDescription: String {
-        "~460MB"
+    public var sizeDescription: String {
+        switch self {
+        case .tdt: return "~460MB"
+        case .tdtMultilingual: return "~460MB"
+        }
     }
 
     var infoURL: URL {
@@ -35,6 +45,13 @@ public enum ModelVariant: String, CaseIterable, Sendable {
     /// File to check when determining if a model is already downloaded.
     var checkFile: String {
         "encoder.int8.onnx"
+    }
+
+    public var languageDescription: String {
+        switch self {
+        case .tdt: return "English"
+        case .tdtMultilingual: return "25 European languages"
+        }
     }
 
     // MARK: - Persistence

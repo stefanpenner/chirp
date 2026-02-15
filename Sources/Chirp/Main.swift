@@ -17,10 +17,37 @@ struct ChirpApp: App {
         MenuBarExtra("Chirp", systemImage: "mic.fill") {
             statusView
             Divider()
+            modelMenu
+            Divider()
             CheckForUpdatesView(updater: updaterController.updater)
             Divider()
             Button("Quit Chirp") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
+        }
+    }
+
+    @ViewBuilder
+    private var modelMenu: some View {
+        Menu("Model") {
+            ForEach(ModelVariant.allCases, id: \.self) { variant in
+                let isActive = variant == appState.activeVariant
+                let isDownloaded = appState.isModelDownloaded(variant)
+                let sizeLabel = isDownloaded ? "" : " (\(variant.sizeDescription))"
+
+                Button {
+                    appState.switchModel(to: variant)
+                } label: {
+                    Text("\(isActive ? "✓ " : "   ")\(variant.displayName) — \(variant.languageDescription)\(sizeLabel)")
+                }
+                .disabled(!appState.canSwitchModel)
+
+                if isDownloaded && !isActive {
+                    Button("   Delete \(variant.displayName)\u{2026}") {
+                        appState.deleteModel(variant)
+                    }
+                    .disabled(!appState.canSwitchModel)
+                }
+            }
         }
     }
 

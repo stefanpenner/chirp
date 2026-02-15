@@ -5,14 +5,16 @@ import Foundation
 @Suite("ModelVariant")
 struct ModelVariantTests {
 
-    @Test("CaseIterable contains tdt")
+    @Test("CaseIterable contains tdt and tdtMultilingual")
     func allCases() {
-        #expect(ModelVariant.allCases == [.tdt])
+        #expect(ModelVariant.allCases == [.tdt, .tdtMultilingual])
     }
+
+    // MARK: - TDT (English)
 
     @Test("TDT display name")
     func tdtDisplayName() {
-        #expect(ModelVariant.tdt.displayName == "Parakeet TDT 0.6b")
+        #expect(ModelVariant.tdt.displayName == "Parakeet TDT English")
     }
 
     @Test("TDT model dir name")
@@ -40,12 +42,60 @@ struct ModelVariantTests {
         #expect(ModelVariant.tdt.sizeDescription == "~460MB")
     }
 
-    @Test("saved round-trips through UserDefaults")
-    func savedRoundTrip() {
+    @Test("TDT language description")
+    func tdtLanguage() {
+        #expect(ModelVariant.tdt.languageDescription == "English")
+    }
+
+    // MARK: - TDT Multilingual
+
+    @Test("Multilingual display name")
+    func multilingualDisplayName() {
+        #expect(ModelVariant.tdtMultilingual.displayName == "Parakeet TDT Multilingual")
+    }
+
+    @Test("Multilingual model dir name")
+    func multilingualModelDirName() {
+        #expect(ModelVariant.tdtMultilingual.modelDirName == "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8")
+    }
+
+    @Test("Multilingual download URL")
+    func multilingualDownloadURL() {
+        #expect(ModelVariant.tdtMultilingual.downloadURL.absoluteString.contains("parakeet-tdt-0.6b-v3-int8"))
+    }
+
+    @Test("Multilingual model type is nemo_transducer")
+    func multilingualModelType() {
+        #expect(ModelVariant.tdtMultilingual.modelType == "nemo_transducer")
+    }
+
+    @Test("Multilingual check file is encoder")
+    func multilingualCheckFile() {
+        #expect(ModelVariant.tdtMultilingual.checkFile == "encoder.int8.onnx")
+    }
+
+    @Test("Multilingual language description")
+    func multilingualLanguage() {
+        #expect(ModelVariant.tdtMultilingual.languageDescription == "25 European languages")
+    }
+
+    // MARK: - Persistence
+
+    @Test("saved round-trips through UserDefaults for tdt")
+    func savedRoundTripTdt() {
         let original = ModelVariant.saved
         defer { ModelVariant.saved = original }
 
         ModelVariant.saved = .tdt
         #expect(ModelVariant.saved == .tdt)
+    }
+
+    @Test("saved round-trips through UserDefaults for tdtMultilingual")
+    func savedRoundTripMultilingual() {
+        let original = ModelVariant.saved
+        defer { ModelVariant.saved = original }
+
+        ModelVariant.saved = .tdtMultilingual
+        #expect(ModelVariant.saved == .tdtMultilingual)
     }
 }
