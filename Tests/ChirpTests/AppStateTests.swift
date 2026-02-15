@@ -19,6 +19,7 @@ struct AppStateTests {
             startListening: false
         )
         state.modelFileCheck = modelFileCheck
+        state.lingerDuration = 1_000_000 // 1ms — don't slow down tests
         return (state, transcriber, recorder, inserter)
     }
 
@@ -513,6 +514,86 @@ struct AppStateTests {
         }
         #expect(state.transcribedText == "The quick brown fox")
         #expect(inserter.typedTexts == ["The quick brown", " fox"])
+    }
+
+    // MARK: - Overlay linger
+
+    @Test("Overlay lingers in transcribing state after flush")
+    func overlayLingersAfterFlush() async throws {
+        let mock = MockTranscriber()
+        await mock.setFlushResult("hello")
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.lingerDuration = 500_000_000 // 500ms
+
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        state.stopRecording()
+
+        // Wait for flush to complete but not the linger
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            if await mock.flushCalled { break }
+        }
+        // Give a moment for flush result to be processed
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        // Status should still be .transcribing during linger
+        guard case .transcribing = state.status else {
+            Issue.record("Expected .transcribing during linger, got \(state.status)")
+            return
+        }
+        #expect(state.transcribedText == "hello")
+
+        // Wait for linger to expire
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if case .ready = state.status { break }
+        }
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after linger, got \(state.status)")
+            return
+        }
+    }
+
+    @Test("No linger when transcription is empty")
+    func noLingerWhenEmpty() async throws {
+        let mock = MockTranscriber()
+        await mock.setFlushResult("")
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.lingerDuration = 2_000_000_000 // 2s — would be obvious if it waited
+
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        state.stopRecording()
+
+        // Should transition to .ready quickly without lingering
+        for _ in 0..<20 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if case .ready = state.status { break }
+        }
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready quickly (no linger), got \(state.status)")
+            return
+        }
+        #expect(inserter.typedTexts.isEmpty)
     }
 
     // MARK: - Model recovery

@@ -56,6 +56,10 @@ public final class AppState {
     /// work from a previous recording session.
     private var recordingSession: UInt64 = 0
 
+    /// How long the overlay lingers after final text before hiding (nanoseconds).
+    /// Injectable for tests.
+    var lingerDuration: UInt64 = 800_000_000
+
     /// Generation counter — incremented each time a committed segment arrives.
     /// Peek previews that were started before the latest commit are discarded.
     private var commitGen = 0
@@ -203,6 +207,11 @@ public final class AppState {
                 self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
             }
             self.audioLevel = 0
+            if !self.transcribedText.isEmpty {
+                try? await Task.sleep(nanoseconds: self.lingerDuration)
+                guard !Task.isCancelled else { return }
+                guard self.recordingSession == session else { return }
+            }
             self.status = .ready
             self.overlayPanel?.hideOverlay()
         }
