@@ -3,7 +3,7 @@ set -euo pipefail
 VERSION="${1:?Usage: $0 <version> <dmg-path>}"
 DMG_PATH="${2:?Usage: $0 <version> <dmg-path>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APPCAST="$ROOT/docs/appcast.xml"
+APPCAST="$ROOT/appcast.xml"
 
 SIZE=$(stat -f%z "$DMG_PATH")
 DATE=$(date -R)

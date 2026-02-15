@@ -2,7 +2,7 @@
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
     <channel>
         <title>Chirp Updates</title>
-        <link>https://raw.githubusercontent.com/stefanpenner/chirp/main/docs/appcast.xml</link>
+        <link>https://raw.githubusercontent.com/stefanpenner/chirp/main/appcast.xml</link>
         <description>Chirp update feed</description>
         <language>en</language>
             <item>
@@ -20,6 +20,14 @@
             <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/stefanpenner/chirp/releases/download/v0.2.1/Chirp-v0.2.1-macOS.dmg" length="31020454" type="application/octet-stream" />
+        </item>
+            <item>
+            <title>Version 0.2.2</title>
+            <pubDate>Sat, 15 Feb 2026 03:23:34 +0000</pubDate>
+            <sparkle:version>0.2.2</sparkle:version>
+            <sparkle:shortVersionString>0.2.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/stefanpenner/chirp/releases/download/v0.2.2/Chirp-v0.2.2-macOS.dmg" length="31077403" type="application/octet-stream" />
         </item>
     </channel>
 </rss>
