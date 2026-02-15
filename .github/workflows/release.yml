@@ -54,8 +54,13 @@ jobs:
 
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
 
-          # Extract signing identity from imported certificate
-          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          # Extract Developer ID Application identity (required for notarization)
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          if [[ -z "$IDENTITY" ]]; then
+            echo "ERROR: No 'Developer ID Application' certificate found in keychain"
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+            exit 1
+          fi
           echo "CHIRP_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
           echo "Signing identity: $IDENTITY"

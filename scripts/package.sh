@@ -100,9 +100,19 @@ rm -rf "$DMG_STAGE"
 # Notarize if configured
 if [[ -n "$NOTARIZE_PROFILE" ]]; then
     echo "==> Notarizing DMG..."
-    xcrun notarytool submit "$DIST/$DMG_NAME" \
+    NOTARIZE_OUTPUT=$(xcrun notarytool submit "$DIST/$DMG_NAME" \
         --keychain-profile "$NOTARIZE_PROFILE" \
-        --wait
+        --wait 2>&1)
+    echo "$NOTARIZE_OUTPUT"
+
+    if echo "$NOTARIZE_OUTPUT" | grep -q "status: Invalid"; then
+        SUBMISSION_ID=$(echo "$NOTARIZE_OUTPUT" | grep "id:" | head -1 | awk '{print $2}')
+        echo "ERROR: Notarization failed. Fetching details..."
+        xcrun notarytool log "$SUBMISSION_ID" \
+            --keychain-profile "$NOTARIZE_PROFILE" 2>&1 || true
+        exit 1
+    fi
+
     echo "==> Stapling notarization ticket..."
     xcrun stapler staple "$DIST/$DMG_NAME"
 fi
