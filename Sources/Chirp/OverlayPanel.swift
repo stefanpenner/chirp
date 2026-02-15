@@ -320,13 +320,13 @@ struct IslandView: View {
                     .padding(.bottom, 8)
                     .transition(.opacity)
             } else if isRecording {
-                Text("release fn")
+                Text("release fn  \u{b7}  esc to cancel")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white.opacity(0.2))
                     .padding(.bottom, 8)
                     .transition(.opacity)
             } else if isTranscribing {
-                Text("Finalizing...")
+                Text("esc to cancel")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white.opacity(0.2))
                     .padding(.bottom, 8)

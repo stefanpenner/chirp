@@ -14,15 +14,26 @@ final class HotkeyManager {
     nonisolated(unsafe) private var runLoopSource: CFRunLoopSource?
     private let onPress: @MainActor () -> Void
     private let onRelease: @MainActor () -> Void
+    private let onCancel: @MainActor () -> Void
 
     /// Tracks fn key state. Accessed from the event tap callback thread
     /// and read from @MainActor context, so marked nonisolated(unsafe).
     nonisolated(unsafe) private var fnDown = false
+
+    /// True while a recording session is active (recording or transcribing).
+    /// Checked by the event tap to decide whether ESC should be intercepted.
+    nonisolated(unsafe) var sessionActive = false
+
     nonisolated(unsafe) private static var current: HotkeyManager?
 
-    init(onPress: @escaping @MainActor () -> Void, onRelease: @escaping @MainActor () -> Void) {
+    init(
+        onPress: @escaping @MainActor () -> Void,
+        onRelease: @escaping @MainActor () -> Void,
+        onCancel: @escaping @MainActor () -> Void
+    ) {
         self.onPress = onPress
         self.onRelease = onRelease
+        self.onCancel = onCancel
         HotkeyManager.current = self
         setupEventTap()
     }
@@ -57,6 +68,11 @@ final class HotkeyManager {
                 // Suppress fn/Globe keyDown and keyUp (prevents emoji picker)
                 if type == .keyDown || type == .keyUp {
                     if keyCode == kFnKeyCode { return nil }
+                    // ESC (0x35) cancels the active session
+                    if type == .keyDown && keyCode == 0x35 && mgr.sessionActive {
+                        Task { @MainActor in mgr.onCancel() }
+                        return nil  // suppress ESC from reaching other apps
+                    }
                     return Unmanaged.passRetained(event)
                 }
 

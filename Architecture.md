@@ -42,17 +42,23 @@ fn key press/release          microphone
     ▼                │ error  │
   ┌───────┐  retry   └────────┘
   │ ready │←────────────┘
-  └───┬───┘
- fn press│
-       ▼
-  ┌───────────┐  fn release  ┌──────────────┐
-  │ recording │─────────────→│ transcribing │──→ ready
-  └───────────┘              └──────────────┘
+  └───┬───┘←──────────────────────────────────┐
+ fn press│                                ESC │
+       ▼                                      │
+  ┌───────────┐  fn release  ┌──────────────┐ │
+  │ recording ├─────────────→│ transcribing ├─┘
+  └─────┬─────┘  ←───────────┴──────┬───────┘
+     ESC│         fn press          │ flush + linger
+        └──→ ready                  └──→ ready
 
   ready ──(fn press, model missing)──→ downloading
 ```
 
-AppState owns all transitions. Only `ready → recording` (fn press) and `recording → transcribing` (fn release) are user-initiated; the rest are automatic. Cancelling a download transitions to `needsModel` (clean idle state); from there, pressing fn or selecting a model from the menu re-enters `downloading`. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording. Pressing fn during `downloading` or `loadingModel` triggers a brief scale-pulse nudge on the overlay (via `downloadNudge`) instead of silently ignoring the press.
+AppState owns all transitions. User-initiated transitions: `ready → recording` (fn press), `recording → transcribing` (fn release), `recording/transcribing → ready` (ESC cancel), and `transcribing → recording` (fn press rejoin). The rest are automatic.
+
+**Recording sessions**: `recording ↔ transcribing` can cycle via fn press/release within the same session — text accumulates across cycles. A session ends naturally (flush + linger timeout) or immediately via ESC cancel. Cancel clears all accumulated text and hides the overlay; already-typed keystrokes are not undone.
+
+Cancelling a download transitions to `needsModel` (clean idle state); from there, pressing fn or selecting a model from the menu re-enters `downloading`. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording. Pressing fn during `downloading` or `loadingModel` triggers a brief scale-pulse nudge on the overlay (via `downloadNudge`) instead of silently ignoring the press.
 
 ## Audio Pipeline
 
@@ -93,7 +99,7 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 
 ## Hotkey
 
-`HotkeyManager` installs a `CGEvent` tap intercepting fn/Globe key events. It suppresses the key entirely (no emoji picker) and calls `onPress`/`onRelease` closures on the main actor via `Task { @MainActor in }`.
+`HotkeyManager` installs a `CGEvent` tap intercepting fn/Globe key events. It suppresses the key entirely (no emoji picker) and calls `onPress`/`onRelease`/`onCancel` closures on the main actor via `Task { @MainActor in }`. ESC (keycode 0x35) is intercepted and suppressed only when `sessionActive` is true (during recording or transcribing); otherwise ESC passes through to the focused app normally.
 
 ## Overlay
 

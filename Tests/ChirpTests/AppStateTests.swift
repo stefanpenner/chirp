@@ -902,9 +902,283 @@ struct AppStateTests {
         let (state, _, _, _) = makeAppState()
         state.status = .ready
         state.activeVariant = .tdt
-        let gen = state.modelCacheGeneration
         state.deleteModel(.tdtMultilingual)
-        #expect(state.modelCacheGeneration == gen + 1)
+        #expect(state.modelCacheGeneration == 1)
+    }
+
+    // MARK: - Cancel session
+
+    @Test("cancelSession from recording → ready")
+    func cancelSessionFromRecording() {
+        let (state, _, recorder, _) = makeAppState()
+        state.status = .ready
+        state.startRecording()
+        guard case .recording = state.status else {
+            Issue.record("Expected .recording, got \(state.status)")
+            return
+        }
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready, got \(state.status)")
+            return
+        }
+        #expect(!recorder.isRecording)
+        #expect(state.transcribedText == "")
+        #expect(state.speculativeText == "")
+        #expect(state.audioLevel == 0)
+    }
+
+    @Test("cancelSession from transcribing → ready")
+    func cancelSessionFromTranscribing() async throws {
+        let mock = MockTranscriber()
+        await mock.setFlushDelay(5_000_000_000) // slow flush
+        await mock.setFlushResult("should not appear")
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        state.stopRecording()
+        guard case .transcribing = state.status else {
+            Issue.record("Expected .transcribing, got \(state.status)")
+            return
+        }
+
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after cancel, got \(state.status)")
+            return
+        }
+        #expect(state.transcribedText == "")
+    }
+
+    @Test("cancelSession prevents flush text from being typed")
+    func cancelSessionPreventsFlushText() async throws {
+        let mock = MockTranscriber()
+        await mock.setFlushDelay(500_000_000) // 500ms flush
+        await mock.setFlushResult("stale text")
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        state.stopRecording()
+        // Cancel while flush is in-flight
+        try await Task.sleep(nanoseconds: 50_000_000)
+        state.cancelSession()
+
+        // Wait for the flush to complete (it was cancelled but let's be sure)
+        try await Task.sleep(nanoseconds: 600_000_000)
+
+        #expect(!inserter.typedTexts.contains("stale text"))
+        #expect(state.transcribedText == "")
+    }
+
+    @Test("cancelSession is no-op from ready")
+    func cancelSessionNoOpFromReady() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .ready
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready, got \(state.status)")
+            return
+        }
+    }
+
+    @Test("cancelSession is no-op from downloading")
+    func cancelSessionNoOpFromDownloading() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .downloading(0.5)
+        state.cancelSession()
+
+        guard case .downloading = state.status else {
+            Issue.record("Expected .downloading, got \(state.status)")
+            return
+        }
+    }
+
+    @Test("Start new recording after cancel works cleanly")
+    func startRecordingAfterCancel() async throws {
+        let mock = MockTranscriber()
+        let recorder = MockAudioRecorder()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder)
+
+        state.status = .ready
+        state.startRecording()
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after cancel, got \(state.status)")
+            return
+        }
+
+        // Start a fresh session
+        state.startRecording()
+        guard case .recording = state.status else {
+            Issue.record("Expected .recording after re-start, got \(state.status)")
+            return
+        }
+        #expect(recorder.isRecording)
+    }
+
+    // MARK: - Session rejoin
+
+    @Test("Rejoin from transcribing preserves text")
+    func rejoinFromTranscribingPreservesText() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        await mock.setFlushDelay(5_000_000_000) // slow flush to stay in transcribing
+        await mock.setFlushResult("")
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        // Commit a segment
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+        #expect(state.transcribedText == "Hello")
+
+        state.stopRecording()
+        guard case .transcribing = state.status else {
+            Issue.record("Expected .transcribing, got \(state.status)")
+            return
+        }
+
+        // Rejoin — fn press during transcribing
+        state.startRecording()
+        guard case .recording = state.status else {
+            Issue.record("Expected .recording after rejoin, got \(state.status)")
+            return
+        }
+        // Text preserved
+        #expect(state.transcribedText == "Hello")
+        #expect(recorder.isRecording)
+    }
+
+    @Test("Rejoin starts new consumer and audio tap")
+    func rejoinStartsNewConsumer() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        await mock.setFlushDelay(5_000_000_000) // slow flush
+        await mock.setFlushResult("")
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        // Commit first segment
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+        #expect(state.transcribedText == "Hello")
+
+        state.stopRecording()
+
+        // Rejoin
+        await mock.setFeedAudioResult(["world"])
+        await mock.setFlushDelay(0)
+        state.startRecording()
+
+        // Wait for new consumer's resetVAD
+        // resetVADCalled is already true, so check feedAudioCallCount increases
+        let prevCount = await mock.feedAudioCallCount
+        recorder.lastOnSamples?([0.2])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.feedAudioCallCount > prevCount { break }
+        }
+
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.typedTexts.contains(" world"))
+    }
+
+    @Test("Rejoin during linger works")
+    func rejoinDuringLingerWorks() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hi"])
+        await mock.setFlushResult("")
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.lingerDuration = 5_000_000_000 // 5s linger to give time to rejoin
+
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        // Commit a segment
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+        #expect(state.transcribedText == "Hi")
+
+        state.stopRecording()
+
+        // Wait for flush to complete (it's instant) and enter linger
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.flushCalled { break }
+        }
+        // Give a moment for linger sleep to start
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        // Still transcribing (in linger)
+        guard case .transcribing = state.status else {
+            Issue.record("Expected .transcribing during linger, got \(state.status)")
+            return
+        }
+
+        // Rejoin during linger
+        state.startRecording()
+        guard case .recording = state.status else {
+            Issue.record("Expected .recording after rejoin, got \(state.status)")
+            return
+        }
+        #expect(state.transcribedText == "Hi")
+        #expect(recorder.isRecording)
     }
 }
 

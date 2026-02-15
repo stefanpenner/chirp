@@ -19,12 +19,18 @@
 //     ▼                │ error  │
 //   ┌───────┐  retry   └────────┘
 //   │ ready │←────────────┘
-//   └───┬───┘
-//  fn press│
-//        ▼
-//   ┌───────────┐  fn release  ┌──────────────┐
-//   │ recording │─────────────→│ transcribing │──→ ready
-//   └───────────┘              └──────────────┘
+//   └───┬───┘←──────────────────────────────────┐
+//  fn press│                                ESC │
+//        ▼                                      │
+//   ┌───────────┐  fn release  ┌──────────────┐ │
+//   │ recording ├─────────────→│ transcribing ├─┘
+//   └─────┬─────┘  ←───────────┴──────┬───────┘
+//      ESC│         fn press          │ flush + linger
+//         └──→ ready                  └──→ ready
+//
+// recording ↔ transcribing can cycle (fn press/release) within the
+// same session. Text accumulates across cycles. Session ends via
+// linger timeout (natural) or ESC (cancel).
 
 import SwiftUI
 import Foundation
@@ -97,7 +103,8 @@ public final class AppState {
         overlayPanel = OverlayPanel(appState: self)
         hotkeyManager = HotkeyManager(
             onPress: { [weak self] in self?.startRecording() },
-            onRelease: { [weak self] in self?.stopRecording() }
+            onRelease: { [weak self] in self?.stopRecording() },
+            onCancel: { [weak self] in self?.cancelSession() }
         )
         textInserter.checkAccessibilityPermission()
         ensureModel()
@@ -246,6 +253,11 @@ public final class AppState {
             return
         case .ready:
             break
+        case .transcribing:
+            // Rejoin: fn pressed during finalization — resume recording
+            // in the same session. Text accumulates.
+            rejoinSession()
+            return
         default:
             return
         }
@@ -261,8 +273,34 @@ public final class AppState {
         recordingSession &+= 1
         let session = recordingSession
         status = .recording
+        hotkeyManager?.sessionActive = true
         overlayPanel?.showOverlay()
 
+        startConsumerAndAudio(session: session)
+        startPeeking()
+    }
+
+    /// Rejoin an active transcribing session — cancel the old consumer
+    /// (which is in flush or linger sleep), keep accumulated text, and
+    /// start a fresh audio stream + consumer in the same session.
+    private func rejoinSession() {
+        audioConsumerTask?.cancel()
+        audioConsumerTask = nil
+        audioContinuation?.finish()
+        audioContinuation = nil
+        audioRecorder.stopRecording()
+
+        let session = recordingSession  // same session — no bump
+        status = .recording
+        hotkeyManager?.sessionActive = true
+
+        startConsumerAndAudio(session: session)
+        startPeeking()
+    }
+
+    /// Shared setup: creates a new audio stream, starts the recorder,
+    /// and spawns the consumer task for the given session.
+    private func startConsumerAndAudio(session: UInt64) {
         let (stream, continuation) = AsyncStream<[Float]>.makeStream()
         audioContinuation = continuation
 
@@ -317,6 +355,7 @@ public final class AppState {
                 self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
             }
             self.audioLevel = 0
+            self.hotkeyManager?.sessionActive = false
             if !self.transcribedText.isEmpty {
                 try? await Task.sleep(nanoseconds: self.lingerDuration)
                 guard !Task.isCancelled else { return }
@@ -325,8 +364,6 @@ public final class AppState {
             self.status = .ready
             self.overlayPanel?.hideOverlay()
         }
-
-        startPeeking()
     }
 
     /// Polls the transcriber every 400 ms for a speculative preview of
@@ -364,6 +401,29 @@ public final class AppState {
 
         status = .transcribing
         speculativeText = ""
+    }
+
+    func cancelSession() {
+        switch status {
+        case .recording, .transcribing: break
+        default: return
+        }
+
+        audioConsumerTask?.cancel()
+        audioConsumerTask = nil
+        peekTask?.cancel()
+        peekTask = nil
+        audioContinuation?.finish()
+        audioContinuation = nil
+        audioRecorder.stopRecording()
+
+        recordingSession &+= 1  // discard in-flight async work
+        transcribedText = ""
+        speculativeText = ""
+        audioLevel = 0
+        hotkeyManager?.sessionActive = false
+        status = .ready
+        overlayPanel?.hideOverlay()
     }
 }
 
