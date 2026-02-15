@@ -4,17 +4,17 @@
 //
 // State machine (AppState.Status):
 //
-//   ┌─────────────┐   model found   ┌──────────────┐  success  ┌───────┐
-//   │ downloading  │───────────────→ │ loadingModel  │────────→ │ ready │
-//   │  (progress)  │                 └──────────────┘  failure  │       │
-//   └─────────────┘                         │          ┌───────→│       │
-//         │ failure                          ▼          │        └───┬───┘
+//   ┌──────────────┐   model found   ┌───────────────┐  success  ┌───────┐
+//   │ downloading  │───────────────→ │ loadingModel  │─────────→ │ ready │
+//   │  (progress)  │                 └───────────────┘  failure  │       │
+//   └──────────────┘                         │         ┌────────→│       │
+//         │ failure                          ▼         │         └───┬───┘
 //         ▼                             ┌────────┐     │     fn press│
 //     ┌────────┐                        │ error  │     │            ▼
 //     │ error  │                        └────────┘     │     ┌───────────┐
 //     └────────┘                                       │     │ recording │
 //                                                      │     └─────┬─────┘
-//                                                      │     fn release│
+//                                                      │     fn release
 //                                                      │           ▼
 //                                                      │   ┌──────────────┐
 //                                                      └───│ transcribing │
