@@ -90,10 +90,18 @@ struct AppStateTests {
     func stopRecordingFlushAndType() async throws {
         let mock = MockTranscriber()
         await mock.setFlushResult("hello world")
+        let recorder = MockAudioRecorder()
         let inserter = MockTextInserter()
-        let (state, _, _, _) = makeAppState(transcriber: mock, inserter: inserter)
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
 
-        state.status = .recording
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
         state.stopRecording()
 
         // Poll until the spawned Task calls flush (up to 3s for slow CI)
@@ -250,12 +258,27 @@ struct AppStateTests {
     @Test("stopRecording flush appends with space")
     func stopRecordingFlushAppendsWithSpace() async throws {
         let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello"])
         await mock.setFlushResult("goodbye")
+        let recorder = MockAudioRecorder()
         let inserter = MockTextInserter()
-        let (state, _, _, _) = makeAppState(transcriber: mock, inserter: inserter)
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
 
-        state.status = .recording
-        state.transcribedText = "hello"
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        // Inject samples so feedAudio returns "hello"
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+
         state.stopRecording()
 
         for _ in 0..<30 {
@@ -264,17 +287,25 @@ struct AppStateTests {
         }
 
         #expect(state.transcribedText == "hello goodbye")
-        #expect(inserter.typedTexts == [" goodbye"])
+        #expect(inserter.typedTexts == ["hello", " goodbye"])
     }
 
     @Test("stopRecording empty flush is no-op")
     func stopRecordingEmptyFlushIsNoOp() async throws {
         let mock = MockTranscriber()
         await mock.setFlushResult("")
+        let recorder = MockAudioRecorder()
         let inserter = MockTextInserter()
-        let (state, _, _, _) = makeAppState(transcriber: mock, inserter: inserter)
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
 
-        state.status = .recording
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
         state.stopRecording()
 
         for _ in 0..<30 {
@@ -336,10 +367,24 @@ struct AppStateTests {
     func stopRecordingResetsAudioLevel() async throws {
         let mock = MockTranscriber()
         await mock.setFlushResult("")
-        let (state, _, _, _) = makeAppState(transcriber: mock)
+        let recorder = MockAudioRecorder()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder)
 
-        state.status = .recording
-        state.audioLevel = 0.5
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        // Inject samples to set audioLevel
+        recorder.lastOnSamples?([0.5, 0.5])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.audioLevel > 0 { break }
+        }
+
         state.stopRecording()
 
         for _ in 0..<30 {
@@ -350,16 +395,25 @@ struct AppStateTests {
         #expect(state.audioLevel == 0)
     }
 
-    // MARK: - Flush task lifecycle
+    // MARK: - Consumer flush lifecycle
 
-    @Test("stopRecording stores flush task that completes")
-    func stopRecordingStoresFlushTask() async throws {
+    @Test("Consumer task flushes after stream ends and transitions to ready")
+    func consumerHandlesFlush() async throws {
         let mock = MockTranscriber()
         await mock.setFlushResult("final words")
         let inserter = MockTextInserter()
-        let (state, _, _, _) = makeAppState(transcriber: mock, inserter: inserter)
+        let recorder = MockAudioRecorder()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
 
-        state.status = .recording
+        state.status = .ready
+        state.startRecording()
+
+        // Wait for resetVAD so consumer is running
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
         state.stopRecording()
 
         // Status should be .transcribing while flush is in flight
@@ -382,8 +436,8 @@ struct AppStateTests {
         #expect(inserter.typedTexts.contains("final words"))
     }
 
-    @Test("startRecording cancels pending flush task")
-    func startRecordingCancelsPendingFlush() async throws {
+    @Test("startRecording cancels pending consumer task")
+    func startRecordingCancelsPendingConsumer() async throws {
         let mock = MockTranscriber()
         // Slow flush — gives us time to start a new recording
         await mock.setFlushDelay(5_000_000_000) // 5s
@@ -392,8 +446,16 @@ struct AppStateTests {
         let recorder = MockAudioRecorder()
         let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
 
-        // Stop a recording → flush starts but takes 5s
-        state.status = .recording
+        state.status = .ready
+        state.startRecording()
+
+        // Wait for consumer to be running
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        // Stop recording → consumer will try to flush (takes 5s)
         state.stopRecording()
         guard case .transcribing = state.status else {
             Issue.record("Expected .transcribing, got \(state.status)")
@@ -410,6 +472,47 @@ struct AppStateTests {
         // Give a moment for any stale work to land
         try await Task.sleep(nanoseconds: 200_000_000)
         #expect(!inserter.typedTexts.contains("stale"))
+    }
+
+    @Test("In-flight feedAudio results survive stopRecording")
+    func inFlightFeedAudioSurvivesStop() async throws {
+        let mock = MockTranscriber()
+        // feedAudio takes 500ms to simulate being mid-call when stop happens
+        await mock.setFeedAudioDelay(500_000_000)
+        await mock.setFeedAudioResult(["The quick brown"])
+        await mock.setFlushResult("fox")
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+
+        state.status = .ready
+        state.startRecording()
+
+        // Wait for resetVAD so consumer is running
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        // Inject samples — feedAudio will take 500ms
+        recorder.lastOnSamples?([0.1, 0.1, 0.1])
+
+        // Brief pause then stop while feedAudio is still in-flight
+        try await Task.sleep(nanoseconds: 100_000_000)
+        state.stopRecording()
+
+        // Wait for everything to complete
+        for _ in 0..<50 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if case .ready = state.status { break }
+        }
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after flush, got \(state.status)")
+            return
+        }
+        #expect(state.transcribedText == "The quick brown fox")
+        #expect(inserter.typedTexts == ["The quick brown", " fox"])
     }
 
     // MARK: - Model recovery

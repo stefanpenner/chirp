@@ -49,7 +49,6 @@ public final class AppState {
     private var modelManager: ModelManager?
     private var peekTask: Task<Void, Never>?
     private var audioConsumerTask: Task<Void, Never>?
-    private var flushTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<[Float]>.Continuation?
 
     /// Monotonically increasing session counter. Incremented each time
@@ -140,8 +139,8 @@ public final class AppState {
             ensureModel()
             return
         }
-        flushTask?.cancel()
-        flushTask = nil
+        audioConsumerTask?.cancel()
+        audioConsumerTask = nil
         transcribedText = ""
         speculativeText = ""
         commitGen = 0
@@ -170,9 +169,10 @@ public final class AppState {
 
                 let segments = await transcriber.feedAudio(samples: samples)
 
-                // After await, back on MainActor. Check session is still ours.
+                // Session guard is sufficient — status may be .transcribing if
+                // stopRecording() ran mid-feedAudio, and we must still process
+                // those results (the VAD already popped them).
                 guard let self, self.recordingSession == session else { break }
-                guard case .recording = self.status else { break }
 
                 self.audioLevel = level
                 for raw in segments {
@@ -186,6 +186,25 @@ public final class AppState {
                     self.textInserter.typeText(needsSpace ? " \(text)" : text)
                 }
             }
+
+            // Stream ended (stopRecording finished the continuation).
+            // Flush any remaining audio the VAD hasn't emitted yet.
+            guard !Task.isCancelled else { return }
+            guard let self, self.recordingSession == session else { return }
+
+            let raw = await transcriber.flush()
+            guard !Task.isCancelled else { return }
+            guard self.recordingSession == session else { return }
+            let remaining = TextPostProcessor.process(raw)
+            if !remaining.isEmpty {
+                let needsSpace = !self.transcribedText.isEmpty
+                if needsSpace { self.transcribedText += " " }
+                self.transcribedText += remaining
+                self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
+            }
+            self.audioLevel = 0
+            self.status = .ready
+            self.overlayPanel?.hideOverlay()
         }
 
         startPeeking()
@@ -216,34 +235,16 @@ public final class AppState {
     func stopRecording() {
         guard case .recording = status else { return }
 
-        // Cancel consumer + peek — no more audio processing after this point.
         peekTask?.cancel()
         peekTask = nil
-        audioConsumerTask?.cancel()
-        audioConsumerTask = nil
+        // Don't cancel audioConsumerTask — it will process any in-flight
+        // feedAudio results, then flush remaining audio after the stream ends.
         audioContinuation?.finish()
         audioContinuation = nil
         audioRecorder.stopRecording()
 
         status = .transcribing
         speculativeText = ""
-
-        let transcriber = self.transcriber
-        flushTask = Task { [weak self] in
-            let raw = await transcriber.flush()
-            guard !Task.isCancelled else { return }
-            let remaining = TextPostProcessor.process(raw)
-            guard let self else { return }
-            if !remaining.isEmpty {
-                let needsSpace = !self.transcribedText.isEmpty
-                if needsSpace { self.transcribedText += " " }
-                self.transcribedText += remaining
-                self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
-            }
-            self.audioLevel = 0
-            self.status = .ready
-            self.overlayPanel?.hideOverlay()
-        }
     }
 }
 

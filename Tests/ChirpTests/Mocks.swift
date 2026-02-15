@@ -6,6 +6,7 @@ actor MockTranscriber: TranscriberProtocol {
     var feedAudioResult: [String] = []
     var peekResult: String? = nil
     var flushResult: String = ""
+    var feedAudioDelay: UInt64 = 0  // nanoseconds
     var flushDelay: UInt64 = 0  // nanoseconds
 
     var initializeCalled = false
@@ -21,13 +22,17 @@ actor MockTranscriber: TranscriberProtocol {
 
     var feedAudioHandler: (([Float]) -> [String])? = nil
 
-    func feedAudio(samples: [Float]) -> [String] {
+    func feedAudio(samples: [Float]) async -> [String] {
         feedAudioCallCount += 1
+        if feedAudioDelay > 0 {
+            try? await Task.sleep(nanoseconds: feedAudioDelay)
+        }
         if let handler = feedAudioHandler { return handler(samples) }
         return feedAudioResult
     }
 
     func setFeedAudioResult(_ value: [String]) { feedAudioResult = value }
+    func setFeedAudioDelay(_ value: UInt64) { feedAudioDelay = value }
     func setFlushDelay(_ value: UInt64) { flushDelay = value }
 
     func peekTranscription() -> String? {
