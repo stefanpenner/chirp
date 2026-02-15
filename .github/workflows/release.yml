@@ -86,6 +86,15 @@ jobs:
           key: bazel-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'deps.bzl') }}
           restore-keys: bazel-${{ runner.os }}-
 
+      - name: Cache dependencies (sherpa-onnx, models, Sparkle)
+        uses: actions/cache@v4
+        with:
+          path: |
+            Frameworks/lib
+            Frameworks/Sparkle.framework
+            models
+          key: deps-${{ runner.os }}-sherpa-v1.12.24-sparkle-2.8.1
+
       - name: Build and package
         run: scripts/package.sh ${{ steps.version.outputs.version }}
 
