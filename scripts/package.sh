@@ -22,70 +22,31 @@ APP="$DIST/Chirp.app"
 CONTENTS="$APP/Contents"
 MACOS="$CONTENTS/MacOS"
 FRAMEWORKS="$CONTENTS/Frameworks"
-RESOURCES="$CONTENTS/Resources"
 
 DMG_NAME="Chirp-v${VERSION}-macOS.dmg"
 
-echo "==> Building Chirp (release)..."
+echo "==> Building Chirp with Bazel..."
 cd "$ROOT"
-swift build -c release
+bazel build //:Chirp
 
-BINARY="$(swift build -c release --show-bin-path)/Chirp"
-if [[ ! -f "$BINARY" ]]; then
-    echo "Error: binary not found at $BINARY"
-    exit 1
-fi
-
-echo "==> Creating app bundle..."
+echo "==> Extracting app bundle..."
 rm -rf "$APP"
-mkdir -p "$MACOS" "$FRAMEWORKS" "$RESOURCES"
+mkdir -p "$DIST"
+unzip -o bazel-bin/Chirp.zip -d "$DIST" > /dev/null
 
-# Copy binary
-cp "$BINARY" "$MACOS/Chirp"
-
-# Copy dylibs
-cp "$ROOT/Frameworks/lib/libsherpa-onnx-c-api.dylib" "$FRAMEWORKS/"
-cp "$ROOT/Frameworks/lib/libonnxruntime.1.23.2.dylib" "$FRAMEWORKS/"
-# Recreate the symlink (some code paths may dlopen the unversioned name)
-ln -sf libonnxruntime.1.23.2.dylib "$FRAMEWORKS/libonnxruntime.dylib"
-
-# Copy Sparkle.framework (downloaded by setup.sh)
-if [[ -d "$ROOT/Frameworks/Sparkle.framework" ]]; then
-    echo "==> Copying Sparkle.framework"
-    cp -R "$ROOT/Frameworks/Sparkle.framework" "$FRAMEWORKS/"
-else
-    echo "Warning: Sparkle.framework not found — run scripts/setup.sh first"
-fi
-
-# Copy Info.plist, stamp the version
-cp "$ROOT/Sources/Chirp/Info.plist" "$CONTENTS/Info.plist"
+# Stamp version into Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$CONTENTS/Info.plist"
-
-# Copy icon if it exists
-if [[ -f "$ROOT/Sources/Chirp/Resources/AppIcon.icns" ]]; then
-    cp "$ROOT/Sources/Chirp/Resources/AppIcon.icns" "$RESOURCES/"
-fi
 
 # Copy entitlements (needed for signing step)
 ENTITLEMENTS="$ROOT/Sources/Chirp/Chirp.entitlements"
 
-echo "==> Fixing rpaths on binary..."
-# Remove build-time rpaths (ignore errors if they don't exist)
+echo "==> Cleaning rpaths on binary..."
+# Remove build-time toolchain rpaths, keep only @executable_path/../Frameworks
 for rp in $(otool -l "$MACOS/Chirp" | grep -A2 "cmd LC_RPATH" | grep "^\s*path" | awk '{print $2}'); do
-    install_name_tool -delete_rpath "$rp" "$MACOS/Chirp" 2>/dev/null || true
-done
-# Add the app-bundle rpath
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS/Chirp"
-
-echo "==> Fixing rpaths on sherpa dylib..."
-# sherpa needs to find onnxruntime next to itself via @loader_path
-# Remove all rpaths except @loader_path, then add it if missing
-for rp in $(otool -l "$FRAMEWORKS/libsherpa-onnx-c-api.dylib" | grep -A2 "cmd LC_RPATH" | grep "^\s*path" | awk '{print $2}'); do
-    if [[ "$rp" != "@loader_path" ]]; then
-        install_name_tool -delete_rpath "$rp" "$FRAMEWORKS/libsherpa-onnx-c-api.dylib" 2>/dev/null || true
+    if [[ "$rp" != "@executable_path/../Frameworks" ]]; then
+        install_name_tool -delete_rpath "$rp" "$MACOS/Chirp" 2>/dev/null || true
     fi
 done
-install_name_tool -add_rpath "@loader_path" "$FRAMEWORKS/libsherpa-onnx-c-api.dylib" 2>/dev/null || true
 
 echo "==> Code signing..."
 if [[ "$SIGNING_IDENTITY" == "-" ]]; then
@@ -100,7 +61,7 @@ codesign --force --sign "$SIGNING_IDENTITY" --timestamp \
 codesign --force --sign "$SIGNING_IDENTITY" --timestamp \
     "$FRAMEWORKS/libsherpa-onnx-c-api.dylib"
 
-# Sign Sparkle.framework if present (each executable needs hardened runtime)
+# Sign Sparkle.framework (each executable needs hardened runtime)
 if [[ -d "$FRAMEWORKS/Sparkle.framework" ]]; then
     find "$FRAMEWORKS/Sparkle.framework" -type f -perm +111 -path '*/MacOS/*' | while read -r exe; do
         codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$exe"
