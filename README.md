@@ -61,15 +61,15 @@ brew upgrade chirp
 
 ## Troubleshooting
 
-### "Chirp can't be opened because Apple cannot check it for malicious software"
+### "Chirp" Not Opened / Apple could not verify Chirp
 
-This means the app isn't notarized yet. Right-click (or Control-click) the app and select **Open**. You'll see the same warning but with an **Open** button. You only need to do this once.
-
-Alternatively, run:
+This means the app isn't notarized yet. Run:
 
 ```
 xattr -cr /Applications/Chirp.app
 ```
+
+Then open Chirp normally. You only need to do this once.
 
 ### Text doesn't appear after transcription
 
