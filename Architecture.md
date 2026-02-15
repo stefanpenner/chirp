@@ -5,31 +5,24 @@ Chirp is a macOS 26+ menu bar app that performs offline speech-to-text. Hold the
 ## Component Overview
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  ChirpApp (SwiftUI MenuBarExtra)                    │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  AppState (@Observable, @MainActor)           │  │
-│  │  Status: downloading → loadingModel → ready   │  │
-│  │          ⇄ recording → transcribing → ready   │  │
-│  ├───────────────────────────────────────────────┤  │
-│  │                                               │  │
-│  │  HotkeyManager ──→ startRecording/stop        │  │
-│  │                                               │  │
-│  │  AudioRecorder ──→ [Float] chunks ──→         │  │
-│  │  Transcriber (actor) ──→ text ──→             │  │
-│  │  TextPostProcessor ──→ cleaned text ──→       │  │
-│  │  TextInserter ──→ CGEvent keystrokes          │  │
-│  │                                               │  │
-│  │  ModelManager ── download/discover models     │  │
-│  │  OverlayPanel ── floating HUD with waveform   │  │
-│  └───────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
-        │
-        ▼
-┌──────────────────┐
-│  CSherpaOnnx (C) │  sherpa-onnx + onnxruntime dylibs
-└──────────────────┘
+fn key press/release          microphone
+       │                         │
+       ▼                         ▼
+  HotkeyManager ──→ AppState ←── AudioRecorder
+                       │  │
+            ┌──────────┘  └──────────┐
+            ▼                        ▼
+      Transcriber              OverlayPanel
+      (sherpa-onnx)            (waveform HUD)
+            │
+            ▼
+    TextPostProcessor
+            │
+            ▼
+      TextInserter ──→ keystrokes into focused app
 ```
+
+**AppState** orchestrates everything. **ModelManager** handles first-run model download. All speech inference runs through the **CSherpaOnnx** C bridge to sherpa-onnx + onnxruntime dylibs.
 
 ## State Machine
 
