@@ -50,7 +50,7 @@ AppState owns all transitions. Only `ready → recording` (fn press) and `record
 
 ## Audio Pipeline
 
-1. **Capture** — `AudioRecorder` wraps AVAudioEngine. Converts hardware sample rate to 16 kHz mono Float32. The tap closure is `nonisolated static` to avoid `@MainActor` executor checks on the real-time audio thread.
+1. **Capture** — `AudioRecorder` wraps AVAudioEngine. Converts hardware sample rate to 16 kHz mono Float32. The engine is created and started once via `prepare()` (called when the model loads) and kept alive between recordings — `startRecording`/`stopRecording` only install/remove the tap for near-instant start. On audio device changes (`AVAudioEngineConfigurationChange`), the engine tears down and re-prepares automatically. The tap closure is `nonisolated static` to avoid `@MainActor` executor checks on the real-time audio thread.
 
 2. **VAD** — `Transcriber.feedAudio()` pushes samples into Silero VAD. When it detects a speech-end boundary, the segment is extracted and transcribed. This gives natural sentence-level chunks.
 

@@ -133,6 +133,7 @@ public final class AppState {
             if ok {
                 self?.status = .ready
                 self?.overlayPanel?.hideOverlay()
+                self?.audioRecorder.prepare()
             } else {
                 self?.status = .error("Failed to initialize transcriber")
             }

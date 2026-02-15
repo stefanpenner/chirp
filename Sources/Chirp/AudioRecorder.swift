@@ -2,20 +2,32 @@
 // Wraps AVAudioEngine with sample-rate conversion. Conforms to AudioRecording.
 // Used by AppState.startRecording(); the onSamples callback delivers chunks
 // to the transcriber on each audio buffer.
+//
+// The engine is prepared once (via prepare()) and kept alive between recordings.
+// startRecording/stopRecording only install/remove the tap — near-instant.
 
 @preconcurrency import AVFoundation
 
 @MainActor
 final class AudioRecorder: AudioRecording {
     private var audioEngine: AVAudioEngine?
+    private var converter: AVAudioConverter?
+    private var targetFormat: AVAudioFormat?
+    private var inputFormat: AVAudioFormat?
     private let sampleRate: Double = 16000
+    private var configObserver: (any NSObjectProtocol)?
 
-    func startRecording(onSamples: @escaping @Sendable ([Float]) -> Void) {
+    /// Creates the AVAudioEngine, converter, and starts the engine.
+    /// Call once when the app is ready (e.g. after model loads).
+    /// Subsequent calls are no-ops if the engine is already running.
+    func prepare() {
+        guard audioEngine == nil else { return }
+
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        let inFormat = inputNode.outputFormat(forBus: 0)
 
-        guard let targetFormat = AVAudioFormat(
+        guard let tgtFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: sampleRate,
             channels: 1,
@@ -25,17 +37,47 @@ final class AudioRecorder: AudioRecording {
             return
         }
 
-        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
-            NSLog("Chirp: Failed to create audio converter (%@ → %@)", inputFormat.description, targetFormat.description)
+        guard let conv = AVAudioConverter(from: inFormat, to: tgtFormat) else {
+            NSLog("Chirp: Failed to create audio converter (%@ → %@)", inFormat.description, tgtFormat.description)
             return
         }
+
+        do {
+            try engine.start()
+        } catch {
+            NSLog("Chirp: Failed to start audio engine: %@", error.localizedDescription)
+            return
+        }
+
+        self.audioEngine = engine
+        self.converter = conv
+        self.targetFormat = tgtFormat
+        self.inputFormat = inFormat
+
+        // Re-prepare on audio device changes (e.g. headphones plugged in).
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.tearDown()
+                self?.prepare()
+            }
+        }
+    }
+
+    func startRecording(onSamples: @escaping @Sendable ([Float]) -> Void) {
+        if audioEngine == nil { prepare() }
+
+        guard let engine = audioEngine,
+              let converter,
+              let targetFormat,
+              let inputFormat else { return }
 
         let inputSampleRate = inputFormat.sampleRate
         let rate = sampleRate
 
-        // Build the tap block in a nonisolated context so the Swift compiler
-        // does not inject @MainActor executor assertions into the closure.
-        // The installTap block runs on AVAudioEngine's I/O thread.
         let tapBlock = Self.makeTapBlock(
             converter: converter,
             targetFormat: targetFormat,
@@ -43,14 +85,7 @@ final class AudioRecorder: AudioRecording {
             outputRate: rate,
             onSamples: onSamples
         )
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat, block: tapBlock)
-
-        do {
-            try engine.start()
-            self.audioEngine = engine
-        } catch {
-            NSLog("Chirp: Failed to start audio engine: %@", error.localizedDescription)
-        }
+        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat, block: tapBlock)
     }
 
     // nonisolated: prevents @MainActor executor checks from leaking
@@ -94,7 +129,18 @@ final class AudioRecorder: AudioRecording {
 
     func stopRecording() {
         audioEngine?.inputNode.removeTap(onBus: 0)
+    }
+
+    private func tearDown() {
+        if let obs = configObserver {
+            NotificationCenter.default.removeObserver(obs)
+            configObserver = nil
+        }
+        audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
+        converter = nil
+        targetFormat = nil
+        inputFormat = nil
     }
 }

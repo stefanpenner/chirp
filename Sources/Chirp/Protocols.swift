@@ -19,8 +19,13 @@ protocol TranscriberProtocol: Sendable {
 }
 
 @MainActor protocol AudioRecording {
+    func prepare()
     func startRecording(onSamples: @escaping @Sendable ([Float]) -> Void)
     func stopRecording()
+}
+
+extension AudioRecording {
+    func prepare() {}
 }
 
 @MainActor protocol TextInserting {

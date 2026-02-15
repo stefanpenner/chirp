@@ -57,6 +57,11 @@ actor MockTranscriber: TranscriberProtocol {
 final class MockAudioRecorder: AudioRecording {
     var isRecording = false
     var lastOnSamples: (([Float]) -> Void)?
+    var prepareCalled = false
+
+    func prepare() {
+        prepareCalled = true
+    }
 
     func startRecording(onSamples: @escaping @Sendable ([Float]) -> Void) {
         isRecording = true
