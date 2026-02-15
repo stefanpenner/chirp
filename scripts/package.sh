@@ -101,9 +101,12 @@ codesign --force --sign "$SIGNING_IDENTITY" --timestamp \
 codesign --force --sign "$SIGNING_IDENTITY" --timestamp \
     "$FRAMEWORKS/libsherpa-onnx-c-api.dylib"
 
-# Sign Sparkle.framework if present
+# Sign Sparkle.framework if present (each executable needs hardened runtime)
 if [[ -d "$FRAMEWORKS/Sparkle.framework" ]]; then
-    codesign --force --sign "$SIGNING_IDENTITY" --timestamp --deep \
+    find "$FRAMEWORKS/Sparkle.framework" -type f -perm +111 -path '*/MacOS/*' | while read -r exe; do
+        codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$exe"
+    done
+    codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime --deep \
         "$FRAMEWORKS/Sparkle.framework"
 fi
 
