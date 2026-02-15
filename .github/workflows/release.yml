@@ -95,8 +95,17 @@ jobs:
             models
           key: deps-${{ runner.os }}-sherpa-v1.12.24-sparkle-2.8.1
 
+      - name: Calculate build number
+        id: build
+        run: |
+          # Integer build number for CFBundleVersion / sparkle:version
+          # Must be > 1 (broken value in all existing installs)
+          BUILD=$(($(git tag -l 'v*' | wc -l) + 1))
+          echo "number=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "Build number: $BUILD"
+
       - name: Build and package
-        run: scripts/package.sh ${{ steps.version.outputs.version }}
+        run: scripts/package.sh ${{ steps.version.outputs.version }} ${{ steps.build.outputs.number }}
 
       - name: Compute DMG SHA256
         id: sha
@@ -119,7 +128,7 @@ jobs:
           # Checkout main so we can push (tag builds run on detached HEAD)
           git fetch origin main
           git checkout main
-          scripts/update-appcast.sh "$VERSION" "$DMG_PATH"
+          scripts/update-appcast.sh "$VERSION" "$DMG_PATH" "${{ steps.build.outputs.number }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add appcast.xml

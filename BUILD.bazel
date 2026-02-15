@@ -17,6 +17,18 @@ sh_binary(
     data = ["scripts/setup.sh"],
 )
 
+sh_test(
+    name = "package_test",
+    srcs = ["scripts/package_test.sh"],
+    data = ["scripts/package.sh"],
+)
+
+sh_test(
+    name = "update_appcast_test",
+    srcs = ["scripts/update_appcast_test.sh"],
+    data = ["scripts/update-appcast.sh"],
+)
+
 # Prebuilt dependencies are fetched by Bazel repo rules in deps.bzl:
 #   @sherpa_onnx  — sherpa-onnx + onnxruntime shared libraries
 #   @sparkle      — Sparkle.framework (auto-update)
