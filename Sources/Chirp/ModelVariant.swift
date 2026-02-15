@@ -20,7 +20,7 @@ public enum ModelVariant: String, CaseIterable, Sendable {
     }
 
     var sizeDescription: String {
-        "~630MB"
+        "~460MB"
     }
 
     var infoURL: URL {

@@ -37,7 +37,7 @@ struct ModelVariantTests {
 
     @Test("TDT size description")
     func tdtSize() {
-        #expect(ModelVariant.tdt.sizeDescription == "~630MB")
+        #expect(ModelVariant.tdt.sizeDescription == "~460MB")
     }
 
     @Test("saved round-trips through UserDefaults")
