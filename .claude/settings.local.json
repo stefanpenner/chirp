@@ -48,7 +48,8 @@
       "Bash(git commit:*)",
       "WebFetch(domain:itnpy2.readthedocs.io)",
       "WebFetch(domain:www.createwithswift.com)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(gh run list:*)"
     ]
   }
 }
