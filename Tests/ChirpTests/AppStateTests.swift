@@ -9,7 +9,8 @@ struct AppStateTests {
     private func makeAppState(
         transcriber: MockTranscriber = MockTranscriber(),
         recorder: MockAudioRecorder = MockAudioRecorder(),
-        inserter: MockTextInserter = MockTextInserter()
+        inserter: MockTextInserter = MockTextInserter(),
+        modelFileCheck: @escaping () -> Bool = { true }
     ) -> (AppState, MockTranscriber, MockAudioRecorder, MockTextInserter) {
         let state = AppState(
             audioRecorder: recorder,
@@ -17,6 +18,7 @@ struct AppStateTests {
             textInserter: inserter,
             startListening: false
         )
+        state.modelFileCheck = modelFileCheck
         return (state, transcriber, recorder, inserter)
     }
 
@@ -414,9 +416,8 @@ struct AppStateTests {
 
     @Test("startRecording re-triggers ensureModel when model files are missing")
     func startRecordingRecoversFromMissingModel() {
-        let (state, _, recorder, _) = makeAppState()
+        let (state, _, recorder, _) = makeAppState(modelFileCheck: { false })
         state.status = .ready
-        state.modelFileCheck = { false }
 
         state.startRecording()
 
