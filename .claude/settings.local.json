@@ -49,7 +49,13 @@
       "WebFetch(domain:itnpy2.readthedocs.io)",
       "WebFetch(domain:www.createwithswift.com)",
       "Bash(git push:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(gh run watch:*)",
+      "Bash(gh run view:*)",
+      "Bash(bazel test:*)",
+      "Bash(bd show:*)",
+      "Bash(bd list:*)",
+      "Bash(grep:*)"
     ]
   }
 }

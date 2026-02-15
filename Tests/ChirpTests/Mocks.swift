@@ -18,10 +18,15 @@ actor MockTranscriber: TranscriberProtocol {
         return initializeResult
     }
 
+    var feedAudioHandler: (([Float]) -> [String])? = nil
+
     func feedAudio(samples: [Float]) -> [String] {
         feedAudioCallCount += 1
+        if let handler = feedAudioHandler { return handler(samples) }
         return feedAudioResult
     }
+
+    func setFeedAudioResult(_ value: [String]) { feedAudioResult = value }
 
     func peekTranscription() -> String? {
         peekCalled = true

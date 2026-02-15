@@ -67,11 +67,13 @@ public final class AppState {
     init(
         audioRecorder: any AudioRecording,
         transcriber: any TranscriberProtocol,
-        textInserter: any TextInserting
+        textInserter: any TextInserting,
+        startListening: Bool = true
     ) {
         self.audioRecorder = audioRecorder
         self.transcriber = transcriber
         self.textInserter = textInserter
+        guard startListening else { return }
         overlayPanel = OverlayPanel(appState: self)
         hotkeyManager = HotkeyManager(
             onPress: { [weak self] in self?.startRecording() },
@@ -116,7 +118,7 @@ public final class AppState {
         modelManager?.download()
     }
 
-    private func loadTranscriber(paths: ModelPaths) {
+    func loadTranscriber(paths: ModelPaths) {
         status = .loadingModel
         let transcriber = self.transcriber
         Task { [weak self] in

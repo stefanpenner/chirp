@@ -91,13 +91,43 @@ macos_application(
 )
 
 # --- Tests ---
-# Run: bazel test //:ChirpTests
+# Run all: bazel test //...
+# Run one: bazel test //:AppStateTests
 
 swift_test(
-    name = "ChirpTests",
-    srcs = glob(["Tests/ChirpTests/*.swift"]),
-    deps = [":ChirpLib"],
-    copts = [
-        "-swift-version", "6",
+    name = "AppStateTests",
+    srcs = [
+        "Tests/ChirpTests/AppStateTests.swift",
+        "Tests/ChirpTests/Mocks.swift",
     ],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+)
+
+swift_test(
+    name = "TranscriberTests",
+    srcs = ["Tests/ChirpTests/TranscriberTests.swift"],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+)
+
+swift_test(
+    name = "ModelTests",
+    srcs = [
+        "Tests/ChirpTests/ModelVariantTests.swift",
+        "Tests/ChirpTests/ModelManagerTests.swift",
+    ],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+)
+
+swift_test(
+    name = "TextTests",
+    srcs = [
+        "Tests/ChirpTests/TextPostProcessorTests.swift",
+        "Tests/ChirpTests/TextInserterTests.swift",
+        "Tests/ChirpTests/Mocks.swift",
+    ],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
 )
