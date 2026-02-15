@@ -5,7 +5,13 @@ load("@rules_apple//apple:macos.bzl", "macos_application")
 load("@rules_apple//apple:apple.bzl", "apple_dynamic_framework_import")
 
 # --- Scripts ---
+# Setup:   bazel run //:setup
 # Package: bazel run //:package -- 0.3.0
+
+sh_binary(
+    name = "setup",
+    srcs = ["scripts/setup.sh"],
+)
 
 sh_binary(
     name = "package",
