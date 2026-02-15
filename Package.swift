@@ -8,17 +8,17 @@ let package = Package(
     name: "Chirp",
     platforms: [.macOS(.v26)],
     products: [
-        .executable(name: "Chirp", targets: ["Chirp"]),
+        .library(name: "Chirp", targets: ["Chirp"]),
     ],
     dependencies: [],
     targets: [
-        .executableTarget(
+        .target(
             name: "Chirp",
             dependencies: [
                 "CSherpaOnnx",
             ],
             path: "Sources/Chirp",
-            exclude: ["Info.plist", "Chirp.entitlements"],
+            exclude: ["Info.plist", "Chirp.entitlements", "Main.swift"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ],
