@@ -9,7 +9,7 @@ SIZE=$(stat -f%z "$DMG_PATH")
 DATE=$(date -R)
 URL="https://github.com/stefanpenner/chirp/releases/download/v${VERSION}/Chirp-v${VERSION}-macOS.dmg"
 
-ITEM="        <item>\n            <title>Version ${VERSION}<\/title>\n            <pubDate>${DATE}<\/pubDate>\n            <sparkle:version>${VERSION}<\/sparkle:version>\n            <sparkle:shortVersionString>${VERSION}<\/sparkle:shortVersionString>\n            <sparkle:minimumSystemVersion>15.0<\/sparkle:minimumSystemVersion>\n            <enclosure url=\"${URL}\" length=\"${SIZE}\" type=\"application\/octet-stream\" \/>\n        <\/item>"
+ITEM="        <item>\n            <title>Version ${VERSION}<\/title>\n            <pubDate>${DATE}<\/pubDate>\n            <sparkle:version>${VERSION}<\/sparkle:version>\n            <sparkle:shortVersionString>${VERSION}<\/sparkle:shortVersionString>\n            <sparkle:minimumSystemVersion>26.0<\/sparkle:minimumSystemVersion>\n            <enclosure url=\"${URL}\" length=\"${SIZE}\" type=\"application\/octet-stream\" \/>\n        <\/item>"
 
 # Insert before </channel>
 sed -i '' "s|</channel>|${ITEM}\n    </channel>|" "$APPCAST"
