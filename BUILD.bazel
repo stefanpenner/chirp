@@ -30,28 +30,9 @@ sh_test(
 )
 
 # Prebuilt dependencies are fetched by Bazel repo rules in deps.bzl:
-#   @sherpa_onnx  — sherpa-onnx + onnxruntime shared libraries
+#   @sherpa_onnx  — sherpa-onnx + onnxruntime shared libraries + CSherpaOnnx Swift module
 #   @sparkle      — Sparkle.framework (auto-update)
 #   @silero_vad   — Silero VAD model (bundled in app)
-
-# --- CSherpaOnnx: C wrapper for sherpa-onnx API ---
-
-swift_interop_hint(
-    name = "CSherpaOnnx_interop",
-    module_name = "CSherpaOnnx",
-)
-
-cc_library(
-    name = "CSherpaOnnx",
-    hdrs = ["Sources/CSherpaOnnx/include/c-api.h"],
-    srcs = ["Sources/CSherpaOnnx/shim.c"],
-    includes = ["Sources/CSherpaOnnx/include"],
-    aspect_hints = [":CSherpaOnnx_interop"],
-    deps = [
-        "@sherpa_onnx//:sherpaonnx",
-        "@sherpa_onnx//:onnxruntime",
-    ],
-)
 
 # --- Chirp Swift library (no @main, testable) ---
 
@@ -62,7 +43,7 @@ swift_library(
         exclude = ["Sources/Chirp/Main.swift"],
     ),
     module_name = "Chirp",
-    deps = [":CSherpaOnnx"],
+    deps = ["@sherpa_onnx//:CSherpaOnnx"],
     copts = [
         "-swift-version", "6",
     ],

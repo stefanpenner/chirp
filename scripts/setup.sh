@@ -28,6 +28,8 @@ if [ ! -f "$ROOT/Frameworks/lib/libsherpa-onnx-c-api.dylib" ]; then
     cp "$EXTRACTED_DIR"/lib/libsherpa-onnx-c-api.dylib "$ROOT/Frameworks/lib/"
     cp "$EXTRACTED_DIR"/lib/libonnxruntime.${ONNXRUNTIME_VERSION}.dylib "$ROOT/Frameworks/lib/"
     cd "$ROOT/Frameworks/lib" && ln -sf "libonnxruntime.${ONNXRUNTIME_VERSION}.dylib" libonnxruntime.dylib && cd "$ROOT"
+    # Copy C header for SPM (Bazel gets it from the @sherpa_onnx archive directly)
+    cp "$EXTRACTED_DIR"/include/sherpa-onnx/c-api/c-api.h "$ROOT/Sources/CSherpaOnnx/include/c-api.h"
     rm -f /tmp/sherpa-onnx-shared.tar.bz2
     rm -rf "$EXTRACTED_DIR"
     echo "Libraries installed to Frameworks/lib/"

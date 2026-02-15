@@ -7,5 +7,6 @@ xcuserdata/
 DerivedData/
 .DS_Store
 dist/
+Sources/CSherpaOnnx/include/c-api.h
 bazel-*
 MODULE.bazel.lock

@@ -28,6 +28,8 @@ def _deps_impl(module_ctx):
         # TODO: pin sha256 for reproducibility (omit to let Bazel print it on first fetch)
         build_file_content = """
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_swift//swift:swift.bzl", "swift_interop_hint")
 
 cc_import(
     name = "sherpaonnx",
@@ -38,6 +40,20 @@ cc_import(
 cc_import(
     name = "onnxruntime",
     shared_library = "lib/libonnxruntime.{ort}.dylib",
+    visibility = ["//visibility:public"],
+)
+
+swift_interop_hint(
+    name = "CSherpaOnnx_interop",
+    module_name = "CSherpaOnnx",
+)
+
+cc_library(
+    name = "CSherpaOnnx",
+    hdrs = ["include/sherpa-onnx/c-api/c-api.h"],
+    strip_include_prefix = "include/sherpa-onnx/c-api",
+    deps = [":sherpaonnx", ":onnxruntime"],
+    aspect_hints = [":CSherpaOnnx_interop"],
     visibility = ["//visibility:public"],
 )
 """.format(ort = _ONNXRUNTIME_VERSION),
