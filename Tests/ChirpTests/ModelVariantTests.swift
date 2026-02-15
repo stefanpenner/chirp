@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import Chirp
 
-@Suite("ModelVariant")
+@Suite("ModelVariant", .serialized)
 struct ModelVariantTests {
 
     @Test("CaseIterable contains tdt and tdtMultilingual")
