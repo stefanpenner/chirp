@@ -28,7 +28,7 @@ final class OverlayPanel {
 
     private func createPanel() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 120),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 200),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
@@ -43,7 +43,7 @@ final class OverlayPanel {
 
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: f.midX - 170, y: f.maxY - 140))
+            panel.setFrameOrigin(NSPoint(x: f.midX - 210, y: f.maxY - 180))
         }
         self.panel = panel
     }
@@ -203,6 +203,7 @@ struct IslandView: View {
         .shadow(color: .black.opacity(0.3), radius: 20, y: 6)
         .animation(.easeInOut(duration: 0.1), value: breathe)
         .animation(.smooth(duration: 0.35), value: isRecording)
+        .padding(40)
     }
 
     private var committed: Text {
