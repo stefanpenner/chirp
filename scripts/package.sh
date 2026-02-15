@@ -49,13 +49,12 @@ cp "$ROOT/Frameworks/lib/libonnxruntime.1.23.2.dylib" "$FRAMEWORKS/"
 # Recreate the symlink (some code paths may dlopen the unversioned name)
 ln -sf libonnxruntime.1.23.2.dylib "$FRAMEWORKS/libonnxruntime.dylib"
 
-# Copy Sparkle.framework from SPM build artifacts
-SPARKLE_FRAMEWORK=$(find "$(swift build -c release --show-bin-path)/../../.." -name "Sparkle.framework" -path "*/macos-*" | head -1)
-if [[ -n "$SPARKLE_FRAMEWORK" ]]; then
-    echo "==> Copying Sparkle.framework from $SPARKLE_FRAMEWORK"
-    cp -R "$SPARKLE_FRAMEWORK" "$FRAMEWORKS/"
+# Copy Sparkle.framework (downloaded by setup.sh)
+if [[ -d "$ROOT/Frameworks/Sparkle.framework" ]]; then
+    echo "==> Copying Sparkle.framework"
+    cp -R "$ROOT/Frameworks/Sparkle.framework" "$FRAMEWORKS/"
 else
-    echo "Warning: Sparkle.framework not found in build artifacts"
+    echo "Warning: Sparkle.framework not found — run scripts/setup.sh first"
 fi
 
 # Copy Info.plist, stamp the version

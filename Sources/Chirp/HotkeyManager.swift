@@ -51,9 +51,11 @@ final class HotkeyManager {
                     return Unmanaged.passRetained(event)
                 }
 
+                let flags = event.flags
+                let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+
                 // Suppress fn/Globe keyDown and keyUp (prevents emoji picker)
                 if type == .keyDown || type == .keyUp {
-                    let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
                     if keyCode == kFnKeyCode { return nil }
                     return Unmanaged.passRetained(event)
                 }
@@ -62,7 +64,7 @@ final class HotkeyManager {
                     return Unmanaged.passRetained(event)
                 }
 
-                let pressed = event.flags.contains(.maskSecondaryFn)
+                let pressed = flags.contains(.maskSecondaryFn)
 
                 if pressed && !mgr.fnDown {
                     mgr.fnDown = true

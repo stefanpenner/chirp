@@ -66,6 +66,23 @@ else
     echo "Silero VAD model already present."
 fi
 
+# --- Download Sparkle.framework ---
+if [ ! -d "$ROOT/Frameworks/Sparkle.framework" ]; then
+    echo ""
+    echo "Downloading Sparkle.framework (2.8.1)..."
+    SPARKLE_URL="https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz"
+    curl -L "$SPARKLE_URL" -o /tmp/Sparkle-2.8.1.tar.xz
+    echo "Extracting..."
+    mkdir -p /tmp/sparkle-extract
+    tar xf /tmp/Sparkle-2.8.1.tar.xz -C /tmp/sparkle-extract
+    cp -R /tmp/sparkle-extract/Sparkle.framework "$ROOT/Frameworks/"
+    rm -f /tmp/Sparkle-2.8.1.tar.xz
+    rm -rf /tmp/sparkle-extract
+    echo "Sparkle.framework installed to Frameworks/"
+else
+    echo "Sparkle.framework already present."
+fi
+
 echo ""
 echo "Model files:"
 ls -lh "$ROOT/models/${TDT_MODEL_NAME}/" 2>/dev/null || echo "  (not downloaded yet)"

@@ -2,16 +2,15 @@
 // Renders the menu bar extra (status, model picker, quit).
 // All logic lives in AppState; this file is just the SwiftUI shell.
 
-#if BAZEL_BUILD
 import Chirp
-#endif
-import SwiftUI
-@preconcurrency import Sparkle
 import Combine
+@preconcurrency import Sparkle
+import SwiftUI
 
 @main
 struct ChirpApp: App {
-    private let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
     @State private var appState = AppState()
 
     var body: some Scene {
@@ -50,7 +49,6 @@ struct ChirpApp: App {
             Text("Error: \(msg)").font(.caption).foregroundColor(.red)
         }
     }
-
 }
 
 struct CheckForUpdatesView: View {

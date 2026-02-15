@@ -2,6 +2,7 @@ load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_swift//swift:swift.bzl", "swift_library", "swift_interop_hint", "swift_test")
 load("@rules_apple//apple:macos.bzl", "macos_application")
+load("@rules_apple//apple:apple.bzl", "apple_dynamic_framework_import")
 
 # --- Scripts ---
 # Package: bazel run //:package -- 0.3.0
@@ -22,6 +23,13 @@ cc_import(
 cc_import(
     name = "libonnxruntime",
     shared_library = "Frameworks/lib/libonnxruntime.1.23.2.dylib",
+)
+
+# --- Prebuilt Sparkle.framework (downloaded by scripts/setup.sh) ---
+
+apple_dynamic_framework_import(
+    name = "Sparkle",
+    framework_imports = glob(["Frameworks/Sparkle.framework/**"]),
 )
 
 # --- CSherpaOnnx: C wrapper for sherpa-onnx API ---
@@ -64,10 +72,12 @@ swift_library(
     name = "ChirpMain",
     srcs = ["Sources/Chirp/Main.swift"],
     module_name = "ChirpMain",
-    deps = [":ChirpLib"],
+    deps = [
+        ":ChirpLib",
+        ":Sparkle",
+    ],
     copts = [
         "-swift-version", "6",
-        "-Xfrontend", "-DBAZEL_BUILD",
     ],
 )
 

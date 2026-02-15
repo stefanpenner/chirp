@@ -10,15 +10,12 @@ let package = Package(
     products: [
         .executable(name: "Chirp", targets: ["Chirp"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
-    ],
+    dependencies: [],
     targets: [
         .executableTarget(
             name: "Chirp",
             dependencies: [
                 "CSherpaOnnx",
-                .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources/Chirp",
             exclude: ["Info.plist", "Chirp.entitlements"],
