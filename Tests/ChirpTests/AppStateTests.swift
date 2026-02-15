@@ -50,10 +50,12 @@ struct AppStateTests {
         state.status = .ready
         state.startRecording()
 
-        // Give the Task a moment to run (CI runners are slower)
-        try await Task.sleep(nanoseconds: 200_000_000)
-        let called = await mock.resetVADCalled
-        #expect(called)
+        // Poll until the spawned Task calls resetVAD (up to 3s for slow CI)
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        #expect(await mock.resetVADCalled)
     }
 
     @Test("startRecording no-ops when not ready")
@@ -91,11 +93,12 @@ struct AppStateTests {
         state.status = .recording
         state.stopRecording()
 
-        // Wait for the async flush Task to complete (CI runners are slower)
-        try await Task.sleep(nanoseconds: 500_000_000)
-
-        let flushed = await mock.flushCalled
-        #expect(flushed)
+        // Poll until the spawned Task calls flush (up to 3s for slow CI)
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.flushCalled { break }
+        }
+        #expect(await mock.flushCalled)
         #expect(inserter.typedTexts.contains("hello world"))
     }
 }
