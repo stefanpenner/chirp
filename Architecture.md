@@ -46,7 +46,7 @@ fn key press/release          microphone
   ready ──(fn press, model missing)──→ downloading
 ```
 
-AppState owns all transitions. Only `ready → recording` (fn press) and `recording → transcribing` (fn release) are user-initiated; the rest are automatic. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording.
+AppState owns all transitions. Only `ready → recording` (fn press) and `recording → transcribing` (fn release) are user-initiated; the rest are automatic. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording. Pressing fn during `downloading` or `loadingModel` triggers a brief scale-pulse nudge on the overlay (via `downloadNudge`) instead of silently ignoring the press.
 
 ## Audio Pipeline
 
@@ -67,7 +67,7 @@ AppState owns all transitions. Only `ready → recording` (fn press) and `record
 `ModelVariant` enumerates available models (TDT, CTC) with download URLs, directory names, and check files. `ModelManager` handles:
 
 - **Discovery**: searches App Support, working directory, parent dirs, and bundle resources
-- **Download**: parallel URLSession tasks for model archive + VAD, with progress (0→0.7 download, 0.7→0.95 extraction, 0.95→1.0 validation)
+- **Download**: URLSession download task with progress (0→0.9 download, 0.9→1.0 extraction)
 - **Extraction**: `/usr/bin/tar xjf` to `~/Library/Application Support/Chirp/models/`
 
 Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. For SPM development, `scripts/setup.sh` downloads models and dylibs to the repo (gitignored).
@@ -79,9 +79,11 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 ## Overlay
 
 `OverlayPanel` manages a borderless `NSPanel` hosting a SwiftUI `IslandView`:
-- Animated sine-wave waveform driven by audio level
+- **Download state**: progress bar (blue→cyan gradient, rescaled 0–0.9→0–100%), model name (clickable link to releases page), source host, filename, and size; pulsing full bar during extraction
+- **Loading state**: indeterminate spinner with model name and size
+- **Recording state**: animated sine-wave waveform driven by audio level
 - Committed text (white) + speculative text (gray)
-- Conic gradient glow border
+- Conic gradient glow border (active during recording, transcribing, and download)
 - Catppuccin-inspired color palette
 
 ## Testing
