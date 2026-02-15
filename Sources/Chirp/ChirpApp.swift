@@ -44,10 +44,12 @@ public final class AppState {
     let audioRecorder: any AudioRecording
     private(set) var transcriber: any TranscriberProtocol
     let textInserter: any TextInserting
+    public var downloadNudge: Bool = false
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
     private var modelManager: ModelManager?
     private var peekTask: Task<Void, Never>?
+    private var nudgeTask: Task<Void, Never>?
     private var audioConsumerTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<[Float]>.Continuation?
 
@@ -98,6 +100,7 @@ public final class AppState {
         }
 
         status = .downloading(0)
+        overlayPanel?.showOverlay()
         modelManager = ModelManager(
             variant: variant,
             onProgress: { [weak self] progress in
@@ -127,7 +130,12 @@ public final class AppState {
         let transcriber = self.transcriber
         Task { [weak self] in
             let ok = await transcriber.initialize(paths: paths)
-            self?.status = ok ? .ready : .error("Failed to initialize transcriber")
+            if ok {
+                self?.status = .ready
+                self?.overlayPanel?.hideOverlay()
+            } else {
+                self?.status = .error("Failed to initialize transcriber")
+            }
         }
     }
 
@@ -137,8 +145,26 @@ public final class AppState {
 
     // MARK: - Recording
 
+    private func triggerDownloadNudge() {
+        nudgeTask?.cancel()
+        downloadNudge = true
+        nudgeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
+            self?.downloadNudge = false
+        }
+    }
+
     func startRecording() {
-        guard case .ready = status else { return }
+        switch status {
+        case .downloading, .loadingModel:
+            triggerDownloadNudge()
+            return
+        case .ready:
+            break
+        default:
+            return
+        }
         if !modelFileCheck() {
             ensureModel()
             return

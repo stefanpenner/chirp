@@ -62,7 +62,7 @@ struct AppStateTests {
         #expect(await mock.resetVADCalled)
     }
 
-    @Test("startRecording no-ops when not ready")
+    @Test("startRecording nudges when not ready")
     func startRecordingNoOp() {
         let (state, _, recorder, _) = makeAppState()
         state.status = .loadingModel
@@ -73,6 +73,7 @@ struct AppStateTests {
             return
         }
         #expect(!recorder.isRecording)
+        #expect(state.downloadNudge == true)
     }
 
     @Test("stopRecording transitions recording → transcribing")
@@ -594,6 +595,43 @@ struct AppStateTests {
             return
         }
         #expect(inserter.typedTexts.isEmpty)
+    }
+
+    // MARK: - Download nudge
+
+    @Test("fn press during download triggers nudge and auto-resets")
+    func fnPressDuringDownloadNudges() async throws {
+        let (state, _, recorder, _) = makeAppState()
+        state.status = .downloading(0.5)
+        state.startRecording()
+
+        // Status unchanged, nudge set
+        guard case .downloading(0.5) = state.status else {
+            Issue.record("Status should remain .downloading(0.5), got \(state.status)")
+            return
+        }
+        #expect(state.downloadNudge == true)
+        #expect(!recorder.isRecording)
+
+        // Wait for auto-reset (~200ms)
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            if !state.downloadNudge { break }
+        }
+        #expect(state.downloadNudge == false)
+    }
+
+    @Test("fn press during download does not start recording")
+    func fnPressDuringDownloadNoRecording() {
+        let (state, _, recorder, _) = makeAppState()
+        state.status = .downloading(0.3)
+        state.startRecording()
+
+        #expect(!recorder.isRecording)
+        guard case .downloading(0.3) = state.status else {
+            Issue.record("Status should remain .downloading(0.3), got \(state.status)")
+            return
+        }
     }
 
     // MARK: - Model recovery

@@ -8,7 +8,7 @@ public enum ModelVariant: String, CaseIterable, Sendable {
     case tdt   // Parakeet TDT 0.6b v2 (3-file transducer, best quality)
 
     public var displayName: String {
-        "Parakeet TDT 0.6b (Best Quality)"
+        "Parakeet TDT 0.6b"
     }
 
     var modelDirName: String {
@@ -21,6 +21,10 @@ public enum ModelVariant: String, CaseIterable, Sendable {
 
     var sizeDescription: String {
         "~630MB"
+    }
+
+    var infoURL: URL {
+        URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models")!
     }
 
     /// sherpa-onnx model_type string for recognizer config.

@@ -12,7 +12,7 @@ struct ModelVariantTests {
 
     @Test("TDT display name")
     func tdtDisplayName() {
-        #expect(ModelVariant.tdt.displayName == "Parakeet TDT 0.6b (Best Quality)")
+        #expect(ModelVariant.tdt.displayName == "Parakeet TDT 0.6b")
     }
 
     @Test("TDT model dir name")

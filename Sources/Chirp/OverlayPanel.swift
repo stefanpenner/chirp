@@ -155,13 +155,80 @@ struct IslandView: View {
         return false
     }
 
+    private var isDownloading: Bool {
+        if case .downloading = appState.status { return true }
+        return false
+    }
+
+    private var downloadProgress: Double {
+        if case .downloading(let p) = appState.status { return p }
+        return 0
+    }
+
+    private var isLoadingModel: Bool {
+        if case .loadingModel = appState.status { return true }
+        return false
+    }
+
     private var breathe: CGFloat {
         isRecording ? 1.0 + CGFloat(min(appState.audioLevel * 0.8, 1)) * 0.015 : 1.0
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            if isRecording {
+            if isDownloading && downloadProgress >= 0.9 {
+                // Extraction phase — full pulsing bar
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [cBlue, cCyan],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(height: 6)
+                    .phaseAnimator([false, true]) { content, phase in
+                        content.opacity(phase ? 1.0 : 0.4)
+                    } animation: { _ in
+                        .easeInOut(duration: 0.8)
+                    }
+                    .clipShape(Capsule())
+                    .padding(.horizontal, 24)
+                    .padding(.top, 14)
+                    .padding(.bottom, 8)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            } else if isDownloading {
+                // Download phase — determinate progress bar (rescaled 0-0.9 → 0-1.0)
+                Capsule()
+                    .fill(.white.opacity(0.08))
+                    .frame(height: 6)
+                    .overlay(alignment: .leading) {
+                        GeometryReader { geo in
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [cBlue, cCyan],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: max(geo.size.width * min(downloadProgress / 0.9, 1.0), 0))
+                                .animation(.easeInOut(duration: 0.3), value: downloadProgress)
+                        }
+                    }
+                    .clipShape(Capsule())
+                    .padding(.horizontal, 24)
+                    .padding(.top, 14)
+                    .padding(.bottom, 8)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            } else if isLoadingModel {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(cBlue)
+                    .padding(.top, 12)
+                    .padding(.bottom, 6)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            } else if isRecording {
                 LiveWaves(level: appState.audioLevel)
                     .frame(height: 28)
                     .padding(.horizontal, 12)
@@ -189,23 +256,76 @@ struct IslandView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.5)))
             }
 
-            Group {
-                if !appState.transcribedText.isEmpty || !appState.speculativeText.isEmpty {
-                    Text("\(committed)\(speculative)")
-                        .lineLimit(2)
-                        .truncationMode(.head)
-                } else {
-                    Text(isRecording ? "Listening..." : isTranscribing ? "Finalizing..." : "Ready")
-                        .foregroundStyle(.white.opacity(0.4))
-                }
-            }
-            .font(.system(size: 13, weight: .regular))
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 16)
-            .padding(.bottom, isActive ? 4 : 10)
+            if isDownloading || isLoadingModel {
+                VStack(spacing: 4) {
+                    HStack(spacing: 0) {
+                        if isDownloading && downloadProgress >= 0.9 {
+                            Text("Extracting ")
+                                .foregroundStyle(.white.opacity(0.7))
+                        } else if isDownloading {
+                            Text("Downloading ")
+                                .foregroundStyle(.white.opacity(0.7))
+                        } else {
+                            Text("Loading ")
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
 
-            if isRecording {
+                        Text(ModelVariant.tdt.displayName)
+                            .foregroundStyle(cBlue.opacity(0.8))
+                            .underline(color: cBlue.opacity(0.3))
+                            .onTapGesture { NSWorkspace.shared.open(ModelVariant.tdt.infoURL) }
+
+                        if isDownloading && downloadProgress < 0.9 {
+                            Text("  \(Int(downloadProgress / 0.9 * 100))%")
+                                .foregroundStyle(.white.opacity(0.3))
+                        }
+                    }
+
+                    if isDownloading {
+                        Text("\(ModelVariant.tdt.downloadURL.host ?? "") · \(ModelVariant.tdt.sizeDescription)")
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.2))
+                        Text(ModelVariant.tdt.downloadURL.lastPathComponent)
+                            .font(.system(size: 9, weight: .regular, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.15))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    } else {
+                        Text(ModelVariant.tdt.sizeDescription)
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.2))
+                    }
+                }
+                .font(.system(size: 13, weight: .regular))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
+            } else {
+                Group {
+                    if !appState.transcribedText.isEmpty || !appState.speculativeText.isEmpty {
+                        Text("\(committed)\(speculative)")
+                            .lineLimit(2)
+                            .truncationMode(.head)
+                    } else {
+                        Text(isRecording ? "Listening..." : isTranscribing ? "Finalizing..." : "Ready")
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
+                }
+                .font(.system(size: 13, weight: .regular))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.bottom, isActive ? 4 : 10)
+            }
+
+            if isDownloading {
+                Text("hold fn to dictate after download")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.2))
+                    .padding(.bottom, 8)
+                    .transition(.opacity)
+            } else if isRecording {
                 Text("release fn")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white.opacity(0.2))
@@ -226,12 +346,13 @@ struct IslandView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(.white.opacity(isActive ? 0.03 : 0.06), lineWidth: 0.5)
+                .strokeBorder(.white.opacity((isActive || isDownloading) ? 0.03 : 0.06), lineWidth: 0.5)
         )
-        .overlay(GlowBorder(active: isActive, level: isTranscribing ? 0.3 : appState.audioLevel))
+        .overlay(GlowBorder(active: isActive || isDownloading, level: isDownloading ? 0.15 : isTranscribing ? 0.3 : appState.audioLevel))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .scaleEffect(breathe)
+        .scaleEffect(appState.downloadNudge ? 1.03 : breathe)
         .shadow(color: .black.opacity(0.3), radius: 20, y: 6)
+        .animation(.easeInOut(duration: 0.15), value: appState.downloadNudge)
         .animation(.easeInOut(duration: 0.1), value: breathe)
         .animation(.smooth(duration: 0.35), value: isActive)
         .padding(40)
