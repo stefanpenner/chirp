@@ -80,8 +80,8 @@ Cancelling a download transitions to `needsModel` (clean idle state); from there
 
 | Variant | Model | Languages |
 |---------|-------|-----------|
-| `.tdt` | Parakeet TDT 0.6b v2 int8 | English |
-| `.tdtMultilingual` | Parakeet TDT 0.6b v3 int8 | 25 European languages (auto-detect) |
+| `.tdt` | Parakeet TDT 0.6b v2 int8 | English only |
+| `.tdtMultilingual` (default) | Parakeet TDT 0.6b v3 int8 | 25 European languages (auto-detect) |
 
 Both use the same `nemo_transducer` architecture and file layout (`encoder.int8.onnx`, `decoder.int8.onnx`, `joiner.int8.onnx`).
 
@@ -93,7 +93,9 @@ Both use the same `nemo_transducer` architecture and file layout (`encoder.int8.
 - **Cancellation**: `cancel()` invalidates in-flight downloads (used during model switching and user cancel)
 - **Deletion**: `deleteModel(variant:)` removes any model from disk (deleting the active model transitions to `needsModel`)
 
-**Model switching** is done via `AppState.switchModel(to:)`, which is only allowed from `.ready`, `.error`, or `.needsModel` state. It cancels any in-flight download, creates a fresh transcriber, persists the selection to UserDefaults, and calls `ensureModel()` to download or load the new model. The menu bar shows a "Model" submenu listing all variants with a checkmark on the active one.
+**Model switching** is done via `AppState.switchModel(to:)`, which is only allowed from `.ready`, `.error`, or `.needsModel` state. It cancels any in-flight download, creates a fresh transcriber, persists the selection to UserDefaults, and calls `ensureModel()` to download or load the new model. The menu bar shows all variants with a checkmark on the active one.
+
+**Background downloads**: `AppState.downloadModel(_:)` downloads a non-active variant in the background without switching to it. Progress is tracked per-variant in `backgroundDownloads: [ModelVariant: Double]`. Each background download gets its own `ModelManager` instance stored in `backgroundManagers`.
 
 Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. For SPM development, `scripts/setup.sh` downloads models and dylibs to the repo (gitignored).
 
@@ -103,7 +105,9 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 
 `HotkeyManager` installs a `CGEvent` tap intercepting the configured hotkey events (flagsChanged for modifier keys, keyDown/keyUp for regular keys). It suppresses the key entirely (no system side effects) and calls `onPress`/`onRelease`/`onCancel` closures on the main actor via `Task { @MainActor in }`. ESC (keycode 0x35) is intercepted and suppressed only when `sessionActive` is true (during recording or transcribing); otherwise ESC passes through to the focused app normally. The tap also intercepts NX_SYSDEFINED events (type 14) to suppress the fn emoji picker trigger. A `suppressOnly` flag allows the tap to eat the hotkey without firing callbacks — used while the hotkey recorder dialog is open.
 
-`HotkeyRecorderPanel` opens a floating NSPanel with glass vibrancy (NSVisualEffectView, `.popover` material) for recording a new hotkey. The user clicks a rounded-rectangle field to enter recording mode (NSEvent local monitor captures the next key/modifier press), reviews the captured shortcut, then clicks Save or Cancel. While the dialog is visible, `suppressOnly` keeps the CGEvent tap active so the current hotkey is suppressed from the system but doesn't trigger recording.
+`InlineHotkeyRecorder` provides hotkey recording directly inside the menu bar popover. It installs an `NSEvent` local monitor to capture the next key/modifier press, shows the captured shortcut inline, and offers Save/Cancel/Reset-to-fn buttons. While recording, `suppressOnly` keeps the CGEvent tap active so the current hotkey is suppressed from the system but doesn't trigger recording.
+
+`HotkeyRecorderPanel` is a standalone floating NSPanel alternative with glass vibrancy (NSVisualEffectView, `.popover` material) — kept as a fallback but no longer used by the default menu bar UI.
 
 ## Overlay
 
@@ -144,14 +148,14 @@ Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`) ena
 | File | Purpose |
 |------|---------|
 | `ChirpApp.swift` | AppState state machine (public API for cross-module access) |
-| `Main.swift` | `@main` SwiftUI app entry point (menu bar UI) |
+| `Main.swift` | `@main` SwiftUI app entry point (window-style menu bar popover, Catppuccin theme) |
 | `Protocols.swift` | DI boundaries: TranscriberProtocol, AudioRecording, TextInserting |
 | `Transcriber.swift` | Actor wrapping sherpa-onnx offline recognizer + VAD |
 | `AudioRecorder.swift` | AVAudioEngine mic capture with sample-rate conversion |
 | `TextInserter.swift` | CGEvent keyboard simulation |
 | `TextPostProcessor.swift` | Filler removal, dedup, whitespace normalization |
 | `HotkeyManager.swift` | HotkeyConfig + configurable key event tap |
-| `HotkeyRecorder.swift` | Shortcut recorder panel with glass vibrancy |
+| `HotkeyRecorder.swift` | InlineHotkeyRecorder (menu bar) + HotkeyRecorderPanel (standalone) |
 | `OverlayPanel.swift` | Floating waveform HUD |
 | `ModelManager.swift` | Model download, extraction, discovery |
 | `ModelVariant.swift` | Model metadata enum with persistence |

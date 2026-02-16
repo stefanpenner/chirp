@@ -14,7 +14,7 @@ struct ModelVariantTests {
 
     @Test("TDT display name")
     func tdtDisplayName() {
-        #expect(ModelVariant.tdt.displayName == "Parakeet TDT English")
+        #expect(ModelVariant.tdt.displayName == "Parakeet: English Only")
     }
 
     @Test("TDT model dir name")
@@ -51,7 +51,7 @@ struct ModelVariantTests {
 
     @Test("Multilingual display name")
     func multilingualDisplayName() {
-        #expect(ModelVariant.tdtMultilingual.displayName == "Parakeet TDT Multilingual")
+        #expect(ModelVariant.tdtMultilingual.displayName == "Parakeet: 25 Euro Languages")
     }
 
     @Test("Multilingual model dir name")

@@ -10,8 +10,8 @@ public enum ModelVariant: String, CaseIterable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .tdt: return "Parakeet TDT English"
-        case .tdtMultilingual: return "Parakeet TDT Multilingual"
+        case .tdt: return "Parakeet: English Only"
+        case .tdtMultilingual: return "Parakeet: 25 Euro Languages"
         }
     }
 
@@ -62,7 +62,7 @@ public enum ModelVariant: String, CaseIterable, Sendable {
         get {
             guard let raw = UserDefaults.standard.string(forKey: defaultsKey),
                   let variant = ModelVariant(rawValue: raw) else {
-                return .tdt
+                return .tdtMultilingual
             }
             return variant
         }

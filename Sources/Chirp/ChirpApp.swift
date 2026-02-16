@@ -60,6 +60,9 @@ public final class AppState {
     let textInserter: any TextInserting
     public var downloadNudge: Bool = false
     public var modelCacheGeneration: Int = 0
+    /// Per-variant progress for background (non-active) downloads. 0.0…1.0.
+    public var backgroundDownloads: [ModelVariant: Double] = [:]
+    private var backgroundManagers: [ModelVariant: ModelManager] = [:]
     public var hotkeyConfig: HotkeyConfig = .saved
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
@@ -238,6 +241,36 @@ public final class AppState {
         case .error, .needsModel: ensureModel()
         default: break
         }
+    }
+
+    /// Download a non-active model in the background without switching to it.
+    public func downloadModel(_ variant: ModelVariant) {
+        guard variant != activeVariant else { return }
+        guard !isModelDownloaded(variant) else { return }
+        guard backgroundDownloads[variant] == nil else { return }
+
+        backgroundDownloads[variant] = 0
+        let manager = ModelManager(
+            variant: variant,
+            onProgress: { [weak self] progress in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.backgroundDownloads[variant] = progress }
+                }
+            },
+            onComplete: { [weak self] result in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self?.backgroundDownloads.removeValue(forKey: variant)
+                        self?.backgroundManagers.removeValue(forKey: variant)
+                        if case .success = result {
+                            self?.modelCacheGeneration += 1
+                        }
+                    }
+                }
+            }
+        )
+        backgroundManagers[variant] = manager
+        manager.download()
     }
 
     // MARK: - Hotkey

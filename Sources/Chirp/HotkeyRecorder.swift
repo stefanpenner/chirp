@@ -233,7 +233,134 @@ final class HotkeyRecorderPanel {
     }
 }
 
-// MARK: - Recorder View
+// MARK: - Inline Hotkey Recorder (for menu bar popover)
+
+@MainActor
+@Observable
+public final class InlineHotkeyRecorder {
+    public var isRecording = false
+    public var capturedConfig: HotkeyConfig?
+    private var monitor: Any?
+    private var pendingModifierKeyCode: UInt16?
+    private weak var appState: AppState?
+
+    public init() {}
+
+    public var displayLabel: String {
+        if isRecording { return "Press a key\u{2026}" }
+        if let captured = capturedConfig { return captured.label }
+        return ""
+    }
+
+    public var canSave: Bool { capturedConfig != nil }
+
+    public func startRecording(appState: AppState) {
+        guard !isRecording else { return }
+        self.appState = appState
+        appState.hotkeyManager?.suppressOnly = true
+        isRecording = true
+        capturedConfig = nil
+        pendingModifierKeyCode = nil
+        installMonitor()
+    }
+
+    public func cancel() {
+        capturedConfig = nil
+        stopRecording()
+    }
+
+    public func save() {
+        guard let config = capturedConfig, let appState else { return }
+        appState.updateHotkey(config)
+        capturedConfig = nil
+        stopRecording()
+    }
+
+    public func resetToFn() {
+        guard let appState else { return }
+        appState.updateHotkey(.fn)
+        capturedConfig = nil
+        stopRecording()
+    }
+
+    private func stopRecording() {
+        isRecording = false
+        removeMonitor()
+        appState?.hotkeyManager?.suppressOnly = false
+    }
+
+    private func installMonitor() {
+        removeMonitor()
+        let recorder = self
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            let eventType = event.type
+            let keyCode = event.keyCode
+            let mods = event.modifierFlags
+            let consumed = MainActor.assumeIsolated {
+                recorder.handleEvent(type: eventType, keyCode: keyCode, modifierFlags: mods)
+            }
+            return consumed ? nil : event
+        }
+    }
+
+    private func removeMonitor() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+    }
+
+    private func handleEvent(
+        type: NSEvent.EventType, keyCode: UInt16, modifierFlags: NSEvent.ModifierFlags
+    ) -> Bool {
+        switch type {
+        case .keyDown:
+            if keyCode == 0x35 {
+                stopRecording()
+                return true
+            }
+            let nsMods = modifierFlags.intersection(.deviceIndependentFlagsMask)
+                .subtracting([.capsLock, .numericPad, .function])
+            let cgMods = HotkeyConfig.nsModsToCGFlags(nsMods)
+            let label = HotkeyConfig.buildLabel(
+                keyCode: keyCode, isModifier: false, modifiers: cgMods
+            )
+            capturedConfig = HotkeyConfig(
+                keyCode: keyCode, isModifier: false,
+                modifierMask: nil, requiredModifiers: cgMods, label: label
+            )
+            pendingModifierKeyCode = nil
+            stopRecording()
+            return true
+
+        case .flagsChanged:
+            let hasAny = !modifierFlags.intersection(
+                [.command, .shift, .option, .control, .function]
+            ).isEmpty
+            if hasAny {
+                pendingModifierKeyCode = keyCode
+            } else if let mkc = pendingModifierKeyCode {
+                guard let mask = HotkeyConfig.modifierMaskForKeyCode(mkc) else {
+                    pendingModifierKeyCode = nil
+                    return true
+                }
+                let label = HotkeyConfig.buildLabel(keyCode: mkc, isModifier: true)
+                capturedConfig = HotkeyConfig(
+                    keyCode: mkc, isModifier: true,
+                    modifierMask: mask, requiredModifiers: [], label: label
+                )
+                pendingModifierKeyCode = nil
+                stopRecording()
+            }
+            return true
+
+        default:
+            return false
+        }
+    }
+}
+
+// MARK: - Recorder View (standalone panel)
 
 private struct HotkeyRecorderView: View {
     var state: HotkeyRecorderState
