@@ -17,6 +17,7 @@ final class AudioRecorder: AudioRecording {
     private let sampleRate: Double = 16000
     private var configObserver: (any NSObjectProtocol)?
     private var parkTimer: Timer?
+    private let audioDucker = AudioDucker()
 
     func requestMicrophoneAccess() async -> Bool {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -111,6 +112,8 @@ final class AudioRecorder: AudioRecording {
             }
         }
 
+        audioDucker.duck()
+
         engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat, block: tapBlock)
     }
 
@@ -155,6 +158,7 @@ final class AudioRecorder: AudioRecording {
 
     func stopRecording() {
         audioEngine?.inputNode.removeTap(onBus: 0)
+        audioDucker.unduck()
         schedulePark()
     }
 

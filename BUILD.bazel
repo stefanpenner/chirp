@@ -124,3 +124,10 @@ swift_test(
     deps = [":ChirpLib"],
     copts = ["-swift-version", "6"],
 )
+
+swift_test(
+    name = "AudioDuckerTests",
+    srcs = ["Tests/ChirpTests/AudioDuckerTests.swift"],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+)
