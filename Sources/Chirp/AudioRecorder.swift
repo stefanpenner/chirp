@@ -16,6 +16,7 @@ final class AudioRecorder: AudioRecording {
     private var inputFormat: AVAudioFormat?
     private let sampleRate: Double = 16000
     private var configObserver: (any NSObjectProtocol)?
+    private var parkTimer: Timer?
 
     func requestMicrophoneAccess() async -> Bool {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -82,6 +83,8 @@ final class AudioRecorder: AudioRecording {
     }
 
     func startRecording(onSamples: @escaping @Sendable ([Float]) -> Void) {
+        cancelPark()
+
         if audioEngine == nil { prepare() }
 
         guard let engine = audioEngine,
@@ -99,6 +102,15 @@ final class AudioRecorder: AudioRecording {
             outputRate: rate,
             onSamples: onSamples
         )
+        if !engine.isRunning {
+            do {
+                try engine.start()
+            } catch {
+                NSLog("Chirp: Failed to restart parked engine: %@", error.localizedDescription)
+                return
+            }
+        }
+
         engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat, block: tapBlock)
     }
 
@@ -143,9 +155,31 @@ final class AudioRecorder: AudioRecording {
 
     func stopRecording() {
         audioEngine?.inputNode.removeTap(onBus: 0)
+        schedulePark()
+    }
+
+    private func schedulePark() {
+        parkTimer?.invalidate()
+        parkTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.parkEngine()
+            }
+        }
+    }
+
+    private func cancelPark() {
+        parkTimer?.invalidate()
+        parkTimer = nil
+    }
+
+    private func parkEngine() {
+        parkTimer = nil
+        audioEngine?.stop()
+        audioEngine?.prepare()
     }
 
     private func tearDown() {
+        cancelPark()
         if let obs = configObserver {
             NotificationCenter.default.removeObserver(obs)
             configObserver = nil

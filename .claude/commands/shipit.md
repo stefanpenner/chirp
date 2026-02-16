@@ -22,7 +22,10 @@ Ship it: build, test, commit, push, wait for CI, and release.
 6. **Release**: Fetch tags (`git fetch --tags`), find the latest tag (`git tag --sort=-v:refname | head -1`), increment the patch number.
    - Tag: `git tag v<VERSION>`
    - Push tag: `git push origin v<VERSION>`
-   - Report the version and link to the release workflow run.
+
+7. **Wait for release**: Find the release workflow run via `gh run list`, then `gh run watch <id> --exit-status`.
+   - If the release fails, stop and report.
+   - On success, report the version and link to the release.
 
 ## Notes
 - The release workflow handles build, sign, notarize, GitHub release, appcast.xml update, and Homebrew tap update automatically.
