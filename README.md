@@ -14,6 +14,9 @@ Hold `fn`, speak, release — text appears at your cursor. All transcription run
 - **Menu bar app** — No dock icon, no clutter
 - **Auto-updates** — Check for updates from the menu bar
 
+\
+**Hotkey change feature**
+
 <img width="272" height="234" alt="chirp-0 3 11-hotkey-select" src="https://github.com/user-attachments/assets/2641c92a-664e-4e2e-aaf3-5b5781f850a7" />
 <img width="280" height="253" alt="chirp-0 3 11-hotkey-selected" src="https://github.com/user-attachments/assets/7bf548a0-2b1c-4cf9-862c-851bd559c7a0" />
 <img width="268" height="226" alt="chirp-0 3 11-hotkey-saved" src="https://github.com/user-attachments/assets/c72f5126-2551-4f8d-9da8-d7e58a683423" />
