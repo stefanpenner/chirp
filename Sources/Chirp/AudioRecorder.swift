@@ -33,9 +33,9 @@ final class AudioRecorder: AudioRecording {
         }
     }
 
-    /// Creates the AVAudioEngine, converter, and starts the engine.
+    /// Creates the AVAudioEngine and converter without starting I/O.
     /// Call once when the app is ready (e.g. after model loads).
-    /// Subsequent calls are no-ops if the engine is already running.
+    /// Subsequent calls are no-ops if the engine already exists.
     func prepare() {
         guard audioEngine == nil else { return }
 
@@ -58,12 +58,10 @@ final class AudioRecorder: AudioRecording {
             return
         }
 
-        do {
-            try engine.start()
-        } catch {
-            NSLog("Chirp: Failed to start audio engine: %@", error.localizedDescription)
-            return
-        }
+        // Preallocate resources without starting I/O. The engine will be
+        // started on-demand in startRecording(). Starting it eagerly here
+        // activates the microphone and shows the orange indicator. (#6)
+        engine.prepare()
 
         self.audioEngine = engine
         self.converter = conv
@@ -164,7 +162,7 @@ final class AudioRecorder: AudioRecording {
 
     private func schedulePark() {
         parkTimer?.invalidate()
-        parkTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+        parkTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.parkEngine()
             }
