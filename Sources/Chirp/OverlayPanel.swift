@@ -137,12 +137,17 @@ struct GlowBorder: View {
 struct IslandView: View {
     var appState: AppState
 
-    /// True for `.recording` or `.transcribing` — drives glow border, padding, border opacity.
+    /// True for `.preparing`, `.recording`, or `.transcribing` — drives glow border, padding, border opacity.
     private var isActive: Bool {
         switch appState.status {
-        case .recording, .transcribing: return true
+        case .preparing, .recording, .transcribing: return true
         default: return false
         }
+    }
+
+    private var isPreparing: Bool {
+        if case .preparing = appState.status { return true }
+        return false
     }
 
     private var isRecording: Bool {
@@ -228,6 +233,13 @@ struct IslandView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 6)
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            } else if isPreparing {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(cCyan)
+                    .padding(.top, 12)
+                    .padding(.bottom, 6)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
             } else if isRecording {
                 LiveWaves(level: appState.audioLevel)
                     .frame(height: 28)
@@ -309,7 +321,7 @@ struct IslandView: View {
                             }
                         }
                     } else {
-                        Text(isRecording ? "Listening..." : isTranscribing ? "Finalizing..." : "Ready")
+                        Text(isPreparing ? "Preparing\u{2026}" : isRecording ? "Listening..." : isTranscribing ? "Finalizing..." : "Ready")
                             .foregroundStyle(.white.opacity(0.4))
                     }
                 }
@@ -334,7 +346,7 @@ struct IslandView: View {
                     }
                     .padding(.bottom, 8)
                     .transition(.opacity)
-            } else if isRecording {
+            } else if isPreparing || isRecording {
                 Text("release \(appState.hotkeyConfig.label)  \u{b7}  esc to cancel")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white.opacity(0.2))
@@ -357,7 +369,7 @@ struct IslandView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(.white.opacity((isActive || isDownloading) ? 0.03 : 0.06), lineWidth: 0.5)
         )
-        .overlay(GlowBorder(active: isActive || isDownloading, level: isDownloading ? 0.15 : isTranscribing ? 0.3 : appState.audioLevel))
+        .overlay(GlowBorder(active: isActive || isDownloading, level: isDownloading ? 0.15 : isPreparing ? 0.15 : isTranscribing ? 0.3 : appState.audioLevel))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .scaleEffect(appState.downloadNudge ? 1.03 : breathe)
         .shadow(color: .black.opacity(0.3), radius: 20, y: 6)

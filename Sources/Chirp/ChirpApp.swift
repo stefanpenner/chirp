@@ -22,15 +22,21 @@
 //   └───┬───┘←──────────────────────────────────┐
 //  fn press│                                ESC │
 //        ▼                                      │
-//   ┌───────────┐  fn release  ┌──────────────┐ │
-//   │ recording ├─────────────→│ transcribing ├─┘
-//   └─────┬─────┘  ←───────────┴──────┬───────┘
-//      ESC│         fn press          │ flush + linger
-//         └──→ ready                  └──→ ready
+//   ┌───────────┐  1st audio  ┌───────────┐     │
+//   │ preparing ├────────────→│ recording │     │
+//   └─────┬─────┘             └─────┬─────┘     │
+//      ESC│                 fn rel. │            │
+//         │                        ▼             │
+//         │                 ┌──────────────┐     │
+//         └──→ ready        │ transcribing ├─────┘
+//                           └──────┬───────┘
+//                    ←──────┘      │ flush + linger
+//                   fn press       └──→ ready
 //
-// recording ↔ transcribing can cycle (fn press/release) within the
-// same session. Text accumulates across cycles. Session ends via
-// linger timeout (natural) or ESC (cancel).
+// preparing → recording happens automatically when the first audio
+// buffer arrives. recording ↔ transcribing can cycle (fn press/release)
+// within the same session. Text accumulates across cycles. Session ends
+// via linger timeout (natural) or ESC (cancel).
 
 import SwiftUI
 import Foundation
@@ -45,6 +51,7 @@ public final class AppState {
         case downloading(Double)   // 0.0 … 1.0
         case loadingModel
         case ready
+        case preparing             // overlay shown, engine starting — not yet capturing audio
         case recording
         case transcribing
         case error(String)
@@ -309,6 +316,9 @@ public final class AppState {
             return
         case .ready:
             break
+        case .preparing:
+            triggerDownloadNudge()
+            return
         case .transcribing:
             // Rejoin: fn pressed during finalization — resume recording
             // in the same session. Text accumulates.
@@ -328,12 +338,11 @@ public final class AppState {
         commitGen = 0
         recordingSession &+= 1
         let session = recordingSession
-        status = .recording
+        status = .preparing
         hotkeyManager?.sessionActive = true
         overlayPanel?.showOverlay()
 
         startConsumerAndAudio(session: session)
-        startPeeking()
     }
 
     /// Rejoin an active transcribing session — cancel the old consumer
@@ -372,6 +381,14 @@ public final class AppState {
             for await samples in stream {
                 guard !Task.isCancelled else { break }
 
+                guard let self, self.recordingSession == session else { break }
+
+                // First audio buffer received — transition from preparing to recording.
+                if case .preparing = self.status {
+                    self.status = .recording
+                    self.startPeeking()
+                }
+
                 let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
                 let level = min(rms * 6, 1)
 
@@ -380,7 +397,7 @@ public final class AppState {
                 // Session guard is sufficient — status may be .transcribing if
                 // stopRecording() ran mid-feedAudio, and we must still process
                 // those results (the VAD already popped them).
-                guard let self, self.recordingSession == session else { break }
+                guard self.recordingSession == session else { break }
 
                 self.audioLevel = level
                 for raw in segments {
@@ -445,7 +462,10 @@ public final class AppState {
     }
 
     func stopRecording() {
-        guard case .recording = status else { return }
+        switch status {
+        case .preparing, .recording: break
+        default: return
+        }
 
         peekTask?.cancel()
         peekTask = nil
@@ -461,7 +481,7 @@ public final class AppState {
 
     func cancelSession() {
         switch status {
-        case .recording, .transcribing: break
+        case .preparing, .recording, .transcribing: break
         default: return
         }
 

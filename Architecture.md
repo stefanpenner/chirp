@@ -45,18 +45,23 @@ hotkey press/release          microphone
   └───┬───┘←──────────────────────────────────┐
  fn press│                                ESC │
        ▼                                      │
-  ┌───────────┐  fn release  ┌──────────────┐ │
-  │ recording ├─────────────→│ transcribing ├─┘
-  └─────┬─────┘  ←───────────┴──────┬───────┘
-     ESC│         fn press          │ flush + linger
-        └──→ ready                  └──→ ready
+  ┌───────────┐  1st audio  ┌───────────┐     │
+  │ preparing ├────────────→│ recording │     │
+  └─────┬─────┘             └─────┬─────┘     │
+     ESC│                 fn rel. │            │
+        │                        ▼             │
+        │                 ┌──────────────┐     │
+        └──→ ready        │ transcribing ├─────┘
+                          └──────┬───────┘
+                   ←──────┘      │ flush + linger
+                  fn press       └──→ ready
 
   ready ──(fn press, model missing)──→ downloading
 ```
 
-AppState owns all transitions. User-initiated transitions: `ready → recording` (fn press), `recording → transcribing` (fn release), `recording/transcribing → ready` (ESC cancel), and `transcribing → recording` (fn press rejoin). The rest are automatic.
+AppState owns all transitions. User-initiated transitions: `ready → preparing` (fn press), `preparing → recording` (first audio buffer arrives), `recording → transcribing` (fn release), `preparing/recording/transcribing → ready` (ESC cancel), and `transcribing → recording` (fn press rejoin). The rest are automatic.
 
-**Recording sessions**: `recording ↔ transcribing` can cycle via fn press/release within the same session — text accumulates across cycles. A session ends naturally (flush + linger timeout) or immediately via ESC cancel. Cancel clears all accumulated text and hides the overlay; already-typed keystrokes are not undone.
+**Recording sessions**: `preparing → recording` happens automatically when the first audio buffer arrives from the microphone, giving the user visual feedback ("Preparing…") while the audio engine starts. `recording ↔ transcribing` can cycle via fn press/release within the same session — text accumulates across cycles. A session ends naturally (flush + linger timeout) or immediately via ESC cancel. Cancel clears all accumulated text and hides the overlay; already-typed keystrokes are not undone.
 
 Cancelling a download transitions to `needsModel` (clean idle state); from there, pressing fn or selecting a model from the menu re-enters `downloading`. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording. Pressing fn during `downloading` or `loadingModel` triggers a brief scale-pulse nudge on the overlay (via `downloadNudge`) instead of silently ignoring the press.
 
@@ -115,6 +120,7 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 - **Download state**: progress bar (blue→cyan gradient, rescaled 0–0.9→0–100%), model name (clickable link), compressed size, and cancel button; pulsing full bar during extraction
 - **Loading state**: indeterminate spinner with model name and size
 - **needsModel state**: overlay hidden; menu shows "No model loaded" with download button
+- **Preparing state**: indeterminate spinner (cyan) with "Preparing…" text while the audio engine starts
 - **Recording state**: animated sine-wave waveform driven by audio level
 - Committed text (white) + speculative text (gray), in an auto-scrolling ScrollView (maxHeight 120) for long transcriptions
 - Conic gradient glow border (active during recording, transcribing, and download)

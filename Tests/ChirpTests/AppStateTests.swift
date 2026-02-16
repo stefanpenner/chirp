@@ -34,14 +34,14 @@ struct AppStateTests {
         }
     }
 
-    @Test("startRecording transitions ready → recording")
+    @Test("startRecording transitions ready → preparing")
     func startRecordingTransition() async {
         let (state, _, recorder, _) = makeAppState()
         state.status = .ready
         state.startRecording()
 
-        guard case .recording = state.status else {
-            Issue.record("Expected .recording, got \(state.status)")
+        guard case .preparing = state.status else {
+            Issue.record("Expected .preparing, got \(state.status)")
             return
         }
         #expect(recorder.isRecording)
@@ -340,8 +340,8 @@ struct AppStateTests {
         // Cycle 1
         state.status = .ready
         state.startRecording()
-        guard case .recording = state.status else {
-            Issue.record("Expected .recording after first start")
+        guard case .preparing = state.status else {
+            Issue.record("Expected .preparing after first start")
             return
         }
         state.stopRecording()
@@ -357,8 +357,8 @@ struct AppStateTests {
 
         // Cycle 2
         state.startRecording()
-        guard case .recording = state.status else {
-            Issue.record("Expected .recording after second start")
+        guard case .preparing = state.status else {
+            Issue.record("Expected .preparing after second start")
             return
         }
         #expect(recorder.isRecording)
@@ -908,13 +908,13 @@ struct AppStateTests {
 
     // MARK: - Cancel session
 
-    @Test("cancelSession from recording → ready")
+    @Test("cancelSession from preparing → ready")
     func cancelSessionFromRecording() {
         let (state, _, recorder, _) = makeAppState()
         state.status = .ready
         state.startRecording()
-        guard case .recording = state.status else {
-            Issue.record("Expected .recording, got \(state.status)")
+        guard case .preparing = state.status else {
+            Issue.record("Expected .preparing, got \(state.status)")
             return
         }
         state.cancelSession()
@@ -1031,11 +1031,113 @@ struct AppStateTests {
 
         // Start a fresh session
         state.startRecording()
-        guard case .recording = state.status else {
-            Issue.record("Expected .recording after re-start, got \(state.status)")
+        guard case .preparing = state.status else {
+            Issue.record("Expected .preparing after re-start, got \(state.status)")
             return
         }
         #expect(recorder.isRecording)
+    }
+
+    // MARK: - Preparing state
+
+    @Test("First audio sample transitions preparing → recording")
+    func preparingTransitionsToRecordingOnFirstSample() async throws {
+        let mock = MockTranscriber()
+        let recorder = MockAudioRecorder()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder)
+
+        state.status = .ready
+        state.startRecording()
+
+        guard case .preparing = state.status else {
+            Issue.record("Expected .preparing, got \(state.status)")
+            return
+        }
+
+        // Wait for resetVAD so the consumer loop is running
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        // First audio sample triggers preparing → recording
+        recorder.lastOnSamples?([0.1])
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if case .recording = state.status { break }
+        }
+
+        guard case .recording = state.status else {
+            Issue.record("Expected .recording after first sample, got \(state.status)")
+            return
+        }
+    }
+
+    @Test("fn press during preparing triggers nudge")
+    func fnPressDuringPreparingNudges() {
+        let (state, _, _, _) = makeAppState()
+        state.status = .ready
+        state.startRecording()
+
+        guard case .preparing = state.status else {
+            Issue.record("Expected .preparing, got \(state.status)")
+            return
+        }
+
+        // Press fn again during preparing
+        state.startRecording()
+
+        guard case .preparing = state.status else {
+            Issue.record("Expected .preparing after nudge, got \(state.status)")
+            return
+        }
+        #expect(state.downloadNudge == true)
+    }
+
+    @Test("stopRecording from preparing transitions to transcribing")
+    func stopRecordingFromPreparing() async throws {
+        let mock = MockTranscriber()
+        await mock.setFlushResult("")
+        let recorder = MockAudioRecorder()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder)
+
+        state.status = .ready
+        state.startRecording()
+
+        guard case .preparing = state.status else {
+            Issue.record("Expected .preparing, got \(state.status)")
+            return
+        }
+
+        state.stopRecording()
+
+        guard case .transcribing = state.status else {
+            Issue.record("Expected .transcribing, got \(state.status)")
+            return
+        }
+    }
+
+    @Test("cancelSession from preparing → ready")
+    func cancelSessionFromPreparing() {
+        let (state, _, recorder, _) = makeAppState()
+        state.status = .ready
+        state.startRecording()
+
+        guard case .preparing = state.status else {
+            Issue.record("Expected .preparing, got \(state.status)")
+            return
+        }
+
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready, got \(state.status)")
+            return
+        }
+        #expect(!recorder.isRecording)
+        #expect(state.transcribedText == "")
+        #expect(state.audioLevel == 0)
     }
 
     // MARK: - Session rejoin
