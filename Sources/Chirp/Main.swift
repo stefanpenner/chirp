@@ -16,20 +16,23 @@ struct ChirpApp: App {
     var body: some Scene {
         MenuBarExtra("Chirp", systemImage: "waveform") {
             statusView
-            Divider()
             modelMenu
-            Divider()
-            Text("Hotkey: \(appState.hotkeyConfig.label)")
-                .font(.caption).foregroundColor(.secondary)
-            Button("Change Hotkey\u{2026}") {
+            Button("Change Hotkey (\(appState.hotkeyConfig.label))\u{2026}") {
                 appState.showHotkeyRecorder()
             }
             Divider()
             CheckForUpdatesView(updater: updaterController.updater)
-            Divider()
+            Text(Self.versionLabel).font(.caption).foregroundColor(.secondary)
             Button("Quit Chirp") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
         }
+    }
+
+    private static var versionLabel: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "Chirp v\(version) (\(build))"
     }
 
     @ViewBuilder
@@ -68,19 +71,25 @@ struct ChirpApp: App {
         case .needsModel:
             Text("No model loaded").font(.caption).foregroundColor(.secondary)
             Button("Download Model") { appState.retryDownload() }
+            Divider()
         case .downloading:
             Text("Downloading model\u{2026}").font(.caption).foregroundColor(.secondary)
+            Divider()
         case .loadingModel:
             Text("Loading model...").font(.caption).foregroundColor(.orange)
+            Divider()
         case .ready:
-            Text("Ready (hold \(appState.hotkeyConfig.label))").font(.caption).foregroundColor(.secondary)
+            EmptyView()
         case .recording:
             Text("Recording...").font(.caption).foregroundColor(.red)
+            Divider()
         case .transcribing:
             Text("Finalizing...").font(.caption).foregroundColor(.orange)
+            Divider()
         case .error(let msg):
             Text("Error: \(msg)").font(.caption).foregroundColor(.red)
             Button("Retry Download") { appState.retryDownload() }
+            Divider()
         }
     }
 }
