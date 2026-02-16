@@ -90,6 +90,32 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         }
     }
 
+    // MARK: - On-disk size
+
+    /// Computes the total size of a downloaded model directory on disk.
+    /// Returns `nil` if the model directory is not found.
+    static func directorySizeOnDisk(variant: ModelVariant) -> Int64? {
+        guard let modelDir = findModelDir(variant: variant) else { return nil }
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(atPath: modelDir) else { return nil }
+        var total: Int64 = 0
+        while let file = enumerator.nextObject() as? String {
+            let fullPath = "\(modelDir)/\(file)"
+            if let attrs = try? fm.attributesOfItem(atPath: fullPath),
+               let size = attrs[.size] as? Int64 {
+                total += size
+            }
+        }
+        return total > 0 ? total : nil
+    }
+
+    /// Formats a byte count as a human-readable string (e.g., "1.2 GB").
+    static func formattedDiskSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
+
     // MARK: - Download
 
     /// Starts download of the model archive.

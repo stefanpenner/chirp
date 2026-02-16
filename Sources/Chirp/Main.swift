@@ -14,10 +14,16 @@ struct ChirpApp: App {
     @State private var appState = AppState()
 
     var body: some Scene {
-        MenuBarExtra("Chirp", systemImage: "mic.fill") {
+        MenuBarExtra("Chirp", systemImage: "waveform") {
             statusView
             Divider()
             modelMenu
+            Divider()
+            Text("Hotkey: \(appState.hotkeyConfig.label)")
+                .font(.caption).foregroundColor(.secondary)
+            Button("Change Hotkey\u{2026}") {
+                appState.showHotkeyRecorder()
+            }
             Divider()
             CheckForUpdatesView(updater: updaterController.updater)
             Divider()
@@ -32,7 +38,8 @@ struct ChirpApp: App {
             ForEach(ModelVariant.allCases, id: \.self) { variant in
                 let isActive = variant == appState.activeVariant
                 let isDownloaded = appState.isModelDownloaded(variant)
-                let sizeLabel = isDownloaded ? "" : " (\(variant.sizeDescription))"
+                let sizeLabel = appState.modelDiskSize(variant).map { " (\($0))" }
+                    ?? (isDownloaded ? "" : " (\(variant.sizeDescription))")
 
                 Button {
                     appState.switchModel(to: variant)
@@ -40,9 +47,13 @@ struct ChirpApp: App {
                     Text("\(isActive ? "✓ " : "   ")\(variant.displayName) — \(variant.languageDescription)\(sizeLabel)")
                 }
                 .disabled(!appState.canSwitchModel)
+            }
 
-                if isDownloaded {
-                    Button("   Delete \(variant.displayName)\u{2026}") {
+            let downloadedVariants = ModelVariant.allCases.filter { appState.isModelDownloaded($0) }
+            if !downloadedVariants.isEmpty {
+                Divider()
+                ForEach(downloadedVariants, id: \.self) { variant in
+                    Button("Delete \(variant.displayName)\u{2026}") {
                         appState.deleteModel(variant)
                     }
                     .disabled(!appState.canSwitchModel)
@@ -62,7 +73,7 @@ struct ChirpApp: App {
         case .loadingModel:
             Text("Loading model...").font(.caption).foregroundColor(.orange)
         case .ready:
-            Text("Ready (hold fn)").font(.caption).foregroundColor(.secondary)
+            Text("Ready (hold \(appState.hotkeyConfig.label))").font(.caption).foregroundColor(.secondary)
         case .recording:
             Text("Recording...").font(.caption).foregroundColor(.red)
         case .transcribing:

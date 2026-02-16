@@ -28,7 +28,7 @@ final class OverlayPanel {
 
     private func createPanel() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 200),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
@@ -43,7 +43,7 @@ final class OverlayPanel {
 
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: f.midX - 210, y: f.maxY - 180))
+            panel.setFrameOrigin(NSPoint(x: f.midX - 210, y: f.maxY - 280))
         }
         self.panel = panel
     }
@@ -290,9 +290,24 @@ struct IslandView: View {
             } else {
                 Group {
                     if !appState.transcribedText.isEmpty || !appState.speculativeText.isEmpty {
-                        Text("\(committed)\(speculative)")
-                            .lineLimit(2)
-                            .truncationMode(.head)
+                        ScrollViewReader { proxy in
+                            ScrollView(.vertical, showsIndicators: false) {
+                                Text("\(committed)\(speculative)")
+                                    .lineLimit(nil)
+                                    .id("transcriptionEnd")
+                            }
+                            .frame(maxHeight: 120)
+                            .onChange(of: appState.transcribedText) {
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    proxy.scrollTo("transcriptionEnd", anchor: .bottom)
+                                }
+                            }
+                            .onChange(of: appState.speculativeText) {
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    proxy.scrollTo("transcriptionEnd", anchor: .bottom)
+                                }
+                            }
+                        }
                     } else {
                         Text(isRecording ? "Listening..." : isTranscribing ? "Finalizing..." : "Ready")
                             .foregroundStyle(.white.opacity(0.4))
@@ -320,7 +335,7 @@ struct IslandView: View {
                     .padding(.bottom, 8)
                     .transition(.opacity)
             } else if isRecording {
-                Text("release fn  \u{b7}  esc to cancel")
+                Text("release \(appState.hotkeyConfig.label)  \u{b7}  esc to cancel")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white.opacity(0.2))
                     .padding(.bottom, 8)

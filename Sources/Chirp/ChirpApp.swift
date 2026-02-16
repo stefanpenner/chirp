@@ -60,8 +60,10 @@ public final class AppState {
     let textInserter: any TextInserting
     public var downloadNudge: Bool = false
     public var modelCacheGeneration: Int = 0
+    public var hotkeyConfig: HotkeyConfig = .saved
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
+    var hotkeyRecorderPanel: HotkeyRecorderPanel?
     private var modelManager: ModelManager?
     var transcriberFactory: () -> any TranscriberProtocol = { Transcriber() }
     private var peekTask: Task<Void, Never>?
@@ -214,6 +216,13 @@ public final class AppState {
         return ModelManager.findExisting(variant: variant) != nil
     }
 
+    /// Human-readable on-disk size of a downloaded model, or nil if not downloaded.
+    public func modelDiskSize(_ variant: ModelVariant) -> String? {
+        _ = modelCacheGeneration  // observation dependency for SwiftUI
+        guard let bytes = ModelManager.directorySizeOnDisk(variant: variant) else { return nil }
+        return ModelManager.formattedDiskSize(bytes)
+    }
+
     /// Cancel an in-flight download. Returns to idle `.needsModel` state.
     public func cancelDownload() {
         guard case .downloading = status else { return }
@@ -229,6 +238,20 @@ public final class AppState {
         case .error, .needsModel: ensureModel()
         default: break
         }
+    }
+
+    // MARK: - Hotkey
+
+    public func updateHotkey(_ config: HotkeyConfig) {
+        hotkeyConfig = config
+        hotkeyManager?.updateConfig(config)
+    }
+
+    public func showHotkeyRecorder() {
+        if hotkeyRecorderPanel == nil {
+            hotkeyRecorderPanel = HotkeyRecorderPanel(appState: self)
+        }
+        hotkeyRecorderPanel?.show()
     }
 
     // MARK: - Recording

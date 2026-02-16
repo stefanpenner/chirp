@@ -5,21 +5,21 @@ Chirp is a macOS 26+ menu bar app that performs offline speech-to-text. Hold the
 ## Component Overview
 
 ```
-fn key press/release          microphone
+hotkey press/release          microphone
        │                         │
        ▼                         ▼
   HotkeyManager ──→ AppState ←── AudioRecorder
-                       │  │
-            ┌──────────┘  └──────────┐
-            ▼                        ▼
-      Transcriber              OverlayPanel
-      (sherpa-onnx)            (waveform HUD)
-            │
-            ▼
-    TextPostProcessor
-            │
-            ▼
-      TextInserter ──→ keystrokes into focused app
+       ▲               │  │
+       │     ┌─────────┘  └──────────┐
+  HotkeyRecorderPanel  ▼             ▼
+                  Transcriber    OverlayPanel
+                  (sherpa-onnx)  (waveform HUD)
+                        │
+                        ▼
+                TextPostProcessor
+                        │
+                        ▼
+                  TextInserter ──→ keystrokes into focused app
 ```
 
 **AppState** orchestrates everything. **ModelManager** handles first-run model download. All speech inference runs through the **CSherpaOnnx** C bridge to sherpa-onnx + onnxruntime dylibs.
@@ -99,7 +99,11 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 
 ## Hotkey
 
-`HotkeyManager` installs a `CGEvent` tap intercepting fn/Globe key events. It suppresses the key entirely (no emoji picker) and calls `onPress`/`onRelease`/`onCancel` closures on the main actor via `Task { @MainActor in }`. ESC (keycode 0x35) is intercepted and suppressed only when `sessionActive` is true (during recording or transcribing); otherwise ESC passes through to the focused app normally.
+`HotkeyConfig` stores the configured hotkey: `keyCode`, `isModifier` flag, `modifierMask` (for modifier-only keys like fn), `requiredModifiers` (for key combos like ⌘⇧R), and a display `label`. Supports modifier-only keys (fn, Right ⌥), key combos (⌘Space), and plain keys (F5). Persisted in UserDefaults. Full ANSI keycode → label mapping for UI display.
+
+`HotkeyManager` installs a `CGEvent` tap intercepting the configured hotkey events (flagsChanged for modifier keys, keyDown/keyUp for regular keys). It suppresses the key entirely (no system side effects) and calls `onPress`/`onRelease`/`onCancel` closures on the main actor via `Task { @MainActor in }`. ESC (keycode 0x35) is intercepted and suppressed only when `sessionActive` is true (during recording or transcribing); otherwise ESC passes through to the focused app normally. The tap also intercepts NX_SYSDEFINED events (type 14) to suppress the fn emoji picker trigger. A `suppressOnly` flag allows the tap to eat the hotkey without firing callbacks — used while the hotkey recorder dialog is open.
+
+`HotkeyRecorderPanel` opens a floating NSPanel with glass vibrancy (NSVisualEffectView, `.popover` material) for recording a new hotkey. The user clicks a rounded-rectangle field to enter recording mode (NSEvent local monitor captures the next key/modifier press), reviews the captured shortcut, then clicks Save or Cancel. While the dialog is visible, `suppressOnly` keeps the CGEvent tap active so the current hotkey is suppressed from the system but doesn't trigger recording.
 
 ## Overlay
 
@@ -108,7 +112,7 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 - **Loading state**: indeterminate spinner with model name and size
 - **needsModel state**: overlay hidden; menu shows "No model loaded" with download button
 - **Recording state**: animated sine-wave waveform driven by audio level
-- Committed text (white) + speculative text (gray)
+- Committed text (white) + speculative text (gray), in an auto-scrolling ScrollView (maxHeight 120) for long transcriptions
 - Conic gradient glow border (active during recording, transcribing, and download)
 - Catppuccin-inspired color palette
 
@@ -146,7 +150,8 @@ Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`) ena
 | `AudioRecorder.swift` | AVAudioEngine mic capture with sample-rate conversion |
 | `TextInserter.swift` | CGEvent keyboard simulation |
 | `TextPostProcessor.swift` | Filler removal, dedup, whitespace normalization |
-| `HotkeyManager.swift` | fn/Globe key event tap |
+| `HotkeyManager.swift` | HotkeyConfig + configurable key event tap |
+| `HotkeyRecorder.swift` | Shortcut recorder panel with glass vibrancy |
 | `OverlayPanel.swift` | Floating waveform HUD |
 | `ModelManager.swift` | Model download, extraction, discovery |
 | `ModelVariant.swift` | Model metadata enum with persistence |
