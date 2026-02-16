@@ -5,22 +5,6 @@ Hold `fn`, speak, release — text appears at your cursor. All transcription run
 
 <img width="310" height="257" alt="chirp-0 3 11-main" src="https://github.com/user-attachments/assets/de9c3483-3615-4f36-8415-998dc37e94cc" />
 
-## Features
-
-- **Hold-to-talk** — Press `fn` to record, release to transcribe, hotkey can be changed
-- **Works everywhere** — Text is typed at your cursor in any app
-- **Speculative preview** — See partial transcription as you speak
-- **Fast** — Parakeet TDT 0.6b v2 with Silero VAD, all on-device
-- **Menu bar app** — No dock icon, no clutter
-- **Auto-updates** — Check for updates from the menu bar
-
-\
-**Hotkey change feature**
-
-<img width="272" height="234" alt="chirp-0 3 11-hotkey-select" src="https://github.com/user-attachments/assets/2641c92a-664e-4e2e-aaf3-5b5781f850a7" />
-<img width="280" height="253" alt="chirp-0 3 11-hotkey-selected" src="https://github.com/user-attachments/assets/7bf548a0-2b1c-4cf9-862c-851bd559c7a0" />
-<img width="268" height="226" alt="chirp-0 3 11-hotkey-saved" src="https://github.com/user-attachments/assets/c72f5126-2551-4f8d-9da8-d7e58a683423" />
-
 ## Install
 
 ### Download
@@ -39,6 +23,15 @@ brew install --cask stefanpenner/chirp/chirp
 brew install bazelisk    # install Bazel via Bazelisk
 bazel run //:Chirp       # build and launch
 ```
+
+## Features
+
+- **Hold-to-talk** — Press `fn` (configurable) to record, release to transcribe, hotkey can be changed
+- **Works everywhere** — Text is typed at your cursor in any app
+- **Speculative preview** — See partial transcription as you speak
+- **Fast** — Parakeet TDT 0.6b v2 with Silero VAD, all on-device
+- **Menu bar app** — No dock icon, no clutter
+- **Auto-updates** — Check for updates from the menu bar
 
 ## Setup
 
