@@ -14,8 +14,11 @@ private let cCyan = Color(red: 0.30, green: 0.75, blue: 0.95)
 
 @main
 struct ChirpApp: App {
+    // Don't auto-start Sparkle on dev builds (version stays at 0.1.0;
+    // release builds stamp the real version via scripts/package.sh).
     private let updaterController = SPUStandardUpdaterController(
-        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        startingUpdater: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String != "0.1.0",
+        updaterDelegate: nil, userDriverDelegate: nil)
     @State private var appState = AppState()
     @State private var hotkeyRecorder = InlineHotkeyRecorder()
 
@@ -290,6 +293,7 @@ private struct SectionDivider: View {
 }
 
 private struct MenuRow: View {
+    @Environment(\.isEnabled) private var isEnabled
     let title: String
     let action: () -> Void
 
@@ -303,7 +307,7 @@ private struct MenuRow: View {
             HStack {
                 Text(title)
                     .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(.white.opacity(isEnabled ? 0.7 : 0.3))
                 Spacer()
             }
             .contentShape(Rectangle())
