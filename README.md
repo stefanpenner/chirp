@@ -47,7 +47,7 @@ If Chirp can transcribe but text doesn't appear, Accessibility permission is mis
 
 ### Model download
 
-On first launch, Chirp downloads the Parakeet TDT 0.6b v2 speech recognition model (~240 MB compressed, ~631 MB on disk). This is a one-time download stored in `~/Library/Application Support/Chirp/`. After that, Chirp works fully offline.
+On first launch, Chirp downloads the Parakeet TDT 0.6b v2 speech recognition model (~460 MB download, ~631 MB on disk). This is a one-time download stored in `~/Library/Application Support/Chirp/`. After that, Chirp works fully offline.
 
 ## Updating
 
