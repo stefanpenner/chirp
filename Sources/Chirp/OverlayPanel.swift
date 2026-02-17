@@ -1,6 +1,6 @@
 // OverlayPanel.swift — Floating HUD that appears during recording.
 // Shows live audio waveforms, committed + speculative transcript text,
-// and a glowing border. Themed with a Catppuccin-inspired palette.
+// and a glowing border. Adapts to system light/dark theme with Catppuccin-inspired accents.
 // Managed by AppState.showOverlay() / hideOverlay().
 
 import AppKit
@@ -135,6 +135,7 @@ struct GlowBorder: View {
 // MARK: - Island View
 
 struct IslandView: View {
+    @Environment(\.colorScheme) private var colorScheme
     var appState: AppState
 
     /// True for `.recording` or `.transcribing` — drives glow border, padding, border opacity.
@@ -200,7 +201,7 @@ struct IslandView: View {
             } else if isDownloading {
                 // Download phase — determinate progress bar (rescaled 0-0.9 → 0-1.0)
                 Capsule()
-                    .fill(.white.opacity(0.08))
+                    .fill(.primary.opacity(0.08))
                     .frame(height: 6)
                     .overlay(alignment: .leading) {
                         GeometryReader { geo in
@@ -260,17 +261,17 @@ struct IslandView: View {
                 VStack(spacing: 4) {
                     if isDownloading && downloadProgress >= 0.9 {
                         Text("Extracting\u{2026}")
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(.primary.opacity(0.7))
                     } else if isDownloading {
                         HStack(spacing: 0) {
                             Text("Downloading")
-                                .foregroundStyle(.white.opacity(0.7))
+                                .foregroundStyle(.primary.opacity(0.7))
                             Text("  \(Int(downloadProgress / 0.9 * 100))%")
-                                .foregroundStyle(.white.opacity(0.35))
+                                .foregroundStyle(.primary.opacity(0.35))
                         }
                     } else {
                         Text("Loading\u{2026}")
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(.primary.opacity(0.7))
                     }
 
                     Text(appState.activeVariant.displayName)
@@ -280,7 +281,7 @@ struct IslandView: View {
 
                     Text("\(appState.activeVariant.sizeDescription) compressed")
                         .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.25))
+                        .foregroundStyle(.primary.opacity(0.25))
                 }
                 .font(.system(size: 13, weight: .regular))
                 .multilineTextAlignment(.center)
@@ -310,7 +311,7 @@ struct IslandView: View {
                         }
                     } else {
                         Text(isRecording ? "Listening..." : isTranscribing ? "Finalizing..." : "Ready")
-                            .foregroundStyle(.white.opacity(0.4))
+                            .foregroundStyle(.primary.opacity(0.4))
                     }
                 }
                 .font(.system(size: 13, weight: .regular))
@@ -323,7 +324,7 @@ struct IslandView: View {
             if isDownloading {
                 Text("Cancel")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.35))
+                    .foregroundStyle(.primary.opacity(0.35))
                     .onTapGesture { appState.cancelDownload() }
                     .onHover { inside in
                         if inside {
@@ -337,13 +338,13 @@ struct IslandView: View {
             } else if isRecording {
                 Text("release \(appState.hotkeyConfig.label)  \u{b7}  esc to cancel")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.2))
+                    .foregroundStyle(.primary.opacity(0.2))
                     .padding(.bottom, 8)
                     .transition(.opacity)
             } else if isTranscribing {
                 Text("esc to cancel")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.2))
+                    .foregroundStyle(.primary.opacity(0.2))
                     .padding(.bottom, 8)
                     .transition(.opacity)
             }
@@ -351,11 +352,11 @@ struct IslandView: View {
         .frame(width: 320)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.black)
+                .fill(colorScheme == .dark ? Color.black : Color.white)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(.white.opacity((isActive || isDownloading) ? 0.03 : 0.06), lineWidth: 0.5)
+                .strokeBorder(.primary.opacity((isActive || isDownloading) ? 0.03 : 0.06), lineWidth: 0.5)
         )
         .overlay(GlowBorder(active: isActive || isDownloading, level: isDownloading ? 0.15 : isTranscribing ? 0.3 : appState.audioLevel))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -369,12 +370,12 @@ struct IslandView: View {
 
     private var committed: Text {
         Text(appState.transcribedText)
-            .foregroundColor(.white)
+            .foregroundColor(.primary)
     }
 
     private var speculative: Text {
         let pfx = appState.transcribedText.isEmpty ? "" : " "
         return Text(pfx + appState.speculativeText)
-            .foregroundColor(.white.opacity(0.4))
+            .foregroundColor(.primary.opacity(0.4))
     }
 }

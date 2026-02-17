@@ -33,7 +33,7 @@ struct ChirpApp: App {
 
                 Text(Self.versionLabel)
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.white.opacity(0.25))
+                    .foregroundColor(.primary.opacity(0.25))
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.bottom, 4)
 
@@ -66,7 +66,7 @@ struct ChirpApp: App {
     private var modelSection: some View {
         Text("Model")
             .font(.system(size: 13, weight: .medium))
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundColor(.primary.opacity(0.7))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -103,7 +103,7 @@ struct ChirpApp: App {
                             .frame(width: 14)
                         Text(variant.displayName)
                             .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(isActive ? 0.9 : 0.5))
+                            .foregroundColor(.primary.opacity(isActive ? 0.9 : 0.5))
                             .lineLimit(1)
                         Spacer()
                     }
@@ -123,7 +123,7 @@ struct ChirpApp: App {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 7, weight: .bold))
-                            .foregroundColor(.white.opacity(0.2))
+                            .foregroundColor(.primary.opacity(0.2))
                             .frame(width: 14, height: 14)
                     }
                     .buttonStyle(DeleteButtonStyle())
@@ -198,7 +198,7 @@ struct ChirpApp: App {
         } else {
             Image(systemName: "circle")
                 .font(.system(size: 10))
-                .foregroundColor(.white.opacity(0.2))
+                .foregroundColor(.primary.opacity(0.2))
         }
     }
 
@@ -215,12 +215,12 @@ struct ChirpApp: App {
                         : hotkeyRecorder.displayLabel)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(hotkeyRecorder.isRecording
-                            ? .white.opacity(0.4) : .white.opacity(0.9))
+                            ? .primary.opacity(0.4) : .primary.opacity(0.9))
                     Spacer()
                     if hotkeyRecorder.isRecording {
                         Text("esc to cancel")
                             .font(.system(size: 9))
-                            .foregroundColor(.white.opacity(0.2))
+                            .foregroundColor(.primary.opacity(0.2))
                     }
                 }
                 .padding(.horizontal, 12)
@@ -238,12 +238,12 @@ struct ChirpApp: App {
                     HStack(spacing: 8) {
                         Button("Reset to fn") { hotkeyRecorder.resetToFn() }
                             .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.4))
+                            .foregroundColor(.primary.opacity(0.4))
                             .buttonStyle(.plain)
                         Spacer()
                         Button("Cancel") { hotkeyRecorder.cancel() }
                             .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.4))
+                            .foregroundColor(.primary.opacity(0.4))
                             .buttonStyle(.plain)
                         Button("Save") { hotkeyRecorder.save() }
                             .font(.system(size: 10, weight: .medium))
@@ -262,16 +262,16 @@ struct ChirpApp: App {
                 HStack {
                     Text("Hotkey")
                         .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(.primary.opacity(0.7))
                     Spacer()
                     Text(appState.hotkeyConfig.label)
                         .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.4))
+                        .foregroundColor(.primary.opacity(0.4))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(
                             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(.white.opacity(0.06))
+                                .fill(.primary.opacity(0.06))
                         )
                 }
                 .contentShape(Rectangle())
@@ -287,7 +287,7 @@ struct ChirpApp: App {
 
 private struct SectionDivider: View {
     var body: some View {
-        Divider().overlay(Color.white.opacity(0.06))
+        Divider().overlay(Color.primary.opacity(0.06))
             .padding(.horizontal, 12).padding(.vertical, 6)
     }
 }
@@ -307,7 +307,7 @@ private struct MenuRow: View {
             HStack {
                 Text(title)
                     .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(isEnabled ? 0.7 : 0.3))
+                    .foregroundColor(.primary.opacity(isEnabled ? 0.7 : 0.3))
                 Spacer()
             }
             .contentShape(Rectangle())
