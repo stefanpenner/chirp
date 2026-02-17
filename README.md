@@ -1,9 +1,10 @@
 # Chirp
 
+
 **Free, Fast,  Offline voice-to-text for macOS.**
 Hold `fn`, speak, release — text appears at your cursor. All transcription runs on-device — no accounts, no servers, no data leaves your machine.
 
-<img width="310" height="257" alt="chirp-0 3 11-main" src="https://github.com/user-attachments/assets/de9c3483-3615-4f36-8415-998dc37e94cc" />
+<img width="680" height="151" alt="chirp-0 3 16-transcribing" src="https://github.com/user-attachments/assets/a4cb6c75-6b77-486b-9aec-8ea2d688d453" />
 
 ## Install
 
@@ -25,9 +26,8 @@ bazel run //:Chirp       # build and launch
 ```
 
 ## Features
+<img width="310" height="257" alt="chirp-0 3 11-main" src="https://github.com/user-attachments/assets/de9c3483-3615-4f36-8415-998dc37e94cc" />
 
-<img width="680" height="151" alt="chirp-0 3 16-transcribing" src="https://github.com/user-attachments/assets/a4cb6c75-6b77-486b-9aec-8ea2d688d453" />
-<br><br>
 
 - **Hold-to-talk** — Press `fn` (configurable) to record, release to transcribe, hotkey can be changed
 - **Works everywhere** — Text is typed at your cursor in any app
