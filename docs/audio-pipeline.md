@@ -49,25 +49,24 @@ Three concurrency domains:
                  └───────────no text)
 ```
 
-A **session** begins on fn press from ready, and ends either naturally
-(linger timeout after flush) or by cancellation (ESC).
+The core interaction is hold-to-record: fn press starts recording, fn
+release stops it. Everything after fn release would ideally be instant,
+but flush and transcription take real time. The **transcribing** state
+exists to cover that gap — the user sees the overlay while remaining
+audio is processed and typed. During that wind-down, the user can act:
+
+- **fn press** → **rejoin** the session (keep accumulated text, start
+  recording again). This creates a new audio stream and consumer because
+  the previous stream was closed on fn release — once an AsyncStream is
+  finished, it can't accept new data.
+- **ESC** → **cancel** the session. No flush, no text typed, everything
+  discarded.
 
 **Recording** runs two parallel tasks:
 - **Consumer** — drains audio from the stream, feeds the transcriber,
   commits segments as typed text
 - **Peek** — polls the transcriber every 400ms for a speculative preview
-  of uncommitted audio (shown italic in the overlay)
-
-**Transcribing** is the wind-down phase after fn release. The consumer
-drains any buffered audio, flushes the transcriber, types remaining text,
-lingers 800ms for the user to read the overlay, then hides it.
-
-**Rejoin** — if fn is pressed again during transcribing, the old consumer
-is cancelled (interrupting flush/linger) and a fresh recording cycle starts
-within the same session. Previously committed text is preserved.
-
-**Cancel** — ESC kills everything immediately. No flush, no text typed,
-all accumulated text discarded.
+  of uncommitted audio, so the user sees words before they're committed
 
 
 ## Audio Capture
@@ -76,43 +75,34 @@ AudioRecorder wraps AVAudioEngine. The tap callback runs on the engine's
 real-time I/O thread, resamples 48kHz stereo to 16kHz mono, and yields
 chunks (~1365 samples, ~85ms each) into an AsyncStream.
 
-```
-┌────────────────────────────────────────────────────┐
-│ Engine lifecycle                                   │
-│                                                    │
-│  prepare() ─► engine allocated, no I/O             │
-│               mic indicator OFF                    │
-│                                                    │
-│  startRecording() ─► start engine + install tap    │
-│                      mic indicator ON              │
-│                                                    │
-│  stopRecording() ─► remove tap + schedule park     │
-│                     park after 0.5s ─► engine stop  │
-│                     mic indicator OFF              │
-│                                                    │
-│  rejoin within 0.5s ─► cancel park, reuse engine   │
-│                                                    │
-│  device change ─► teardown + prepare from scratch  │
-└────────────────────────────────────────────────────┘
-```
+The engine is **prepared eagerly** (at app launch) but **started lazily**
+(on first recording) to avoid showing the orange mic indicator at idle.
+After recording stops, the engine is **parked after 0.5s** — stopped but
+kept allocated so a quick rejoin reuses it without the startup cost. If
+a device change occurs (headphones plugged in), the engine is torn down
+and re-prepared from scratch because AVAudioEngine's input format may
+have changed.
 
 **Shutdown order matters:** stopRecording() removes the tap *before*
-finishing the continuation, so any in-flight I/O callback can still
-yield into the open stream. Reversing this order would lose ~85ms of
-audio in a race window.
+finishing the AsyncStream continuation. This way, any I/O callback
+already in flight can still yield its buffer into the open stream.
+Reversing this order creates a race where the callback's yield returns
+`.terminated` and ~85ms of audio is lost.
 
 
 ## Transcriber
 
-The transcriber actor holds two pieces of state that receive the same
-audio but serve different purposes:
+The transcriber actor holds two pieces of state that both receive every
+audio sample. They exist because transcription has two competing needs:
+mid-recording commits need tight speech boundaries (VAD's job), while
+end-of-recording flush needs complete audio (pendingAudio's job).
 
 ```
                      samples
                         │
                ┌────────┴────────┐
                ▼                 ▼
-        ┌─────────────┐   ┌───────────┐
+        ┌──────────────┐   ┌────────────┐
         │ pendingAudio │   │ Silero VAD │
         │  (raw buffer)│   │            │
         └──────────────┘   └─────┬──────┘
@@ -120,11 +110,11 @@ audio but serve different purposes:
                │           silence ≥ 0.5s
                │                 │
                │                 ▼
-               │          ┌────────────┐
+               │          ┌─────────────┐
                │          │ VAD segment │ (onset → offset audio)
-               │          └─────┬──────┘
+               │          └─────┬───────┘
                │                │
-     ┌─────────┴───┐    ┌──────┴──────┐
+     ┌─────────┴───┐    ┌───────┴─────┐
      │ peek, flush │    │  feedAudio  │
      │ transcribe  │    │  transcribe │
      │ pendingAudio│    │ VAD segment │
@@ -159,34 +149,42 @@ Using pendingAudio for flush avoids this.
 
 ### Peek Safeguards
 
-Peek only runs inference when:
-- VAD detects active speech (avoids hallucinating words from silence)
-- pendingAudio has ≥ 4800 samples (~0.3s, enough for meaningful recognition)
-- Capped to the last 5s to bound inference time on long utterances
+The recognizer will confidently produce text from silence or noise
+(e.g. "Yeah", "Hm"). Three guards prevent this from reaching the user:
 
-If a committed segment arrives while peek is mid-inference, the result
-is discarded (commitGen mismatch). This prevents stale speculative text
-from appearing after committed text has already been typed.
+- **VAD.Detected gate** — only peek when the VAD thinks speech is
+  happening. Without this, ambient noise produces hallucinated words.
+- **Minimum 4800 samples (~0.3s)** — very short audio produces
+  unreliable transcriptions. Wait for enough signal.
+- **Cap to last 5s** — inference time scales with audio length. Without
+  the cap, a long utterance makes peek lag behind real-time.
 
 
 ## Concurrency Safety
 
+The consumer and peek tasks run concurrently and both call into the
+transcriber actor, while sessions can start and stop at any time. Three
+mechanisms prevent stale or cross-session work from corrupting state:
+
 **Session counter** (`recordingSession`) — incremented on each new
-session, checked after every `await`. Any async work from a previous
-session discovers the mismatch and exits. Uses wrapping arithmetic
-to handle overflow.
+session, checked after every `await`. If a session was cancelled or
+replaced while the consumer was mid-`feedAudio`, the stale result is
+discarded instead of typed into the wrong context.
 
-**commitGen** — incremented on each committed segment. Peek captures
-the current gen before calling into the transcriber. If a commit
-happened during the peek, the gen won't match and the preview is
-dropped.
+**commitGen** — solves a narrower problem: peek runs every 400ms and
+calls into the transcriber, but a committed segment may arrive while
+peek is mid-inference. Without commitGen, the stale preview would
+flash on screen after the committed text was already typed. Peek
+captures the gen before calling the transcriber and discards the
+result if it changed.
 
-**Actor isolation** — pendingAudio and the VAD are only accessed
-through the Transcriber actor. feedAudio and peekTranscription never
-run concurrently.
+**Actor isolation** — pendingAudio and the VAD live inside the
+Transcriber actor, so feedAudio and peekTranscription are serialized
+automatically. No locks needed.
 
-**Consumer not cancelled on stop** — stopRecording() finishes the
-stream but does *not* cancel the consumer task. The consumer must
-process any in-flight feedAudio results (the VAD already popped them)
-and then flush. Cancellation only happens via cancelSession() or
-rejoinSession().
+**Consumer not cancelled on stop** — when the user releases fn, the
+stream is finished but the consumer task keeps running. It must:
+drain any buffered audio still in the stream, process in-flight
+feedAudio results (the VAD already popped those segments — dropping
+them would lose text), then flush. Only cancelSession() and
+rejoinSession() cancel the consumer.
