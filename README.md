@@ -26,6 +26,9 @@ bazel run //:Chirp       # build and launch
 
 ## Features
 
+<img width="680" height="151" alt="chirp-0 3 16-transcribing" src="https://github.com/user-attachments/assets/a4cb6c75-6b77-486b-9aec-8ea2d688d453" />
+<br><br>
+
 - **Hold-to-talk** — Press `fn` (configurable) to record, release to transcribe, hotkey can be changed
 - **Works everywhere** — Text is typed at your cursor in any app
 - **Speculative preview** — See partial transcription as you speak
