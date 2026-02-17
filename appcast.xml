@@ -149,5 +149,13 @@
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/stefanpenner/chirp/releases/download/v0.3.13/Chirp-v0.3.13-macOS.dmg" length="31317963" type="application/octet-stream" />
         </item>
+        <item>
+            <title>Version 0.3.14</title>
+            <pubDate>Tue, 17 Feb 2026 01:32:00 +0000</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>0.3.14</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/stefanpenner/chirp/releases/download/v0.3.14/Chirp-v0.3.14-macOS.dmg" length="31343309" type="application/octet-stream" />
+        </item>
     </channel>
 </rss>
