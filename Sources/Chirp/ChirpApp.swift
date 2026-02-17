@@ -452,9 +452,11 @@ public final class AppState {
         peekTask = nil
         // Don't cancel audioConsumerTask — it will process any in-flight
         // feedAudio results, then flush remaining audio after the stream ends.
+        // Stop the recorder before finishing the continuation so in-flight
+        // I/O thread tap callbacks can still yield to the open continuation.
+        audioRecorder.stopRecording()
         audioContinuation?.finish()
         audioContinuation = nil
-        audioRecorder.stopRecording()
 
         status = .transcribing
         speculativeText = ""

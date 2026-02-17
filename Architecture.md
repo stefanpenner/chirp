@@ -62,17 +62,19 @@ Cancelling a download transitions to `needsModel` (clean idle state); from there
 
 ## Audio Pipeline
 
-1. **Capture** — `AudioRecorder` wraps AVAudioEngine. Converts hardware sample rate to 16 kHz mono Float32. Before preparing the engine, `requestMicrophoneAccess()` explicitly calls `AVCaptureDevice.requestAccess(for: .audio)` to trigger the macOS permission dialog (required for the app to appear in System Settings → Microphone). If denied, AppState transitions to `.error` with guidance. The engine is created and started once via `prepare()` (called when the model loads) and kept alive between recordings — `startRecording`/`stopRecording` only install/remove the tap for near-instant start. On audio device changes (`AVAudioEngineConfigurationChange`), the engine tears down and re-prepares automatically. The tap closure is `nonisolated static` to avoid `@MainActor` executor checks on the real-time audio thread.
+1. **Capture** — `AudioRecorder` wraps AVAudioEngine. Converts hardware sample rate to 16 kHz mono Float32. Before preparing the engine, `requestMicrophoneAccess()` explicitly calls `AVCaptureDevice.requestAccess(for: .audio)` to trigger the macOS permission dialog (required for the app to appear in System Settings → Microphone). If denied, AppState transitions to `.error` with guidance. The engine is created and started once via `prepare()` (called when the model loads) and kept alive between recordings — `startRecording`/`stopRecording` only install/remove the tap for near-instant start. On stop, the recorder's tap is removed before the AsyncStream continuation is finished, so in-flight I/O thread callbacks can still yield their buffer. On audio device changes (`AVAudioEngineConfigurationChange`), the engine tears down and re-prepares automatically. The tap closure is `nonisolated static` to avoid `@MainActor` executor checks on the real-time audio thread.
 
-2. **VAD** — `Transcriber.feedAudio()` pushes samples into Silero VAD. When it detects a speech-end boundary, the segment is extracted and transcribed. This gives natural sentence-level chunks.
+2. **VAD** — `Transcriber.feedAudio()` pushes samples into Silero VAD and appends them to `pendingAudio`. When the VAD detects a speech-end boundary (≥0.5s silence), the segment is extracted, transcribed, and `pendingAudio` is cleared. This gives natural sentence-level chunks.
 
 3. **Transcription** — Offline recognizer (Parakeet TDT 0.6b v2 int8 or CTC variant) runs greedy-search decoding. The `Transcriber` actor serializes all C API access.
 
-4. **Speculative preview** — Every 400ms, `peekTranscription()` runs inference on the last 5 seconds of pending audio. A generation counter (`commitGen`) discards stale previews when a real segment commits.
+4. **Speculative preview** — Every 400ms, `peekTranscription()` runs inference on `pendingAudio` (last 5 seconds, gated on VAD speech detection). A generation counter (`commitGen`) discards stale previews when a real segment commits.
 
-5. **Post-processing** — `TextPostProcessor.process()` strips fillers ("um", "uh"), deduplicates stutters ("the the" → "the"), normalizes whitespace, and capitalizes "I". Pure function, sub-millisecond.
+5. **Flush** — When recording stops, `flush()` transcribes remaining `pendingAudio` directly (same source as peek) rather than VAD segment audio. This avoids onset-lag clipping where the VAD's speech-onset detection lags behind the actual start of speech. Guarded by requiring both VAD flush segments and sufficient `pendingAudio` to prevent hallucinated words from post-commit noise.
 
-6. **Insertion** — `TextInserter` posts `CGEvent` keystrokes via `CGEventKeyboardSetUnicodeString`, chunked to 20 UniChars per event. Requires Accessibility permission.
+6. **Post-processing** — `TextPostProcessor.process()` strips fillers ("um", "uh"), deduplicates stutters ("the the" → "the"), normalizes whitespace, and capitalizes "I". Pure function, sub-millisecond.
+
+7. **Insertion** — `TextInserter` posts `CGEvent` keystrokes via `CGEventKeyboardSetUnicodeString`, chunked to 20 UniChars per event. Requires Accessibility permission.
 
 ## Model System
 

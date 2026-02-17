@@ -191,31 +191,32 @@ actor Transcriber: TranscriberProtocol {
         return text.isEmpty ? nil : text
     }
 
-    /// Flushes the VAD and transcribes any remaining speech segments.
+    /// Flushes the VAD and transcribes any remaining pending audio.
+    /// Uses pendingAudio (same source as peek) instead of VAD segment
+    /// audio to avoid onset-lag clipping the start of speech.
     func flush() -> String {
         guard let vad = vad else { return "" }
 
         SherpaOnnxVoiceActivityDetectorFlush(vad)
 
-        var allText = ""
+        // Check if the VAD had uncommitted speech to flush.
+        var hasPendingSpeech = false
         while SherpaOnnxVoiceActivityDetectorEmpty(vad) == 0 {
-            guard let segmentPtr = SherpaOnnxVoiceActivityDetectorFront(vad) else { break }
-            let segment = segmentPtr.pointee
-
-            if segment.n > 0, let samplesPtr = segment.samples {
-                let segmentSamples = Array(UnsafeBufferPointer(start: samplesPtr, count: Int(segment.n)))
-                let text = transcribeSamples(segmentSamples)
-                if !text.isEmpty {
-                    if !allText.isEmpty { allText += " " }
-                    allText += text
-                }
+            hasPendingSpeech = true
+            if let ptr = SherpaOnnxVoiceActivityDetectorFront(vad) {
+                SherpaOnnxDestroySpeechSegment(ptr)
             }
-
-            SherpaOnnxDestroySpeechSegment(segmentPtr)
             SherpaOnnxVoiceActivityDetectorPop(vad)
         }
 
-        return allText
+        guard hasPendingSpeech, pendingAudio.count >= 1600 else {
+            pendingAudio.removeAll()
+            return ""
+        }
+
+        let text = transcribeSamples(pendingAudio)
+        pendingAudio.removeAll()
+        return text
     }
 
     func resetVAD() {
