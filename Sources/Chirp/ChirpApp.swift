@@ -330,10 +330,11 @@ public final class AppState {
         let session = recordingSession
         status = .recording
         hotkeyManager?.sessionActive = true
-        overlayPanel?.showOverlay()
 
         startConsumerAndAudio(session: session)
         startPeeking()
+
+        overlayPanel?.showOverlay()
     }
 
     /// Rejoin an active transcribing session — cancel the old consumer

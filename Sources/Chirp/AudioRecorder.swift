@@ -110,9 +110,9 @@ final class AudioRecorder: AudioRecording {
             }
         }
 
-        audioDucker.duck()
-
         engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat, block: tapBlock)
+
+        audioDucker.duck()
     }
 
     // nonisolated: prevents @MainActor executor checks from leaking
