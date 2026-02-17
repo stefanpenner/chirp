@@ -1,190 +1,146 @@
 # Audio Pipeline
 
-Chirp turns speech into keystrokes: hold a hotkey, talk, release, and
-your words appear in whatever app has focus. Audio is captured from the
-microphone, streamed through a VAD to detect speech boundaries, and
-transcribed by an offline recognizer (Parakeet TDT). Committed text is
-typed into the target app via synthetic keyboard events. A speculative
-preview runs in parallel so the user sees their words on an overlay
-before the final transcription is committed.
+Hold a hotkey, talk, release — words appear in the focused app.
 
-## Overview
+The recognizer (Parakeet TDT) is offline and fast, but not streaming —
+it transcribes a complete audio buffer in one shot. It can't tell you
+"the user is still talking" or "speech just ended." That's the VAD's
+job: detect speech boundaries so we can feed the recognizer bounded
+chunks mid-recording (committed segments) and know when silence means
+"done with this phrase." pendingAudio exists because the VAD trims its
+segments to detected speech boundaries, which can clip the start — so
+peek and flush transcribe the raw buffer instead.
+
+
+## Components
 
 ```
- Microphone                                                           Target App
-     │                                                                    ▲
-     │ 48kHz stereo                                                       │ CGEvent
-     ▼                                                                    │ keystrokes
-┌──────────┐  16kHz mono   ┌─────────────┐  committed    ┌─────────────┐  │
-│  Audio   │──────────────►│ Transcriber │──segments────►│  AppState   │──┘
-│ Recorder │  AsyncStream  │   (actor)   │               │ (MainActor) │
-└──────────┘               │             │◄──peek────────│             │
- I/O thread                │  VAD + ASR  │  every 400ms  │  consumer   │
-                           └─────────────┘               │  + peek     │
-                                                         └─────────────┘
-                                                               │
-                                                               ▼
-                                                          Overlay UI
+ Microphone                                                        Target App
+     │                                                                 ▲
+     │ 48kHz stereo                                                    │ CGEvent
+     ▼                                                                 │ keystrokes
+┌──────────┐  16kHz mono   ┌─────────────┐  committed   ┌──────────┐  │
+│  Audio   │──────────────►│ Transcriber │──segments───►│ AppState │──┘
+│ Recorder │  AsyncStream  │   (actor)   │              │(MainActor│
+└──────────┘               │             │◄──peek───────│  consumer│
+ I/O thread                │  VAD + ASR  │  every 400ms │  + peek) │
+                           └─────────────┘              └──────────┘
+                                                              │
+                                                              ▼
+                                                         Overlay UI
 ```
 
 Three concurrency domains:
-- **I/O thread** — AVAudioEngine tap callback, captures and resamples audio
-- **Transcriber actor** — owns VAD and recognizer, serializes all inference
-- **MainActor** — AppState drives the session, updates UI, types text
+- **I/O thread** — AVAudioEngine tap, captures and resamples
+- **Transcriber actor** — VAD + recognizer, serializes inference
+- **MainActor** — session lifecycle, UI, text insertion
 
 
 ## Session Lifecycle
 
 ```
-                         fn press             fn release
-                 ┌─────────────────┐    ┌──────────────────┐
-                 │                 ▼    │                   ▼
-               ready ──────► recording ──────► transcribing ──────► ready
-                 ▲               │                  │          flush + linger
-                 │            ESC│               fn │press
-                 │               ▼                  ▼
-                 │            ready            recording        (rejoin)
-                 │          (cancel —            same session,
-                 │           no flush,           text preserved
-                 └───────────no text)
+                       fn press            fn release
+                ┌────────────────┐   ┌──────────────────┐
+                │                ▼   │                   ▼
+              ready ─────► recording ─────► transcribing ─────► ready
+                ▲              │                 │         flush + linger
+                │           ESC│              fn │press
+                │              ▼                 ▼
+                │           ready           recording       (rejoin)
+                │         (cancel —           same session,
+                └──────────no text)           text preserved
 ```
 
-The core interaction is hold-to-record: fn press starts recording, fn
-release stops it. Everything after fn release would ideally be instant,
-but flush and transcription take real time. The **transcribing** state
-exists to cover that gap — the user sees the overlay while remaining
-audio is processed and typed. During that wind-down, the user can act:
+Hold-to-record. fn release stops audio capture but flush takes real
+time, so **transcribing** covers that gap. During transcribing:
 
-- **fn press** → **rejoin** the session (keep accumulated text, start
-  recording again). This creates a new audio stream and consumer because
-  the previous stream was closed on fn release — once an AsyncStream is
-  finished, it can't accept new data.
-- **ESC** → **cancel** the session. No flush, no text typed, everything
-  discarded.
+- **fn press** → rejoin (new stream + consumer; old stream is closed
+  and can't accept data). Text accumulates.
+- **ESC** → cancel. No flush, no typing, text discarded.
 
-**Recording** runs two parallel tasks:
-- **Consumer** — drains audio from the stream, feeds the transcriber,
-  commits segments as typed text
-- **Peek** — polls the transcriber every 400ms for a speculative preview
-  of uncommitted audio, so the user sees words before they're committed
+Recording runs two parallel tasks:
+- **Consumer** — drains stream, feeds transcriber, types committed text
+- **Peek** — polls transcriber every 400ms for speculative preview
 
 
 ## Audio Capture
 
-AudioRecorder wraps AVAudioEngine. The tap callback runs on the engine's
-real-time I/O thread, resamples 48kHz stereo to 16kHz mono, and yields
-chunks (~1365 samples, ~85ms each) into an AsyncStream.
+AVAudioEngine tap on the I/O thread resamples to 16kHz mono and yields
+~85ms chunks into an AsyncStream.
 
-The engine is **prepared eagerly** (at app launch) but **started lazily**
-(on first recording) to avoid showing the orange mic indicator at idle.
-After recording stops, the engine is **parked after 0.5s** — stopped but
-kept allocated so a quick rejoin reuses it without the startup cost. If
-a device change occurs (headphones plugged in), the engine is torn down
-and re-prepared from scratch because AVAudioEngine's input format may
-have changed.
+Engine is prepared at launch (no I/O — mic indicator off), started on
+first recording (mic indicator on), and parked 0.5s after stop (so
+quick rejoins reuse it). Device changes tear down and re-prepare.
 
-**Shutdown order matters:** stopRecording() removes the tap *before*
-finishing the AsyncStream continuation. This way, any I/O callback
-already in flight can still yield its buffer into the open stream.
-Reversing this order creates a race where the callback's yield returns
-`.terminated` and ~85ms of audio is lost.
+**Shutdown order:** tap removed *before* stream finished, so in-flight
+I/O callbacks can still yield. Reversed order loses ~85ms in a race.
 
 
 ## Transcriber
 
-The transcriber actor holds two pieces of state that both receive every
-audio sample. They exist because transcription has two competing needs:
-mid-recording commits need tight speech boundaries (VAD's job), while
-end-of-recording flush needs complete audio (pendingAudio's job).
+Two pieces of state receive every sample. They exist because
+mid-recording commits need tight speech boundaries (VAD) while
+end-of-recording flush needs complete audio (pendingAudio).
 
 ```
-                     samples
-                        │
-               ┌────────┴────────┐
-               ▼                 ▼
-        ┌──────────────┐   ┌────────────┐
-        │ pendingAudio │   │ Silero VAD │
-        │  (raw buffer)│   │            │
-        └──────────────┘   └─────┬──────┘
-               │                 │
-               │           silence ≥ 0.5s
-               │                 │
-               │                 ▼
-               │          ┌─────────────┐
-               │          │ VAD segment │ (onset → offset audio)
-               │          └─────┬───────┘
-               │                │
-     ┌─────────┴───┐    ┌───────┴─────┐
-     │ peek, flush │    │  feedAudio  │
-     │ transcribe  │    │  transcribe │
-     │ pendingAudio│    │ VAD segment │
-     └─────────────┘    └─────────────┘
+                  samples
+                     │
+            ┌────────┴────────┐
+            ▼                 ▼
+     ┌─────────────┐   ┌───────────┐
+     │pendingAudio │   │ Silero VAD│
+     │ (raw buffer)│   │           │
+     └──────┬──────┘   └─────┬─────┘
+            │           silence ≥ 0.5s
+            │                 │
+            │          ┌──────┴──────┐
+            │          │ VAD segment │
+            │          └──────┬──────┘
+            │                 │
+   ┌────────┴──┐      ┌───────┴────┐
+   │peek, flush│      │ feedAudio  │
+   │transcribe │      │ transcribe │
+   │pending    │      │ VAD segment│
+   └───────────┘      └────────────┘
 ```
 
-**Two transcription paths, one recognizer:**
-
-| | Audio source | When | Why this source |
+| | Audio source | When | Why |
 |---|---|---|---|
-| **feedAudio** | VAD segment | 0.5s silence detected mid-recording | Tight speech boundaries, no silence waste |
-| **peek** | pendingAudio (last 5s) | Every 400ms during recording | Shows the user everything since last commit |
-| **flush** | pendingAudio (all) | Recording ends | Matches what peek showed — no onset-lag clipping |
+| **feedAudio** | VAD segment | silence detected mid-recording | tight speech boundaries |
+| **peek** | pendingAudio (last 5s) | every 400ms | show user everything since last commit |
+| **flush** | pendingAudio (all) | recording ends | match what peek showed; VAD onset lag clips beginnings |
 
-**pendingAudio** accumulates every sample since the last commit. When
-feedAudio commits a segment, pendingAudio is cleared entirely. peek and
-flush both read from it, so the speculative preview and the final
-transcription use the same audio source.
+**pendingAudio** — all samples since last commit. Cleared on commit.
+Shared source for peek and flush, so preview matches final output.
 
-**VAD** tracks speech/silence continuously and emits segments to a queue
-when it detects ≥0.5s of silence (or speech hits 15s max). feedAudio
-pops these segments and transcribes the VAD's own audio buffer. flush
-also pops the queue but *discards* the segment audio, transcribing
-pendingAudio instead.
-
-**Why the split?** VAD onset detection lags behind actual speech start,
-so its segments can be clipped at the beginning. For mid-recording
-commits this is acceptable (the next utterance starts fresh). But at
-flush time, clipping would lose the start of the user's final words.
-Using pendingAudio for flush avoids this.
+**VAD** — emits segments on ≥0.5s silence (or 15s max). feedAudio
+transcribes segment audio. flush pops but *discards* segments,
+transcribing pendingAudio instead (avoids onset-lag clipping).
 
 
 ### Peek Safeguards
 
-The recognizer will confidently produce text from silence or noise
-(e.g. "Yeah", "Hm"). Three guards prevent this from reaching the user:
-
-- **VAD.Detected gate** — only peek when the VAD thinks speech is
-  happening. Without this, ambient noise produces hallucinated words.
-- **Minimum 4800 samples (~0.3s)** — very short audio produces
-  unreliable transcriptions. Wait for enough signal.
-- **Cap to last 5s** — inference time scales with audio length. Without
-  the cap, a long utterance makes peek lag behind real-time.
+The recognizer hallucinates from silence (e.g. "Yeah"). Three guards:
+- **VAD.Detected gate** — skip peek when no speech active
+- **Min 4800 samples** (~0.3s) — too short = unreliable
+- **Cap 5s** — bounds inference time on long utterances
 
 
 ## Concurrency Safety
 
-The consumer and peek tasks run concurrently and both call into the
-transcriber actor, while sessions can start and stop at any time. Three
-mechanisms prevent stale or cross-session work from corrupting state:
+Consumer and peek run concurrently, sessions start/stop at any time.
 
-**Session counter** (`recordingSession`) — incremented on each new
-session, checked after every `await`. If a session was cancelled or
-replaced while the consumer was mid-`feedAudio`, the stale result is
-discarded instead of typed into the wrong context.
+**`recordingSession`** — counter incremented per session, checked after
+every `await`. Stale async work self-terminates on mismatch.
 
-**commitGen** — solves a narrower problem: peek runs every 400ms and
-calls into the transcriber, but a committed segment may arrive while
-peek is mid-inference. Without commitGen, the stale preview would
-flash on screen after the committed text was already typed. Peek
-captures the gen before calling the transcriber and discards the
-result if it changed.
+**`commitGen`** — counter incremented per committed segment. Peek
+captures gen before inference, discards result if gen changed
+(prevents stale preview from appearing after committed text).
 
-**Actor isolation** — pendingAudio and the VAD live inside the
-Transcriber actor, so feedAudio and peekTranscription are serialized
-automatically. No locks needed.
+**Actor isolation** — pendingAudio and VAD live on the Transcriber
+actor. feedAudio and peek are serialized; no locks.
 
-**Consumer not cancelled on stop** — when the user releases fn, the
-stream is finished but the consumer task keeps running. It must:
-drain any buffered audio still in the stream, process in-flight
-feedAudio results (the VAD already popped those segments — dropping
-them would lose text), then flush. Only cancelSession() and
-rejoinSession() cancel the consumer.
+**Consumer survives stop** — fn release finishes the stream but does
+not cancel the consumer. It must drain buffered audio, process
+in-flight feedAudio results (VAD already popped those segments),
+and flush. Only cancel and rejoin kill the consumer.
