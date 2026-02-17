@@ -1,347 +1,192 @@
 # Audio Pipeline
 
-## Thread / Actor Map
+Chirp turns speech into keystrokes: hold a hotkey, talk, release, and
+your words appear in whatever app has focus. Audio is captured from the
+microphone, streamed through a VAD to detect speech boundaries, and
+transcribed by an offline recognizer (Parakeet TDT). Committed text is
+typed into the target app via synthetic keyboard events. A speculative
+preview runs in parallel so the user sees their words on an overlay
+before the final transcription is committed.
+
+## Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ I/O Thread (AVAudioEngine)                                                  │
-│                                                                             │
-│  installTap(bufferSize: 4096)                                               │
-│       │                                                                     │
-│       ▼                                                                     │
-│  ┌──────────────────────┐                                                   │
-│  │ tapBlock callback    │  fires every ~85ms (4096 samples @ 48kHz)         │
-│  │                      │                                                   │
-│  │  48kHz stereo buffer │                                                   │
-│  │       │              │                                                   │
-│  │       ▼              │                                                   │
-│  │  AVAudioConverter    │                                                   │
-│  │  48kHz → 16kHz mono  │                                                   │
-│  │       │              │                                                   │
-│  │       ▼              │                                                   │
-│  │  onSamples([Float])  │─────────── continuation.yield(samples) ──────┐    │
-│  │                      │                                              │    │
-│  └──────────────────────┘                                              │    │
-│                                                                        │    │
-└────────────────────────────────────────────────────────────────────────│────┘
-                                                                        │
-                                                                        ▼
-┌───────────────────────────────────────────────────────────────────────────────┐
-│ AsyncStream<[Float]> buffer                                                   │
-│                                                                               │
-│  [chunk₁] [chunk₂] [chunk₃] ...     ~1365 Float samples per chunk (85ms)     │
-│                                                                               │
-└────────────────────────────────────────────────────────────────────────│──────┘
-                                                                        │
-                                                                        │ for await
-                                                                        ▼
-┌───────────────────────────────────────────────────────────────────────────────┐
-│ @MainActor — audioConsumerTask                                                │
-│                                                                               │
-│  for await samples in stream {                                                │
-│      ┌─────────────────────────────┐                                          │
-│      │ compute RMS → audioLevel    │  (UI: volume meter)                      │
-│      └─────────────┬───────────────┘                                          │
-│                    │                                                          │
-│                    ▼                                                          │
-│      ┌─────────────────────────────────────────────────────────────┐          │
-│      │ await transcriber.feedAudio(samples)  ──── hop to actor ───┼──┐       │
-│      └─────────────────────────────────────────────────────────────┘  │       │
-│                                                                      │       │
-│                ┌─────────────────────────────────────────────────┐    │       │
-│                │ returned segments (committed text)              │◄───┘       │
-│                │                                                 │            │
-│                │  for each segment:                               │            │
-│                │    TextPostProcessor.process(raw)                │            │
-│                │    commitGen += 1                                │            │
-│                │    speculativeText = ""                          │            │
-│                │    transcribedText += text   (UI: overlay)       │            │
-│                │    textInserter.typeText()   (CGEvent keys)      │            │
-│                └─────────────────────────────────────────────────┘            │
-│  }                                                                            │
-│                                                                               │
-│  // --- stream ended (continuation.finish() was called) ---                   │
-│                                                                               │
-│  await transcriber.flush()  ─────────────────────── hop to actor ───┐        │
-│                                                                      │        │
-│  ◄───────────────────────────────────────────────────────────────────┘        │
-│  remaining text → transcribedText, typeText()                                 │
-│  sleep(lingerDuration)   // 800ms overlay linger                              │
-│  status = .ready                                                              │
-│  hideOverlay()                                                                │
-│                                                                               │
-└───────────────────────────────────────────────────────────────────────────────┘
-
-
-┌───────────────────────────────────────────────────────────────────────────────┐
-│ @MainActor — peekTask (parallel to consumer)                                  │
-│                                                                               │
-│  loop every 400ms:                                                            │
-│    gen = commitGen                                                            │
-│    preview = await transcriber.peekTranscription()                            │
-│    guard commitGen == gen       // discard if commit happened mid-peek        │
-│    speculativeText = preview    // (UI: overlay, italic)                      │
-│                                                                               │
-└───────────────────────────────────────────────────────────────────────────────┘
+ Microphone                                                           Target App
+     │                                                                    ▲
+     │ 48kHz stereo                                                       │ CGEvent
+     ▼                                                                    │ keystrokes
+┌──────────┐  16kHz mono   ┌─────────────┐  committed    ┌─────────────┐  │
+│  Audio   │──────────────►│ Transcriber │──segments────►│  AppState   │──┘
+│ Recorder │  AsyncStream  │   (actor)   │               │ (MainActor) │
+└──────────┘               │             │◄──peek────────│             │
+ I/O thread                │  VAD + ASR  │  every 400ms  │  consumer   │
+                           └─────────────┘               │  + peek     │
+                                                         └─────────────┘
+                                                               │
+                                                               ▼
+                                                          Overlay UI
 ```
 
-## Transcriber Actor — Internal State
+Three concurrency domains:
+- **I/O thread** — AVAudioEngine tap callback, captures and resamples audio
+- **Transcriber actor** — owns VAD and recognizer, serializes all inference
+- **MainActor** — AppState drives the session, updates UI, types text
+
+
+## Session Lifecycle
 
 ```
-┌───────────────────────────────────────────────────────────────────────────────┐
-│ actor Transcriber                                                             │
-│                                                                               │
-│  ┌─────────────────────────────────────────────────────────────────────┐      │
-│  │ pendingAudio: [Float]                                               │      │
-│  │                                                                     │      │
-│  │ Accumulates ALL samples from feedAudio() since last commit.         │      │
-│  │ Cleared entirely when feedAudio() returns non-empty results.        │      │
-│  │ Used by peekTranscription() as its audio source.                    │      │
-│  │ NOT used by flush() — flush uses VAD segment audio instead.         │ ◄── MISMATCH
-│  └─────────────────────────────────────────────────────────────────────┘      │
-│                                                                               │
-│  ┌─────────────────────────────────────────────────────────────────────┐      │
-│  │ Silero VAD                                                          │      │
-│  │                                                                     │      │
-│  │  AcceptWaveform(samples)  ← receives same samples as pendingAudio   │      │
-│  │       │                                                             │      │
-│  │       ▼                                                             │      │
-│  │  ┌──────────────────┐                                               │      │
-│  │  │ Frame-level      │  512-sample windows (32ms)                    │      │
-│  │  │ speech prob      │  threshold: 0.45                              │      │
-│  │  │                  │                                               │      │
-│  │  │ Detected() → 0/1 │  "is current frame speech?"                  │      │
-│  │  └────────┬─────────┘                                               │      │
-│  │           │                                                         │      │
-│  │           ▼                                                         │      │
-│  │  ┌──────────────────────────────────────┐                           │      │
-│  │  │ Segment tracking                     │                           │      │
-│  │  │                                      │                           │      │
-│  │  │  speech onset ──► accumulate ──► silence detected                │      │
-│  │  │       │              │              │                            │      │
-│  │  │  (prob > 0.45    (recording)   (prob < 0.45                     │      │
-│  │  │   for enough                    for ≥ 0.5s)                     │      │
-│  │  │   frames)                           │                            │      │
-│  │  │       │                             ▼                            │      │
-│  │  │       │                    emit segment to queue                 │      │
-│  │  │       │                    (contains audio from                  │      │
-│  │  │       │                     onset to offset)                     │      │
-│  │  │       │                                                          │      │
-│  │  │  Constraints:                                                    │      │
-│  │  │    min_speech_duration:  0.1s                                    │      │
-│  │  │    min_silence_duration: 0.5s                                    │      │
-│  │  │    max_speech_duration:  15s  (force-emit)                       │      │
-│  │  └──────────────────────────────────────┘                           │      │
-│  │           │                                                         │      │
-│  │           ▼                                                         │      │
-│  │  ┌──────────────────┐                                               │      │
-│  │  │ Segment Queue    │  popped by feedAudio() and flush()            │      │
-│  │  │ [seg₁, seg₂, …]  │  each seg has its own audio samples          │      │
-│  │  └──────────────────┘                                               │      │
-│  └─────────────────────────────────────────────────────────────────────┘      │
-│                                                                               │
-│  ┌─────────────────────────────────────────────────────────────────────┐      │
-│  │ Offline Recognizer (Parakeet TDT 0.6b v2 int8)                      │      │
-│  │                                                                     │      │
-│  │  transcribeSamples([Float]) → String                                │      │
-│  │                                                                     │      │
-│  │  Called by:                                                          │      │
-│  │    feedAudio  → with VAD segment audio (onset-to-offset)            │      │
-│  │    peek       → with pendingAudio (all audio since last commit)     │      │
-│  │    flush      → with VAD segment audio (onset-to-flush-point)       │      │
-│  └─────────────────────────────────────────────────────────────────────┘      │
-│                                                                               │
-└───────────────────────────────────────────────────────────────────────────────┘
+                         fn press             fn release
+                 ┌─────────────────┐    ┌──────────────────┐
+                 │                 ▼    │                   ▼
+               ready ──────► recording ──────► transcribing ──────► ready
+                 ▲               │                  │          flush + linger
+                 │            ESC│               fn │press
+                 │               ▼                  ▼
+                 │            ready            recording        (rejoin)
+                 │          (cancel —            same session,
+                 │           no flush,           text preserved
+                 └───────────no text)
 ```
 
-## feedAudio() Flow
+A **session** begins on fn press from ready, and ends either naturally
+(linger timeout after flush) or by cancellation (ESC).
+
+**Recording** runs two parallel tasks:
+- **Consumer** — drains audio from the stream, feeds the transcriber,
+  commits segments as typed text
+- **Peek** — polls the transcriber every 400ms for a speculative preview
+  of uncommitted audio (shown italic in the overlay)
+
+**Transcribing** is the wind-down phase after fn release. The consumer
+drains any buffered audio, flushes the transcriber, types remaining text,
+lingers 800ms for the user to read the overlay, then hides it.
+
+**Rejoin** — if fn is pressed again during transcribing, the old consumer
+is cancelled (interrupting flush/linger) and a fresh recording cycle starts
+within the same session. Previously committed text is preserved.
+
+**Cancel** — ESC kills everything immediately. No flush, no text typed,
+all accumulated text discarded.
+
+
+## Audio Capture
+
+AudioRecorder wraps AVAudioEngine. The tap callback runs on the engine's
+real-time I/O thread, resamples 48kHz stereo to 16kHz mono, and yields
+chunks (~1365 samples, ~85ms each) into an AsyncStream.
 
 ```
-feedAudio(samples) {
-    pendingAudio += samples                         ← append ALL
-    VAD.AcceptWaveform(samples)                     ← feed to VAD
-
-    while VAD has segments {
-        segment = VAD.Front()                       ← VAD's own audio buffer
-        text = transcribeSamples(segment.samples)   ← transcribe VAD audio
-        results.append(text)
-        VAD.Pop()
-    }
-
-    if results.nonEmpty {
-        pendingAudio.removeAll()                    ← FULL CLEAR
-    }                                               ← (not "remove up to segment boundary")
-
-    return results
-}
+┌────────────────────────────────────────────────────┐
+│ Engine lifecycle                                   │
+│                                                    │
+│  prepare() ─► engine allocated, no I/O             │
+│               mic indicator OFF                    │
+│                                                    │
+│  startRecording() ─► start engine + install tap    │
+│                      mic indicator ON              │
+│                                                    │
+│  stopRecording() ─► remove tap + schedule park     │
+│                     park after 0.5s ─► engine stop  │
+│                     mic indicator OFF              │
+│                                                    │
+│  rejoin within 0.5s ─► cancel park, reuse engine   │
+│                                                    │
+│  device change ─► teardown + prepare from scratch  │
+└────────────────────────────────────────────────────┘
 ```
 
-### pendingAudio vs VAD — what they contain after a commit
+**Shutdown order matters:** stopRecording() removes the tap *before*
+finishing the continuation, so any in-flight I/O callback can still
+yield into the open stream. Reversing this order would lose ~85ms of
+audio in a race window.
+
+
+## Transcriber
+
+The transcriber actor holds two pieces of state that receive the same
+audio but serve different purposes:
 
 ```
-Timeline:   |-------- speech --------|-- silence --|--- new audio ---|
-                                                    ▲
-                                                    commit happens here
-                                                    (VAD detected 0.5s silence)
-
-After commit:
-  pendingAudio = []                      ← wiped completely
-  VAD internal  = has post-silence audio ← tracks continuously
-
-Next feedAudio call adds new samples to both.
-
-So after commit, pendingAudio RESTARTS from the next feedAudio call,
-while VAD has continuous history including the inter-call gap.
-
-Gap ≈ 1 buffer period ≈ 85ms
+                     samples
+                        │
+               ┌────────┴────────┐
+               ▼                 ▼
+        ┌─────────────┐   ┌───────────┐
+        │ pendingAudio │   │ Silero VAD │
+        │  (raw buffer)│   │            │
+        └──────────────┘   └─────┬──────┘
+               │                 │
+               │           silence ≥ 0.5s
+               │                 │
+               │                 ▼
+               │          ┌────────────┐
+               │          │ VAD segment │ (onset → offset audio)
+               │          └─────┬──────┘
+               │                │
+     ┌─────────┴───┐    ┌──────┴──────┐
+     │ peek, flush │    │  feedAudio  │
+     │ transcribe  │    │  transcribe │
+     │ pendingAudio│    │ VAD segment │
+     └─────────────┘    └─────────────┘
 ```
 
+**Two transcription paths, one recognizer:**
 
-## stopRecording() → flush() Sequence
+| | Audio source | When | Why this source |
+|---|---|---|---|
+| **feedAudio** | VAD segment | 0.5s silence detected mid-recording | Tight speech boundaries, no silence waste |
+| **peek** | pendingAudio (last 5s) | Every 400ms during recording | Shows the user everything since last commit |
+| **flush** | pendingAudio (all) | Recording ends | Matches what peek showed — no onset-lag clipping |
 
-```
-              Main Actor                          I/O Thread              Transcriber Actor
-                 │                                    │                        │
- fn released ──► │                                    │                        │
-                 │                                    │                        │
- stopRecording() │                                    │                        │
-                 │                                    │                        │
-   peekTask.cancel()                                  │                        │
-                 │                                    │                        │
-   continuation.finish() ─────────►  ╳                │                        │
-                 │                    ╳ (yields after  │                        │
-   recorder.stopRecording() ──────►  ╳  this point    │                        │
-                 │                    ╳  are DROPPED)  │                        │
-   status = .transcribing             │                │                        │
-   speculativeText = ""               │                │                        │
-                 │                    │                │                        │
-                 │                    │                │                        │
-   ─ ─ ─ ─ ─ ─  consumer task continues  ─ ─ ─ ─ ─ ─                         │
-                 │                                                             │
-   for-await drains remaining                                                  │
-   buffered chunks                    │                                        │
-                 │                                                             │
-                 │  last feedAudio ────────────────────────────────────────────►│
-                 │                                                             │
-                 │◄────────────────────────────────── segments (if any) ────────│
-                 │  type committed text                                        │
-                 │                                                             │
-   for-await loop exits (stream finished)                                      │
-                 │                                                             │
-                 │  flush() ──────────────────────────────────────────────────► │
-                 │                                    VAD.Flush()              │
-                 │                                    pop segments             │
-                 │                                    transcribe segment audio │
-                 │◄──────────────────────────────────────────── remaining text  │
-                 │                                                             │
-   type remaining text                                                         │
-   sleep(800ms)  // linger                                                     │
-   status = .ready                                                             │
-   hideOverlay()                                                               │
-```
+**pendingAudio** accumulates every sample since the last commit. When
+feedAudio commits a segment, pendingAudio is cleared entirely. peek and
+flush both read from it, so the speculative preview and the final
+transcription use the same audio source.
+
+**VAD** tracks speech/silence continuously and emits segments to a queue
+when it detects ≥0.5s of silence (or speech hits 15s max). feedAudio
+pops these segments and transcribes the VAD's own audio buffer. flush
+also pops the queue but *discards* the segment audio, transcribing
+pendingAudio instead.
+
+**Why the split?** VAD onset detection lags behind actual speech start,
+so its segments can be clipped at the beginning. For mid-recording
+commits this is acceptable (the next utterance starts fresh). But at
+flush time, clipping would lose the start of the user's final words.
+Using pendingAudio for flush avoids this.
 
 
-## The "hey is it working" Bug — What Happens
+### Peek Safeguards
 
-```
-User says: "hey is it working"
-                    then releases fn
+Peek only runs inference when:
+- VAD detects active speech (avoids hallucinating words from silence)
+- pendingAudio has ≥ 4800 samples (~0.3s, enough for meaningful recognition)
+- Capped to the last 5s to bound inference time on long utterances
 
-Timeline:
-─────────────────────────────────────────────────────────────────────►
- "hey"            "is"   "it"   "working"    fn-release
-   │               │      │        │             │
-   ▼               ▼      ▼        ▼             ▼
-
-  VAD: speech onset detected ───────────────────►│
-                                                  │
-  peek (every 400ms):                             │
-    pendingAudio has all speech                   │
-    transcribes → "hey is it working"             │
-    shown as speculativeText on overlay           │
-                                                  │
-                                            stopRecording()
-                                                  │
-                                            continuation.finish()
-                                            removeTap()
-
-  Consumer for-await drains remaining chunks:
-    feedAudio(last-chunks)
-       VAD detects 0.5s silence? ─── maybe ──► commits "hey is it working"
-                                                │
-                                                ▼
-                                          pendingAudio.removeAll()
-                                          transcribedText += "hey is it working"
-                                          typeText("hey is it working")
-
-  for-await exits
-
-  flush():
-    VAD.Flush()
-    VAD emits segment? ─── from what audio?
-       │
-       ├── If silence triggered commit above:
-       │     remaining audio = post-commit noise/silence
-       │     VAD may detect speech from noise (fn click, ambient)
-       │     segment audio → transcribeSamples → "Yeah" ← HALLUCINATION
-       │     typed: "hey is it working Yeah"
-       │
-       └── If speech was NOT committed (no 0.5s silence):
-             VAD flushes active speech segment
-             segment audio = onset-to-flush-point
-             BUT: VAD onset may lag behind actual speech start
-             segment is SHORTER than what peek saw
-             segment audio ≈ "is it working" (missing "hey")
-             transcribeSamples("is it working") → ???
-             or if segment very short → "Yeah"
+If a committed segment arrives while peek is mid-inference, the result
+is discarded (commitGen mismatch). This prevents stale speculative text
+from appearing after committed text has already been typed.
 
 
-RESULT: Either trailing hallucination or truncated/wrong transcription
-```
+## Concurrency Safety
 
-## peek vs feedAudio vs flush — Audio Source Comparison
+**Session counter** (`recordingSession`) — incremented on each new
+session, checked after every `await`. Any async work from a previous
+session discovers the mismatch and exits. Uses wrapping arithmetic
+to handle overflow.
 
-```
-                    pendingAudio                 VAD segment audio
-                    ─────────────                ─────────────────
-feedAudio commit:   (not used for transcription) ✓ onset-to-offset
-peek:               ✓ all since last commit      (not used)
-flush:              (not used)                   ✓ onset-to-flush-point
+**commitGen** — incremented on each committed segment. Peek captures
+the current gen before calling into the transcriber. If a commit
+happened during the peek, the gen won't match and the preview is
+dropped.
 
-                    ▲                            ▲
-                    │                            │
-               FULL recording                TRIMMED to speech
-               since last commit             boundaries (onset lag)
+**Actor isolation** — pendingAudio and the VAD are only accessed
+through the Transcriber actor. feedAudio and peekTranscription never
+run concurrently.
 
-The mismatch: peek uses pendingAudio and produces correct text.
-flush uses VAD segment audio which may be shorter (onset lag)
-or may transcribe post-commit noise (hallucination).
-```
-
-## Race Window in stopRecording()
-
-```
-stopRecording() currently:
-
-    continuation.finish()          ← I/O thread yields after this = DROPPED
-    audioRecorder.stopRecording()  ← removeTap
-
-    ┌──────────────────────────────────────────┐
-    │ RACE: I/O thread may be mid-callback     │
-    │ between finish() and removeTap().        │
-    │ Its yield() returns .terminated.         │
-    │ That buffer's audio is lost.             │
-    │                                          │
-    │ Window ≈ nanoseconds (both on main),     │
-    │ but I/O callback runs concurrently.      │
-    │ Worst case: 1 buffer lost (85ms).        │
-    └──────────────────────────────────────────┘
-
-Swapped order (stop recorder first):
-
-    audioRecorder.stopRecording()  ← removeTap — no new callbacks start
-    continuation.finish()          ← in-flight callback can still yield
-
-    Any callback already running on I/O thread completes
-    and successfully yields to the still-open continuation.
-```
+**Consumer not cancelled on stop** — stopRecording() finishes the
+stream but does *not* cancel the consumer task. The consumer must
+process any in-flight feedAudio results (the VAD already popped them)
+and then flush. Cancellation only happens via cancelSession() or
+rejoinSession().
