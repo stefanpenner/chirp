@@ -177,7 +177,11 @@ actor Transcriber: TranscriberProtocol {
 
     /// Returns a speculative transcription of pending (uncommitted) audio,
     /// capped to the last 5 seconds so inference time stays constant.
+    /// Only transcribes when the VAD detects active speech to avoid
+    /// hallucinated words (e.g. "Yeah", "hm..") from silence/noise.
     func peekTranscription() -> String? {
+        guard let vad else { return nil }
+        guard SherpaOnnxVoiceActivityDetectorDetected(vad) != 0 else { return nil }
         guard pendingAudio.count >= 4800 else { return nil }
         let maxSamples = 16000 * 5
         let samples = pendingAudio.count > maxSamples
