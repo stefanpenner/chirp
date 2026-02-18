@@ -2,6 +2,7 @@
 // AppState depends on these protocols rather than concrete types,
 // enabling mock-based testing without audio hardware or ML models.
 
+import CoreAudio
 import Foundation
 
 struct ModelPaths: Sendable {
@@ -22,11 +23,13 @@ protocol TranscriberProtocol: Sendable {
     func prepare()
     func startRecording(onSamples: @escaping @Sendable ([Float]) -> Void)
     func stopRecording()
+    func selectInputDevice(_ deviceID: AudioDeviceID?)
 }
 
 extension AudioRecording {
     func prepare() {}
     func requestMicrophoneAccess() async -> Bool { true }
+    func selectInputDevice(_ deviceID: AudioDeviceID?) {}
 }
 
 @MainActor protocol TextInserting {

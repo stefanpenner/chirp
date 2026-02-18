@@ -9,8 +9,9 @@ hotkey press/release          microphone
        │                         │
        ▼                         ▼
   HotkeyManager ──→ AppState ←── AudioRecorder
-       ▲               │  │
-       │     ┌─────────┘  └──────────┐
+       ▲               │  │  ▲
+       │     ┌─────────┘  │  └── InputDeviceManager
+       │     │            └──────────┐
   HotkeyRecorderPanel  ▼             ▼
                   Transcriber    OverlayPanel
                   (sherpa-onnx)  (waveform HUD)
@@ -62,7 +63,7 @@ Cancelling a download transitions to `needsModel` (clean idle state); from there
 
 ## Audio Pipeline
 
-1. **Capture** — `AudioRecorder` wraps AVAudioEngine. Converts hardware sample rate to 16 kHz mono Float32. Before preparing the engine, `requestMicrophoneAccess()` explicitly calls `AVCaptureDevice.requestAccess(for: .audio)` to trigger the macOS permission dialog (required for the app to appear in System Settings → Microphone). If denied, AppState transitions to `.error` with guidance. The engine is created and started once via `prepare()` (called when the model loads) and kept alive between recordings — `startRecording`/`stopRecording` only install/remove the tap for near-instant start. On stop, the recorder's tap is removed before the AsyncStream continuation is finished, so in-flight I/O thread callbacks can still yield their buffer. On audio device changes (`AVAudioEngineConfigurationChange`), the engine tears down and re-prepares automatically. The tap closure is `nonisolated static` to avoid `@MainActor` executor checks on the real-time audio thread.
+1. **Capture** — `AudioRecorder` wraps AVAudioEngine. Converts hardware sample rate to 16 kHz mono Float32. Before preparing the engine, `requestMicrophoneAccess()` explicitly calls `AVCaptureDevice.requestAccess(for: .audio)` to trigger the macOS permission dialog (required for the app to appear in System Settings → Microphone). If denied, AppState transitions to `.error` with guidance. The engine is created and started once via `prepare()` (called when the model loads) and kept alive between recordings — `startRecording`/`stopRecording` only install/remove the tap for near-instant start. On stop, the recorder's tap is removed before the AsyncStream continuation is finished, so in-flight I/O thread callbacks can still yield their buffer. On audio device changes (`AVAudioEngineConfigurationChange`), the engine tears down and re-prepares automatically. The tap closure is `nonisolated static` to avoid `@MainActor` executor checks on the real-time audio thread. **Device selection**: `InputDeviceManager` enumerates CoreAudio input devices and persists the user's choice by UID (stable across reboots). When `selectInputDevice(_:)` is called, the engine tears down and re-prepares with the new device set via `kAudioOutputUnitProperty_CurrentDevice` on the input AudioUnit before `inputNode` is accessed.
 
 2. **VAD** — `Transcriber.feedAudio()` pushes samples into Silero VAD and appends them to `pendingAudio`. When the VAD detects a speech-end boundary (≥0.5s silence), the segment is extracted, transcribed, and `pendingAudio` is cleared. This gives natural sentence-level chunks.
 
@@ -142,6 +143,7 @@ Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`) ena
 | `Protocols.swift` | DI boundaries: TranscriberProtocol, AudioRecording, TextInserting |
 | `Transcriber.swift` | Actor wrapping sherpa-onnx offline recognizer + VAD |
 | `AudioRecorder.swift` | AVAudioEngine mic capture with sample-rate conversion |
+| `InputDeviceManager.swift` | CoreAudio input device enumeration, UID-based persistence, hardware-change listener |
 | `TextInserter.swift` | CGEvent keyboard simulation |
 | `TextPostProcessor.swift` | Filler removal, dedup, whitespace normalization |
 | `HotkeyManager.swift` | HotkeyConfig + configurable key event tap |
