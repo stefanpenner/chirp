@@ -12,7 +12,10 @@ concurrency:
 
 jobs:
   build-and-test:
-    runs-on: macos-26
+    strategy:
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -22,8 +25,8 @@ jobs:
           path: |
             ~/.cache/bazel
             ~/.cache/bazelisk
-          key: bazel-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'deps.bzl') }}
-          restore-keys: bazel-${{ runner.os }}-
+          key: bazel-${{ matrix.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'deps.bzl') }}
+          restore-keys: bazel-${{ matrix.os }}-
 
       - name: Build
         run: bazel build //...
