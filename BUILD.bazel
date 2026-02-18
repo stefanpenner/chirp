@@ -72,7 +72,7 @@ swift_library(
 macos_application(
     name = "Chirp",
     bundle_id = "com.chirp.app",
-    minimum_os_version = "26.0",
+    minimum_os_version = "15.0",
     infoplists = ["Sources/Chirp/Info.plist"],
     entitlements = "Sources/Chirp/Chirp.entitlements",
     resources = [

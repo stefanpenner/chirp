@@ -6,7 +6,7 @@ let packageDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().pat
 
 let package = Package(
     name: "Chirp",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "Chirp", targets: ["Chirp"]),
     ],

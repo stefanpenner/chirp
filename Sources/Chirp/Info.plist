@@ -11,7 +11,7 @@
     <key>LSUIElement</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
-    <string>26.2</string>
+    <string>15.0</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Chirp needs microphone access to transcribe your speech to text.</string>
     <key>CFBundleName</key>
