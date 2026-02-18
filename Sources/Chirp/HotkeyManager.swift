@@ -4,6 +4,7 @@
 // Created by AppState.init; lives for the app's lifetime.
 
 import AppKit
+@preconcurrency import ApplicationServices
 @preconcurrency import CoreGraphics
 
 // MARK: - HotkeyConfig
@@ -195,6 +196,7 @@ final class HotkeyManager {
     nonisolated(unsafe) private var eventTap: CFMachPort?
     nonisolated(unsafe) private var runLoopSource: CFRunLoopSource?
     nonisolated(unsafe) private var config: HotkeyConfig
+    nonisolated(unsafe) private var accessibilityPoller: Task<Void, Never>?
     private let onPress: @MainActor () -> Void
     private let onRelease: @MainActor () -> Void
     private let onCancel: @MainActor () -> Void
@@ -230,6 +232,8 @@ final class HotkeyManager {
     }
 
     func updateConfig(_ newConfig: HotkeyConfig) {
+        accessibilityPoller?.cancel()
+        accessibilityPoller = nil
         if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
@@ -362,6 +366,9 @@ final class HotkeyManager {
             userInfo: nil
         ) else {
             NSLog("Chirp: Failed to create event tap — check Accessibility permissions")
+            if accessibilityPoller == nil {
+                startAccessibilityPoller()
+            }
             return
         }
 
@@ -370,9 +377,25 @@ final class HotkeyManager {
         self.runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        accessibilityPoller?.cancel()
+        accessibilityPoller = nil
+    }
+
+    private func startAccessibilityPoller() {
+        accessibilityPoller = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard !Task.isCancelled else { break }
+                guard let self else { break }
+                guard AXIsProcessTrusted() else { continue }
+                self.setupEventTap()
+                break
+            }
+        }
     }
 
     deinit {
+        accessibilityPoller?.cancel()
         let tap = eventTap
         let source = runLoopSource
         MainActor.assumeIsolated {
