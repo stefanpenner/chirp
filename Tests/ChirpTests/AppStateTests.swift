@@ -662,7 +662,7 @@ struct AppStateTests {
         recorder.microphoneAccessGranted = false
         let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder)
 
-        let paths = ModelPaths(modelDir: "/test", vadPath: "/test", variant: .tdt)
+        let paths = ModelPaths(modelDir: "/test", vadPath: "/test", )
         state.loadTranscriber(paths: paths)
 
         for _ in 0..<30 {
@@ -686,7 +686,7 @@ struct AppStateTests {
         recorder.microphoneAccessGranted = true
         let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder)
 
-        let paths = ModelPaths(modelDir: "/test", vadPath: "/test", variant: .tdt)
+        let paths = ModelPaths(modelDir: "/test", vadPath: "/test", )
         state.loadTranscriber(paths: paths)
 
         for _ in 0..<30 {
@@ -707,7 +707,7 @@ struct AppStateTests {
         // initializeResult defaults to false
         let (state, _, _, _) = makeAppState(transcriber: mock)
 
-        let paths = ModelPaths(modelDir: "/nonexistent", vadPath: "/nonexistent", variant: .tdt)
+        let paths = ModelPaths(modelDir: "/nonexistent", vadPath: "/nonexistent", )
         state.loadTranscriber(paths: paths)
 
         for _ in 0..<30 {
@@ -720,88 +720,6 @@ struct AppStateTests {
             return
         }
         #expect(msg.contains("Failed to initialize"))
-    }
-
-    // MARK: - Model switching
-
-    @Test("switchModel same variant is no-op")
-    func switchModelSameVariantIsNoOp() {
-        let (state, _, _, _) = makeAppState()
-        state.status = .ready
-        state.activeVariant = .tdt
-        state.switchModel(to: .tdt)
-
-        guard case .ready = state.status else {
-            Issue.record("Expected .ready, got \(state.status)")
-            return
-        }
-        #expect(state.activeVariant == .tdt)
-    }
-
-    @Test("switchModel blocked during recording")
-    func switchModelBlockedDuringRecording() {
-        let (state, _, _, _) = makeAppState()
-        state.status = .recording
-        state.activeVariant = .tdt
-        state.switchModel(to: .tdtMultilingual)
-
-        guard case .recording = state.status else {
-            Issue.record("Expected .recording, got \(state.status)")
-            return
-        }
-        #expect(state.activeVariant == .tdt)
-    }
-
-    @Test("switchModel blocked during downloading")
-    func switchModelBlockedDuringDownloading() {
-        let (state, _, _, _) = makeAppState()
-        state.status = .downloading(0.5)
-        state.activeVariant = .tdt
-        state.switchModel(to: .tdtMultilingual)
-
-        guard case .downloading = state.status else {
-            Issue.record("Expected .downloading, got \(state.status)")
-            return
-        }
-        #expect(state.activeVariant == .tdt)
-    }
-
-    @Test("switchModel from error updates activeVariant")
-    func switchModelFromError() {
-        let (state, _, _, _) = makeAppState()
-        state.status = .error("something failed")
-        state.activeVariant = .tdt
-        state.switchModel(to: .tdtMultilingual)
-
-        #expect(state.activeVariant == .tdtMultilingual)
-    }
-
-    @Test("deleteModel active variant transitions to needsModel")
-    func deleteModelActiveVariant() {
-        let (state, _, _, _) = makeAppState()
-        state.status = .ready
-        state.activeVariant = .tdt
-        state.deleteModel(.tdt)
-
-        guard case .needsModel = state.status else {
-            Issue.record("Expected .needsModel, got \(state.status)")
-            return
-        }
-    }
-
-    @Test("deleteModel blocked during recording")
-    func deleteModelBlockedDuringRecording() {
-        let (state, _, _, _) = makeAppState()
-        state.status = .recording
-        state.activeVariant = .tdt
-        let gen = state.modelCacheGeneration
-        state.deleteModel(.tdt)
-
-        guard case .recording = state.status else {
-            Issue.record("Expected .recording, got \(state.status)")
-            return
-        }
-        #expect(state.modelCacheGeneration == gen)
     }
 
     // MARK: - Cancel download
@@ -886,24 +804,6 @@ struct AppStateTests {
         default:
             Issue.record("Expected .downloading or .loadingModel, got \(state.status)")
         }
-    }
-
-    @Test("canSwitchModel is true in needsModel")
-    func canSwitchModelInNeedsModel() {
-        let (state, _, _, _) = makeAppState()
-        state.status = .needsModel
-        #expect(state.canSwitchModel)
-    }
-
-    // MARK: - Model cache generation
-
-    @Test("deleteModel increments modelCacheGeneration")
-    func deleteModelIncrementsGeneration() {
-        let (state, _, _, _) = makeAppState()
-        state.status = .ready
-        state.activeVariant = .tdt
-        state.deleteModel(.tdtMultilingual)
-        #expect(state.modelCacheGeneration == 1)
     }
 
     // MARK: - Cancel session

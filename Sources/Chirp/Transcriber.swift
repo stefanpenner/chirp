@@ -24,11 +24,10 @@ actor Transcriber: TranscriberProtocol {
     /// Returns false if either fails to initialize.
     func initialize(paths: ModelPaths) -> Bool {
         let modelDir = paths.modelDir
-        let variant = paths.variant
 
         let tokensPath = toCString("\(modelDir)/tokens.txt")
         let providerStr = toCString("cpu")
-        let modelTypeStr = toCString(variant.modelType)
+        let modelTypeStr = toCString(ModelVariant.modelType)
         let emptyStr = toCString("")
         let decodingMethodStr = toCString("greedy_search")
 

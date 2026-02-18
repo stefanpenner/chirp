@@ -7,7 +7,6 @@ import Foundation
 struct ModelPaths: Sendable {
     let modelDir: String
     let vadPath: String
-    let variant: ModelVariant
 }
 
 protocol TranscriberProtocol: Sendable {

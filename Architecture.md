@@ -58,7 +58,7 @@ AppState owns all transitions. User-initiated transitions: `ready → recording`
 
 **Recording sessions**: `recording ↔ transcribing` can cycle via fn press/release within the same session — text accumulates across cycles. A session ends naturally (flush + linger timeout) or immediately via ESC cancel. Cancel clears all accumulated text and hides the overlay; already-typed keystrokes are not undone.
 
-Cancelling a download transitions to `needsModel` (clean idle state); from there, pressing fn or selecting a model from the menu re-enters `downloading`. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording. Pressing fn during `downloading` or `loadingModel` triggers a brief scale-pulse nudge on the overlay (via `downloadNudge`) instead of silently ignoring the press.
+Cancelling a download transitions to `needsModel` (clean idle state); from there, pressing fn re-enters `downloading`. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording. Pressing fn during `downloading` or `loadingModel` triggers a brief scale-pulse nudge on the overlay (via `downloadNudge`) instead of silently ignoring the press.
 
 ## Audio Pipeline
 
@@ -66,7 +66,7 @@ Cancelling a download transitions to `needsModel` (clean idle state); from there
 
 2. **VAD** — `Transcriber.feedAudio()` pushes samples into Silero VAD and appends them to `pendingAudio`. When the VAD detects a speech-end boundary (≥0.5s silence), the segment is extracted, transcribed, and `pendingAudio` is cleared. This gives natural sentence-level chunks.
 
-3. **Transcription** — Offline recognizer (Parakeet TDT 0.6b v2 int8 or CTC variant) runs greedy-search decoding. The `Transcriber` actor serializes all C API access.
+3. **Transcription** — Offline recognizer (Parakeet TDT 0.6b v3 int8, multilingual) runs greedy-search decoding. The `Transcriber` actor serializes all C API access.
 
 4. **Speculative preview** — Every 400ms, `peekTranscription()` runs inference on `pendingAudio` (last 5 seconds, gated on VAD speech detection). A generation counter (`commitGen`) discards stale previews when a real segment commits.
 
@@ -78,26 +78,14 @@ Cancelling a download transitions to `needsModel` (clean idle state); from there
 
 ## Model System
 
-`ModelVariant` enumerates available models with download URLs, directory names, and check files:
-
-| Variant | Model | Languages |
-|---------|-------|-----------|
-| `.tdt` | Parakeet TDT 0.6b v2 int8 | English only |
-| `.tdtMultilingual` (default) | Parakeet TDT 0.6b v3 int8 | 25 European languages (auto-detect) |
-
-Both use the same `nemo_transducer` architecture and file layout (`encoder.int8.onnx`, `decoder.int8.onnx`, `joiner.int8.onnx`).
+`ModelVariant` holds static configuration for the single model: Parakeet TDT 0.6b v3 int8 (25 European languages, auto-detect). Uses `nemo_transducer` architecture with `encoder.int8.onnx`, `decoder.int8.onnx`, `joiner.int8.onnx`.
 
 `ModelManager` handles:
 
-- **Discovery**: searches App Support, working directory, parent dirs, and bundle resources
+- **Discovery**: searches App Support, bundle resources, and `CHIRP_MODEL_DIR` env var
 - **Download**: URLSession download task with progress (0→0.9 download, 0.9→1.0 extraction)
 - **Extraction**: `/usr/bin/tar xjf` to `~/Library/Application Support/Chirp/models/`
-- **Cancellation**: `cancel()` invalidates in-flight downloads (used during model switching and user cancel)
-- **Deletion**: `deleteModel(variant:)` removes any model from disk (deleting the active model transitions to `needsModel`)
-
-**Model switching** is done via `AppState.switchModel(to:)`, which is only allowed from `.ready`, `.error`, or `.needsModel` state. It cancels any in-flight download, creates a fresh transcriber, persists the selection to UserDefaults, and calls `ensureModel()` to download or load the new model. The menu bar shows all variants with a checkmark on the active one.
-
-**Background downloads**: `AppState.downloadModel(_:)` downloads a non-active variant in the background without switching to it. Progress is tracked per-variant in `backgroundDownloads: [ModelVariant: Double]`. Each background download gets its own `ModelManager` instance stored in `backgroundManagers`.
+- **Cancellation**: `cancel()` invalidates in-flight downloads
 
 Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. For SPM development, `scripts/setup.sh` downloads models and dylibs to the repo (gitignored).
 
@@ -135,7 +123,7 @@ Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`) ena
 - `ChirpMain`: only `Main.swift` with `@main`, imports `Chirp` and `Sparkle`
 - `ChirpTests`: `swift_test` depending on `ChirpLib`
 - Prebuilt deps fetched via Bazel repo rules (`deps.bzl`): sherpa-onnx dylibs, Sparkle.framework, Silero VAD
-- Types used by `Main.swift` (`AppState`, `Status`, `ModelVariant`, etc.) are `public` to cross the module boundary
+- Types used by `Main.swift` (`AppState`, `Status`, etc.) are `public` to cross the module boundary
 
 `scripts/package.sh` creates a signed `.app` bundle + DMG:
 - Copies dylibs to `Frameworks/`, fixes rpaths to `@executable_path/../Frameworks`
@@ -160,4 +148,4 @@ Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`) ena
 | `HotkeyRecorder.swift` | InlineHotkeyRecorder (menu bar) + HotkeyRecorderPanel (standalone) |
 | `OverlayPanel.swift` | Floating waveform HUD |
 | `ModelManager.swift` | Model download, extraction, discovery |
-| `ModelVariant.swift` | Model metadata enum with persistence |
+| `ModelVariant.swift` | Model configuration constants |

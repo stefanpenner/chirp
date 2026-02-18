@@ -23,8 +23,7 @@ struct TranscriberTests {
         let t = Transcriber()
         let paths = ModelPaths(
             modelDir: "/nonexistent/path",
-            vadPath: "/nonexistent/vad.onnx",
-            variant: .tdt
+            vadPath: "/nonexistent/vad.onnx"
         )
         let ok = await t.initialize(paths: paths)
         #expect(!ok)

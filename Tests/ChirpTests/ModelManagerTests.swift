@@ -15,7 +15,7 @@ struct ModelManagerTests {
     func findExistingNilWithoutBundle() {
         // Without the VAD bundled (test runner has no bundle resources),
         // findExisting should return nil but not crash
-        let result = ModelManager.findExisting(variant: .tdt)
+        let result = ModelManager.findExisting()
         #expect(result == nil)
     }
 
@@ -33,7 +33,7 @@ struct ModelManagerTests {
         // Point env var at directory with no check file
         setenv("CHIRP_MODEL_DIR", tmpDir.path, 1)
 
-        let result = ModelManager.findExisting(variant: .tdt)
+        let result = ModelManager.findExisting()
         // Should not use the env dir since check file is absent
         #expect(result == nil || result?.modelDir != tmpDir.path)
     }

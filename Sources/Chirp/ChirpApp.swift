@@ -1,6 +1,5 @@
-// ChirpApp.swift — App entry point and core state machine.
+// ChirpApp.swift — Core state machine.
 // AppState owns the full lifecycle: model download → loading → ready ⇄ recording.
-// ChirpApp renders the menu bar extra (status, model picker, quit).
 //
 // State machine (AppState.Status):
 //
@@ -8,7 +7,7 @@
 //   ┌──────────────┐──────────→┌─────────────┐
 //   │ downloading  │           │ needsModel  │
 //   │  (progress)  │           └──────┬──────┘
-//   └──────┬───────┘          fn/menu │
+//   └──────┬───────┘            fn   │
 //          │ model found              ▼
 //          ▼                  ┌──────────────┐
 //   ┌───────────────┐  ←─────│ downloading  │ (re-entry)
@@ -54,15 +53,10 @@ public final class AppState {
     public var transcribedText: String = ""
     public var speculativeText: String = ""
     public var audioLevel: Float = 0
-    public var activeVariant: ModelVariant = .saved
     let audioRecorder: any AudioRecording
     private(set) var transcriber: any TranscriberProtocol
     let textInserter: any TextInserting
     public var downloadNudge: Bool = false
-    public var modelCacheGeneration: Int = 0
-    /// Per-variant progress for background (non-active) downloads. 0.0…1.0.
-    public var backgroundDownloads: [ModelVariant: Double] = [:]
-    private var backgroundManagers: [ModelVariant: ModelManager] = [:]
     public var hotkeyConfig: HotkeyConfig = .saved
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
@@ -89,9 +83,8 @@ public final class AppState {
 
     public convenience init() {
         self.init(audioRecorder: AudioRecorder(), transcriber: Transcriber(), textInserter: TextInserter())
-        self.modelFileCheck = { [weak self] in
-            guard let self else { return false }
-            return ModelManager.findExisting(variant: self.activeVariant) != nil
+        self.modelFileCheck = {
+            ModelManager.findExisting() != nil
         }
     }
 
@@ -119,8 +112,7 @@ public final class AppState {
 
     /// If the model is on disk, load it immediately; otherwise download first.
     private func ensureModel() {
-        let variant = activeVariant
-        if let paths = ModelManager.findExisting(variant: variant) {
+        if let paths = ModelManager.findExisting() {
             loadTranscriber(paths: paths)
             return
         }
@@ -128,7 +120,6 @@ public final class AppState {
         status = .downloading(0)
         overlayPanel?.showOverlay()
         modelManager = ModelManager(
-            variant: variant,
             onProgress: { [weak self] progress in
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated { self?.status = .downloading(progress) }
@@ -139,7 +130,6 @@ public final class AppState {
                     MainActor.assumeIsolated {
                         switch result {
                         case .success(let paths):
-                            self?.modelCacheGeneration += 1
                             self?.loadTranscriber(paths: paths)
                         case .failure(let error):
                             self?.status = .error(error.localizedDescription)
@@ -155,13 +145,11 @@ public final class AppState {
     func loadTranscriber(paths: ModelPaths) {
         status = .loadingModel
         let transcriber = self.transcriber
-        let expectedVariant = activeVariant
         Task { [weak self] in
             let ok = await transcriber.initialize(paths: paths)
-            guard let self, self.activeVariant == expectedVariant else { return }
+            guard let self else { return }
             if ok {
                 let micGranted = await self.audioRecorder.requestMicrophoneAccess()
-                guard self.activeVariant == expectedVariant else { return }
                 if micGranted {
                     self.status = .ready
                     self.overlayPanel?.hideOverlay()
@@ -178,54 +166,6 @@ public final class AppState {
 
     var modelFileCheck: () -> Bool = { true }
 
-    // MARK: - Model switching
-
-    /// Whether the model can be switched right now (not recording/transcribing/downloading/loading).
-    public var canSwitchModel: Bool {
-        switch status {
-        case .ready, .error, .needsModel: return true
-        default: return false
-        }
-    }
-
-    /// Switch to a different model variant. Only allowed from `.ready` or `.error` state.
-    public func switchModel(to variant: ModelVariant) {
-        guard canSwitchModel else { return }
-        guard variant != activeVariant else { return }
-
-        modelManager?.cancel()
-        modelManager = nil
-
-        activeVariant = variant
-        ModelVariant.saved = variant
-
-        self.transcriber = transcriberFactory()
-        ensureModel()
-    }
-
-    /// Delete a model's files from disk. Only allowed when the state machine is idle.
-    public func deleteModel(_ variant: ModelVariant) {
-        guard canSwitchModel else { return }
-        try? ModelManager.deleteModel(variant: variant)
-        modelCacheGeneration += 1
-        if variant == activeVariant {
-            status = .needsModel
-        }
-    }
-
-    /// Whether a variant's model files exist on disk.
-    public func isModelDownloaded(_ variant: ModelVariant) -> Bool {
-        _ = modelCacheGeneration  // observation dependency for SwiftUI
-        return ModelManager.findExisting(variant: variant) != nil
-    }
-
-    /// Human-readable on-disk size of a downloaded model, or nil if not downloaded.
-    public func modelDiskSize(_ variant: ModelVariant) -> String? {
-        _ = modelCacheGeneration  // observation dependency for SwiftUI
-        guard let bytes = ModelManager.directorySizeOnDisk(variant: variant) else { return nil }
-        return ModelManager.formattedDiskSize(bytes)
-    }
-
     /// Cancel an in-flight download. Returns to idle `.needsModel` state.
     public func cancelDownload() {
         guard case .downloading = status else { return }
@@ -235,42 +175,12 @@ public final class AppState {
         overlayPanel?.hideOverlay()
     }
 
-    /// Start or retry downloading the active model.
+    /// Start or retry downloading the model.
     public func retryDownload() {
         switch status {
         case .error, .needsModel: ensureModel()
         default: break
         }
-    }
-
-    /// Download a non-active model in the background without switching to it.
-    public func downloadModel(_ variant: ModelVariant) {
-        guard variant != activeVariant else { return }
-        guard !isModelDownloaded(variant) else { return }
-        guard backgroundDownloads[variant] == nil else { return }
-
-        backgroundDownloads[variant] = 0
-        let manager = ModelManager(
-            variant: variant,
-            onProgress: { [weak self] progress in
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self?.backgroundDownloads[variant] = progress }
-                }
-            },
-            onComplete: { [weak self] result in
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        self?.backgroundDownloads.removeValue(forKey: variant)
-                        self?.backgroundManagers.removeValue(forKey: variant)
-                        if case .success = result {
-                            self?.modelCacheGeneration += 1
-                        }
-                    }
-                }
-            }
-        )
-        backgroundManagers[variant] = manager
-        manager.download()
     }
 
     // MARK: - Hotkey

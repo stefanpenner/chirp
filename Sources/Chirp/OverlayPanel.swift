@@ -274,12 +274,12 @@ struct IslandView: View {
                             .foregroundStyle(.primary.opacity(0.7))
                     }
 
-                    Text(appState.activeVariant.displayName)
+                    Text(ModelVariant.displayName)
                         .foregroundStyle(cBlue.opacity(0.8))
                         .underline(color: cBlue.opacity(0.3))
-                        .onTapGesture { NSWorkspace.shared.open(appState.activeVariant.infoURL) }
+                        .onTapGesture { NSWorkspace.shared.open(ModelVariant.infoURL) }
 
-                    Text("\(appState.activeVariant.sizeDescription) compressed")
+                    Text("\(ModelVariant.sizeDescription) compressed")
                         .font(.system(size: 11, weight: .regular))
                         .foregroundStyle(.primary.opacity(0.25))
                 }

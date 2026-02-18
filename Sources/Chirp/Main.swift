@@ -1,5 +1,5 @@
 // Main.swift — App entry point.
-// Renders the menu bar extra (status, model picker, quit).
+// Renders the menu bar extra (hotkey, quit).
 // All logic lives in AppState; this file is just the SwiftUI shell.
 
 import Chirp
@@ -9,8 +9,6 @@ import SwiftUI
 
 // Catppuccin Mocha palette (matches OverlayPanel)
 private let cBlue = Color(red: 0.35, green: 0.58, blue: 1.0)
-private let cPurple = Color(red: 0.55, green: 0.40, blue: 0.95)
-private let cCyan = Color(red: 0.30, green: 0.75, blue: 0.95)
 
 @main
 struct ChirpApp: App {
@@ -25,7 +23,6 @@ struct ChirpApp: App {
     var body: some Scene {
         MenuBarExtra("Chirp", systemImage: "waveform") {
             VStack(spacing: 0) {
-                modelSection
                 hotkeySection
                 CheckForUpdatesView(updater: updaterController.updater)
 
@@ -50,156 +47,6 @@ struct ChirpApp: App {
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return "v\(version) (\(build))"
-    }
-
-    // MARK: - Model Section
-
-    /// Whether the active variant is mid-download or mid-load.
-    private var activeVariantBusy: Bool {
-        switch appState.status {
-        case .downloading, .loadingModel: return true
-        default: return false
-        }
-    }
-
-    @ViewBuilder
-    private var modelSection: some View {
-        Text("Model")
-            .font(.system(size: 13, weight: .medium))
-            .foregroundColor(.primary.opacity(0.7))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-
-        VStack(spacing: 0) {
-            ForEach(ModelVariant.allCases, id: \.self) { variant in
-                modelRow(variant: variant)
-            }
-        }
-
-        SectionDivider()
-    }
-
-    @ViewBuilder
-    private func modelRow(variant: ModelVariant) -> some View {
-        let isActive = variant == appState.activeVariant
-        let isDownloaded = appState.isModelDownloaded(variant)
-        let isBackgroundDownloading = appState.backgroundDownloads[variant] != nil
-
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                // Model row button
-                Button {
-                    if isActive {
-                        appState.retryDownload()
-                    } else if isDownloaded {
-                        appState.switchModel(to: variant)
-                    } else {
-                        appState.downloadModel(variant)
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        modelIndicator(isActive: isActive, variant: variant)
-                            .frame(width: 14)
-                        Text(variant.displayName)
-                            .font(.system(size: 11))
-                            .foregroundColor(.primary.opacity(isActive ? 0.9 : 0.5))
-                            .lineLimit(1)
-                        Spacer()
-                    }
-                    .contentShape(Rectangle())
-                    .padding(.horizontal, 4)
-                    .padding(.leading, 8)
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(MenuRowStyle())
-                .disabled(isBackgroundDownloading
-                    || (isActive && !isErrorOrNeedsModel && !appState.canSwitchModel))
-
-                // Delete button on the right
-                if isDownloaded && appState.canSwitchModel {
-                    Button {
-                        appState.deleteModel(variant)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 7, weight: .bold))
-                            .foregroundColor(.primary.opacity(0.2))
-                            .frame(width: 14, height: 14)
-                    }
-                    .buttonStyle(DeleteButtonStyle())
-                    .padding(.trailing, 12)
-                }
-            }
-
-            // Inline error for active variant
-            if isActive, case .error(let msg) = appState.status {
-                HStack(spacing: 6) {
-                    Text(msg)
-                        .font(.system(size: 9))
-                        .foregroundColor(Color(red: 0.95, green: 0.30, blue: 0.30))
-                        .lineLimit(1)
-                    Button("Retry") {
-                        appState.retryDownload()
-                    }
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(cBlue)
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 40)
-                .padding(.top, 2)
-                .padding(.bottom, 4)
-            }
-        }
-    }
-
-    private var isErrorOrNeedsModel: Bool {
-        switch appState.status {
-        case .error, .needsModel: return true
-        default: return false
-        }
-    }
-
-    @ViewBuilder
-    private func modelIndicator(isActive: Bool, variant: ModelVariant) -> some View {
-        let isDownloaded = appState.isModelDownloaded(variant)
-        let isBackgroundDownloading = appState.backgroundDownloads[variant] != nil
-
-        if isBackgroundDownloading {
-            ProgressView()
-                .controlSize(.mini)
-                .scaleEffect(0.6)
-        } else if isActive {
-            switch appState.status {
-            case .downloading:
-                ProgressView()
-                    .controlSize(.mini)
-                    .scaleEffect(0.6)
-            case .loadingModel:
-                ProgressView()
-                    .controlSize(.mini)
-                    .scaleEffect(0.6)
-            case .needsModel:
-                Image(systemName: "arrow.down.circle")
-                    .font(.system(size: 10))
-                    .foregroundColor(cCyan)
-            case .error:
-                Image(systemName: "exclamationmark.circle")
-                    .font(.system(size: 10))
-                    .foregroundColor(Color(red: 0.95, green: 0.30, blue: 0.30))
-            default:
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 10))
-                    .foregroundColor(cBlue)
-            }
-        } else if !isDownloaded {
-            Image(systemName: "arrow.down.circle")
-                .font(.system(size: 10))
-                .foregroundColor(cCyan.opacity(0.5))
-        } else {
-            Image(systemName: "circle")
-                .font(.system(size: 10))
-                .foregroundColor(.primary.opacity(0.2))
-        }
     }
 
     // MARK: - Hotkey Section
@@ -335,27 +182,6 @@ private struct MenuRowBody: View {
                     .fill(isHovered ? cBlue.opacity(0.15) : Color.clear)
                     .padding(.horizontal, 4)
             )
-            .onHover { isHovered = $0 }
-    }
-}
-
-private struct DeleteButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        DeleteButtonBody(configuration: configuration)
-    }
-}
-
-private struct DeleteButtonBody: View {
-    let configuration: ButtonStyle.Configuration
-    @State private var isHovered = false
-
-    var body: some View {
-        configuration.label
-            .background(
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(isHovered ? Color.red.opacity(0.2) : Color.clear)
-            )
-            .foregroundColor(isHovered ? .red.opacity(0.8) : nil)
             .onHover { isHovered = $0 }
     }
 }

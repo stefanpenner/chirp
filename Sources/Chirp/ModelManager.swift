@@ -1,23 +1,19 @@
 // ModelManager.swift — Downloads model archive from GitHub releases.
 // Handles download, tar extraction, progress reporting, and
-// on-disk model discovery. Used by AppState.ensureModel() on first launch
-// or when switching model variants.
+// on-disk model discovery. Used by AppState.ensureModel() on first launch.
 // VAD (silero_vad.onnx) is bundled in the app by Bazel and not downloaded.
 
 import Foundation
 
 final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDelegate {
-    private let variant: ModelVariant
     private let onProgress: @Sendable (Double) -> Void
     private let onComplete: @Sendable (Result<ModelPaths, Error>) -> Void
     private var session: URLSession?
 
     init(
-        variant: ModelVariant,
         onProgress: @escaping @Sendable (Double) -> Void,
         onComplete: @escaping @Sendable (Result<ModelPaths, Error>) -> Void
     ) {
-        self.variant = variant
         self.onProgress = onProgress
         self.onComplete = onComplete
     }
@@ -25,27 +21,27 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
     // MARK: - Model discovery
 
     /// Searches well-known locations for an already-downloaded model.
-    static func findExisting(variant: ModelVariant) -> ModelPaths? {
-        guard let modelDir = findModelDir(variant: variant) else { return nil }
+    static func findExisting() -> ModelPaths? {
+        guard let modelDir = findModelDir() else { return nil }
         guard let vadPath = findVADPath() else { return nil }
-        return ModelPaths(modelDir: modelDir, vadPath: vadPath, variant: variant)
+        return ModelPaths(modelDir: modelDir, vadPath: vadPath)
     }
 
-    private static func findModelDir(variant: ModelVariant) -> String? {
+    private static func findModelDir() -> String? {
         if let envDir = ProcessInfo.processInfo.environment["CHIRP_MODEL_DIR"],
-           FileManager.default.fileExists(atPath: envDir + "/\(variant.checkFile)") {
+           FileManager.default.fileExists(atPath: envDir + "/\(ModelVariant.checkFile)") {
             return envDir
         }
 
         let appSupport = appSupportModelsPath()
-        let modelPath = "\(appSupport)/\(variant.modelDirName)"
-        if FileManager.default.fileExists(atPath: modelPath + "/\(variant.checkFile)") {
+        let modelPath = "\(appSupport)/\(ModelVariant.modelDirName)"
+        if FileManager.default.fileExists(atPath: modelPath + "/\(ModelVariant.checkFile)") {
             return modelPath
         }
 
         if let resourcePath = Bundle.main.resourcePath {
-            let bundled = "\(resourcePath)/models/\(variant.modelDirName)"
-            if FileManager.default.fileExists(atPath: bundled + "/\(variant.checkFile)") {
+            let bundled = "\(resourcePath)/models/\(ModelVariant.modelDirName)"
+            if FileManager.default.fileExists(atPath: bundled + "/\(ModelVariant.checkFile)") {
                 return bundled
             }
         }
@@ -82,38 +78,12 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         session = nil
     }
 
-    /// Removes a downloaded model from disk.
-    static func deleteModel(variant: ModelVariant) throws {
-        let path = "\(appSupportModelsPath())/\(variant.modelDirName)"
+    /// Removes the downloaded model from disk.
+    static func deleteModel() throws {
+        let path = "\(appSupportModelsPath())/\(ModelVariant.modelDirName)"
         if FileManager.default.fileExists(atPath: path) {
             try FileManager.default.removeItem(atPath: path)
         }
-    }
-
-    // MARK: - On-disk size
-
-    /// Computes the total size of a downloaded model directory on disk.
-    /// Returns `nil` if the model directory is not found.
-    static func directorySizeOnDisk(variant: ModelVariant) -> Int64? {
-        guard let modelDir = findModelDir(variant: variant) else { return nil }
-        let fm = FileManager.default
-        guard let enumerator = fm.enumerator(atPath: modelDir) else { return nil }
-        var total: Int64 = 0
-        while let file = enumerator.nextObject() as? String {
-            let fullPath = "\(modelDir)/\(file)"
-            if let attrs = try? fm.attributesOfItem(atPath: fullPath),
-               let size = attrs[.size] as? Int64 {
-                total += size
-            }
-        }
-        return total > 0 ? total : nil
-    }
-
-    /// Formats a byte count as a human-readable string (e.g., "1.2 GB").
-    static func formattedDiskSize(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: bytes)
     }
 
     // MARK: - Download
@@ -123,7 +93,7 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         let config = URLSessionConfiguration.default
         session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
 
-        let modelTask = session!.downloadTask(with: variant.downloadURL)
+        let modelTask = session!.downloadTask(with: ModelVariant.downloadURL)
         modelTask.resume()
     }
 
@@ -174,8 +144,8 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
             return
         }
 
-        let modelDir = "\(installBase)/\(variant.modelDirName)"
-        guard FileManager.default.fileExists(atPath: modelDir + "/\(variant.checkFile)") else {
+        let modelDir = "\(installBase)/\(ModelVariant.modelDirName)"
+        guard FileManager.default.fileExists(atPath: modelDir + "/\(ModelVariant.checkFile)") else {
             onComplete(.failure(ChirpError.modelFilesNotFound))
             return
         }
@@ -186,7 +156,7 @@ final class ModelManager: NSObject, @unchecked Sendable, URLSessionDownloadDeleg
         }
 
         onProgress(1.0)
-        onComplete(.success(ModelPaths(modelDir: modelDir, vadPath: vadPath, variant: variant)))
+        onComplete(.success(ModelPaths(modelDir: modelDir, vadPath: vadPath)))
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
