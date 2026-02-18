@@ -19,11 +19,13 @@ struct ChirpApp: App {
         updaterDelegate: nil, userDriverDelegate: nil)
     @State private var appState = AppState()
     @State private var hotkeyRecorder = InlineHotkeyRecorder()
+    @State private var isMicPickerExpanded = false
 
     var body: some Scene {
         MenuBarExtra("Chirp", systemImage: "waveform") {
             VStack(spacing: 0) {
                 hotkeySection
+                microphoneSection
                 CheckForUpdatesView(updater: updaterController.updater)
 
                 SectionDivider()
@@ -47,6 +49,75 @@ struct ChirpApp: App {
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return "v\(version) (\(build))"
+    }
+
+    // MARK: - Microphone Section
+
+    private func selectedInputDeviceName(manager: InputDeviceManager, devices: [InputDevice]) -> String {
+        if let uid = manager.selectedDeviceUID,
+           let device = devices.first(where: { $0.uid == uid }) {
+            return device.name
+        }
+        return "System Default"
+    }
+
+    @ViewBuilder
+    private var microphoneSection: some View {
+        let manager = appState.inputDeviceManager
+        let devices = manager.devices
+        if !devices.isEmpty {
+            SectionDivider()
+
+            let selectedName = selectedInputDeviceName(manager: manager, devices: devices)
+            let canExpand = devices.count > 1
+
+            // Summary row — always visible
+            Button {
+                if canExpand { isMicPickerExpanded.toggle() }
+            } label: {
+                HStack {
+                    Text("Microphone")
+                        .font(.system(size: 13))
+                        .foregroundColor(.primary.opacity(0.7))
+                    Spacer()
+                    Text(selectedName)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundColor(.primary.opacity(0.4))
+                        .lineLimit(1)
+                    if canExpand {
+                        Image(systemName: isMicPickerExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.primary.opacity(0.3))
+                    }
+                }
+                .contentShape(Rectangle())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(MenuRowStyle())
+
+            // Expanded device picker
+            if isMicPickerExpanded {
+                DeviceRow(
+                    name: "System Default",
+                    tag: nil,
+                    isSelected: manager.selectedDeviceUID == nil
+                ) {
+                    appState.updateInputDevice(uid: nil)
+                    isMicPickerExpanded = false
+                }
+                ForEach(devices) { device in
+                    DeviceRow(
+                        name: device.name,
+                        tag: device.isDefault ? "default" : nil,
+                        isSelected: manager.selectedDeviceUID == device.uid
+                    ) {
+                        appState.updateInputDevice(uid: device.uid)
+                        isMicPickerExpanded = false
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Hotkey Section
@@ -131,6 +202,37 @@ struct ChirpApp: App {
 }
 
 // MARK: - Shared Components
+
+private struct DeviceRow: View {
+    let name: String
+    let tag: String?
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(isSelected ? cBlue : .clear)
+                    .frame(width: 14)
+                Text(name)
+                    .font(.system(size: 13))
+                    .foregroundColor(.primary.opacity(0.7))
+                Spacer()
+                if let tag {
+                    Text(tag)
+                        .font(.system(size: 10))
+                        .foregroundColor(.primary.opacity(0.25))
+                }
+            }
+            .contentShape(Rectangle())
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(MenuRowStyle())
+    }
+}
 
 private struct SectionDivider: View {
     var body: some View {

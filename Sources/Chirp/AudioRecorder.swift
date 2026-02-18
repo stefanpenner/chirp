@@ -7,6 +7,7 @@
 // startRecording/stopRecording only install/remove the tap — near-instant.
 
 @preconcurrency import AVFoundation
+import CoreAudio
 
 @MainActor
 final class AudioRecorder: AudioRecording {
@@ -18,6 +19,9 @@ final class AudioRecorder: AudioRecording {
     private var configObserver: (any NSObjectProtocol)?
     private var parkTimer: Timer?
     private let audioDucker = AudioDucker()
+
+    /// The device ID to use for recording, or nil for the system default.
+    var selectedDeviceID: AudioDeviceID?
 
     func requestMicrophoneAccess() async -> Bool {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -40,6 +44,26 @@ final class AudioRecorder: AudioRecording {
         guard audioEngine == nil else { return }
 
         let engine = AVAudioEngine()
+
+        // Set the input device before accessing inputNode's format.
+        // Accessing inputNode implicitly opens the default device, so we
+        // must redirect to the selected device first via its AudioUnit.
+        if let deviceID = selectedDeviceID {
+            let inputNode = engine.inputNode
+            var devID = deviceID
+            let status = AudioUnitSetProperty(
+                inputNode.audioUnit!,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global,
+                0,
+                &devID,
+                UInt32(MemoryLayout<AudioDeviceID>.size)
+            )
+            if status != noErr {
+                NSLog("Chirp: Failed to set input device %u (status %d)", deviceID, status)
+            }
+        }
+
         let inputNode = engine.inputNode
         let inFormat = inputNode.outputFormat(forBus: 0)
 
@@ -178,6 +202,12 @@ final class AudioRecorder: AudioRecording {
         parkTimer = nil
         audioEngine?.stop()
         audioEngine?.prepare()
+    }
+
+    func selectInputDevice(_ deviceID: AudioDeviceID?) {
+        selectedDeviceID = deviceID
+        tearDown()
+        prepare()
     }
 
     private func tearDown() {

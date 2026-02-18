@@ -58,6 +58,7 @@ public final class AppState {
     let textInserter: any TextInserting
     public var downloadNudge: Bool = false
     public var hotkeyConfig: HotkeyConfig = .saved
+    public let inputDeviceManager = InputDeviceManager()
     var hotkeyManager: HotkeyManager?
     var overlayPanel: OverlayPanel?
     var hotkeyRecorderPanel: HotkeyRecorderPanel?
@@ -184,6 +185,11 @@ public final class AppState {
     }
 
     // MARK: - Hotkey
+
+    public func updateInputDevice(uid: String?) {
+        inputDeviceManager.selectedDeviceUID = uid
+        audioRecorder.selectInputDevice(inputDeviceManager.selectedDeviceID)
+    }
 
     public func updateHotkey(_ config: HotkeyConfig) {
         hotkeyConfig = config
