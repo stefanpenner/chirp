@@ -16,6 +16,7 @@ let package = Package(
             name: "Chirp",
             dependencies: [
                 "CSherpaOnnx",
+                "COnnxRuntime",
             ],
             path: "Sources/Chirp",
             exclude: ["Info.plist", "Chirp.entitlements", "Main.swift", "AppIcon.icns"],
@@ -44,6 +45,11 @@ let package = Package(
         .target(
             name: "CSherpaOnnx",
             path: "Sources/CSherpaOnnx",
+            publicHeadersPath: "include"
+        ),
+        .target(
+            name: "COnnxRuntime",
+            path: "Sources/COnnxRuntime",
             publicHeadersPath: "include"
         ),
     ]

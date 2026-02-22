@@ -257,7 +257,18 @@ public final class AppState {
             return ChainedPostProcessor(
                 llm: LLMPostProcessor(client: client, systemPrompt: aiSettings.llmSystemPrompt)
             )
+        case .offlineLLM:
+            guard let t5 = buildT5PostProcessor() else { return RegexPostProcessor() }
+            return OfflineLLMPostProcessor(t5: t5)
+        case .regexThenOfflineLLM:
+            guard let t5 = buildT5PostProcessor() else { return RegexPostProcessor() }
+            return ChainedOfflinePostProcessor(t5: t5)
         }
+    }
+
+    private func buildT5PostProcessor() -> T5PostProcessor? {
+        guard let modelDir = T5ModelManager.findExisting() else { return nil }
+        return try? T5PostProcessor(modelDir: modelDir)
     }
 
     private func buildLLMClient() -> (any LLMClient)? {

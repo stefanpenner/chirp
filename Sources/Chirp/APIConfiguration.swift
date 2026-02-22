@@ -59,6 +59,8 @@ public enum PostProcessingMode: String, Codable, CaseIterable, Sendable {
     case regex
     case llm
     case regexThenLLM
+    case offlineLLM
+    case regexThenOfflineLLM
 }
 
 // MARK: - AI Settings

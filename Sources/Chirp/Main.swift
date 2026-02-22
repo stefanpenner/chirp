@@ -88,6 +88,8 @@ struct ChirpApp: App {
         case .regex: break
         case .llm: parts.append("LLM")
         case .regexThenLLM: parts.append("Regex+LLM")
+        case .offlineLLM: parts.append("Offline LLM")
+        case .regexThenOfflineLLM: parts.append("Regex+Offline LLM")
         }
         return parts.joined(separator: " + ")
     }

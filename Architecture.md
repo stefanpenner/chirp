@@ -23,16 +23,17 @@ hotkey press/release          microphone
                │           │
                ▼           ▼
           PostProcessing
-        ┌───┬────┴────┬───────┐
-      Regex  LLM   Chained
-              │
-          LLMClient ──→ cloud API
+        ┌───┬────┴────┬───────┬──────────┐
+      Regex  LLM   Chained  OfflineLLM  ChainedOffline
+              │                  │
+          LLMClient ──→       T5PostProcessor
+           cloud API       (ONNXSession + T5Tokenizer)
               │
               ▼
         TextInserter ──→ keystrokes into focused app
 ```
 
-**AppState** orchestrates everything. **ModelManager** handles first-run model download. All speech inference runs through the **CSherpaOnnx** C bridge to sherpa-onnx + onnxruntime dylibs. Optional cloud features use **STTClient** and **LLMClient** protocols with provider implementations for OpenAI, Anthropic, and Google.
+**AppState** orchestrates everything. **ModelManager** handles first-run ASR model download. All speech inference runs through the **CSherpaOnnx** C bridge to sherpa-onnx + onnxruntime dylibs. Optional cloud features use **STTClient** and **LLMClient** protocols with provider implementations for OpenAI, Anthropic, and Google. Offline post-processing uses **T5PostProcessor** which runs T5-small inference via the **COnnxRuntime** C bridge (same onnxruntime dylib, separate Swift module exposing the raw ORT C API).
 
 ## State Machine
 
@@ -86,12 +87,14 @@ These are set by `rebuildPipeline()` when AI settings change.
 
 ### Post-Processing
 
-`TextPostProcessing` protocol with three implementations:
+`TextPostProcessing` protocol with five implementations:
 - **RegexPostProcessor** — wraps existing `TextPostProcessor` (sub-ms, synchronous)
-- **LLMPostProcessor** — sends text to an LLM for grammar/punctuation cleanup
-- **ChainedPostProcessor** — regex first, then LLM refinement
+- **LLMPostProcessor** — sends text to a cloud LLM for grammar/punctuation cleanup
+- **ChainedPostProcessor** — regex first, then cloud LLM refinement
+- **OfflineLLMPostProcessor** — runs T5-small locally via ONNX Runtime (no internet needed)
+- **ChainedOfflinePostProcessor** — regex first, then offline T5 refinement
 
-On LLM error, the pipeline silently falls back to regex-only output.
+On LLM error (cloud or offline), the pipeline silently falls back to regex-only output.
 
 ### Cloud Providers
 
@@ -112,7 +115,7 @@ The `baseURL` on each endpoint enables gateways: a company proxy at `https://ai.
 ```
 AISettings (persisted in UserDefaults as Codable blob)
 ├── transcriptionMode: .offline | .cloud
-├── postProcessingMode: .regex | .llm | .regexThenLLM
+├── postProcessingMode: .regex | .llm | .regexThenLLM | .offlineLLM | .regexThenOfflineLLM
 ├── sttEndpointID / llmEndpointID (UUID references)
 ├── sttModel / llmModel / llmSystemPrompt (task-level config)
 └── endpoints: [APIEndpoint]
@@ -154,6 +157,8 @@ API keys are stored in the macOS **Keychain** via `KeychainHelper`, never in Use
 
 Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. For SPM development, `scripts/setup.sh` downloads models and dylibs to the repo (gitignored).
 
+`T5ModelManager` handles the optional T5-small model download (encoder_model.onnx, decoder_model.onnx, tokenizer.json — ~375 MB total from HuggingFace `optimum/t5-small`). Stored in `~/Library/Application Support/Chirp/models/t5-small-onnx/`. Downloads are triggered from the Settings UI, not on first launch. The model is only needed when offline LLM post-processing modes are selected.
+
 ## Hotkey
 
 `HotkeyConfig` stores the configured hotkey: `keyCode`, `isModifier` flag, `modifierMask` (for modifier-only keys like fn), `requiredModifiers` (for key combos like ⌘⇧R), and a display `label`. Supports modifier-only keys (fn, Right ⌥), key combos (⌘Space), and plain keys (F5). Persisted in UserDefaults. Full ANSI keycode → label mapping for UI display.
@@ -179,7 +184,7 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 ## Settings
 
 `SettingsView` provides a tabbed settings window (opened via "Settings..." in the menu bar):
-- **AI tab**: transcription mode picker (offline/cloud) with inline STT model field, post-processing mode picker (regex/LLM/regex+LLM) with inline LLM model + system prompt fields, endpoint selector pickers, endpoint list with add/edit/delete
+- **AI tab**: transcription mode picker (offline/cloud) with inline STT model field, post-processing mode picker (regex/offline LLM/cloud LLM and chained variants) with T5 model status view (download/progress/ready/delete) or cloud LLM config (provider + model + system prompt), endpoint list with add/edit/delete
 - **Endpoint editor**: connectivity only — protocol picker, base URL, API key (stored in Keychain), enable/disable toggle
 
 `SettingsWindowController` manages the `NSWindow` lifecycle (single instance, bring-to-front on re-open).
@@ -194,10 +199,11 @@ The pipeline abstraction is transparent to existing tests: the default `OfflineT
 
 ## Build & Distribution
 
-**SPM** — Single `Chirp` target containing all Swift sources (including `Main.swift`). `CSherpaOnnx` C target wraps the sherpa-onnx header via modulemap. The executable links against `libsherpa-onnx-c-api` and `libonnxruntime` via rpath.
+**SPM** — Single `Chirp` target containing all Swift sources (including `Main.swift`). `CSherpaOnnx` C target wraps the sherpa-onnx header via modulemap. `COnnxRuntime` C target wraps the vendored ONNX Runtime C API header (v1.23.2) via modulemap. The executable links against `libsherpa-onnx-c-api` and `libonnxruntime` via rpath.
 
 **Bazel** — Two-module split for testability:
-- `ChirpLib` (module name `Chirp`): all sources except `Main.swift` (including `Providers/*.swift`), no `@main` entry point
+- `COnnxRuntime`: local `cc_library` with vendored ORT headers, linked against `@sherpa_onnx//:onnxruntime`
+- `ChirpLib` (module name `Chirp`): all sources except `Main.swift` (including `Providers/*.swift`), no `@main` entry point; depends on both `@sherpa_onnx//:CSherpaOnnx` and `:COnnxRuntime`
 - `ChirpMain`: only `Main.swift` with `@main`, imports `Chirp` and `Sparkle`
 - `ChirpTests`: `swift_test` depending on `ChirpLib`
 - Prebuilt deps fetched via Bazel repo rules (`deps.bzl`): sherpa-onnx dylibs, Sparkle.framework, Silero VAD
@@ -219,7 +225,7 @@ The pipeline abstraction is transparent to existing tests: the default `OfflineT
 | `Main.swift` | `@main` SwiftUI app entry point (window-style menu bar popover, AI mode label, Catppuccin theme) |
 | `Protocols.swift` | DI boundaries: TranscriberProtocol, AudioRecording, TextInserting |
 | `TranscriptionPipeline.swift` | Pipeline protocol + Offline/Cloud implementations |
-| `TextPostProcessing.swift` | Post-processing protocol + Regex/LLM/Chained implementations |
+| `TextPostProcessing.swift` | Post-processing protocol + Regex/LLM/Chained/OfflineLLM/ChainedOffline implementations |
 | `CloudSTT.swift` | STTClient protocol + WAV encoder |
 | `CloudLLM.swift` | LLMClient protocol |
 | `Providers/OpenAIProvider.swift` | OpenAI-compatible STT (Whisper) + LLM (GPT) |
@@ -239,4 +245,8 @@ The pipeline abstraction is transparent to existing tests: the default `OfflineT
 | `OverlayPanel.swift` | Floating waveform HUD (cloud-aware status text) |
 | `ModelManager.swift` | Model download, extraction, discovery |
 | `ModelVariant.swift` | Model configuration constants |
+| `T5PostProcessor.swift` | Offline T5-small inference engine (encoder-decoder greedy decoding) |
+| `T5Tokenizer.swift` | Pure-Swift SentencePiece Unigram tokenizer for T5 |
+| `T5ModelManager.swift` | T5 model download from HuggingFace, discovery, deletion |
+| `ONNXSession.swift` | Thin Swift wrapper around ORT C API (env, session, run) |
 | `AudioDucker.swift` | System volume duck/unduck during recording |

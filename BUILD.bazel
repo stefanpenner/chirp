@@ -34,6 +34,21 @@ sh_test(
 #   @sparkle      — Sparkle.framework (auto-update)
 #   @silero_vad   — Silero VAD model (bundled in app)
 
+# --- COnnxRuntime C module (vendored ORT headers) ---
+
+swift_interop_hint(
+    name = "COnnxRuntime_interop",
+    module_name = "COnnxRuntime",
+)
+
+cc_library(
+    name = "COnnxRuntime",
+    hdrs = glob(["Sources/COnnxRuntime/include/*.h"]),
+    strip_include_prefix = "Sources/COnnxRuntime/include",
+    deps = ["@sherpa_onnx//:onnxruntime"],
+    aspect_hints = [":COnnxRuntime_interop"],
+)
+
 # --- Chirp Swift library (no @main, testable) ---
 
 swift_library(
@@ -43,7 +58,10 @@ swift_library(
         exclude = ["Sources/Chirp/Main.swift"],
     ),
     module_name = "Chirp",
-    deps = ["@sherpa_onnx//:CSherpaOnnx"],
+    deps = [
+        "@sherpa_onnx//:CSherpaOnnx",
+        ":COnnxRuntime",
+    ],
     copts = [
         "-swift-version", "6",
     ],
@@ -128,6 +146,16 @@ swift_test(
 swift_test(
     name = "AudioDuckerTests",
     srcs = ["Tests/ChirpTests/AudioDuckerTests.swift"],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+)
+
+swift_test(
+    name = "T5Tests",
+    srcs = [
+        "Tests/ChirpTests/T5TokenizerTests.swift",
+        "Tests/ChirpTests/T5PostProcessorTests.swift",
+    ],
     deps = [":ChirpLib"],
     copts = ["-swift-version", "6"],
 )

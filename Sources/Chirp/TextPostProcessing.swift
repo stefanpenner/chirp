@@ -64,3 +64,35 @@ struct ChainedPostProcessor: TextPostProcessing {
         return try await llm.process(cleaned)
     }
 }
+
+// MARK: - Offline LLM (T5)
+
+struct OfflineLLMPostProcessor: TextPostProcessing {
+    let t5: T5PostProcessor
+
+    init(t5: T5PostProcessor) {
+        self.t5 = t5
+    }
+
+    func process(_ text: String) async throws -> String {
+        try await t5.process(text)
+    }
+}
+
+// MARK: - Chained (regex then offline LLM)
+
+struct ChainedOfflinePostProcessor: TextPostProcessing {
+    let regex: RegexPostProcessor
+    let t5: T5PostProcessor
+
+    init(t5: T5PostProcessor) {
+        self.regex = RegexPostProcessor()
+        self.t5 = t5
+    }
+
+    func process(_ text: String) async throws -> String {
+        let cleaned = try await regex.process(text)
+        guard !cleaned.isEmpty else { return cleaned }
+        return try await t5.process(cleaned)
+    }
+}

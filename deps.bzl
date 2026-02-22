@@ -56,6 +56,7 @@ cc_library(
     aspect_hints = [":CSherpaOnnx_interop"],
     visibility = ["//visibility:public"],
 )
+
 """.format(ort = _ONNXRUNTIME_VERSION),
     )
 
