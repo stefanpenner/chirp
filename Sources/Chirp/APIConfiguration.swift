@@ -20,9 +20,6 @@ public struct APIEndpoint: Codable, Identifiable, Sendable, Equatable {
     public var apiProtocol: APIProtocol
     public var baseURL: URL               // supports gateways via custom URL
     public var apiKeyRef: String          // Keychain account name (NOT raw key)
-    public var sttModel: String?          // e.g. "whisper-1"
-    public var llmModel: String?          // e.g. "gpt-4o-mini"
-    public var llmSystemPrompt: String?
     public var isEnabled: Bool
 
     public init(
@@ -31,9 +28,6 @@ public struct APIEndpoint: Codable, Identifiable, Sendable, Equatable {
         apiProtocol: APIProtocol,
         baseURL: URL,
         apiKeyRef: String = "",
-        sttModel: String? = nil,
-        llmModel: String? = nil,
-        llmSystemPrompt: String? = nil,
         isEnabled: Bool = true
     ) {
         self.id = id
@@ -41,9 +35,6 @@ public struct APIEndpoint: Codable, Identifiable, Sendable, Equatable {
         self.apiProtocol = apiProtocol
         self.baseURL = baseURL
         self.apiKeyRef = apiKeyRef
-        self.sttModel = sttModel
-        self.llmModel = llmModel
-        self.llmSystemPrompt = llmSystemPrompt
         self.isEnabled = isEnabled
     }
 
@@ -77,6 +68,9 @@ public struct AISettings: Codable, Sendable, Equatable {
     public var postProcessingMode: PostProcessingMode = .regex
     public var sttEndpointID: UUID?
     public var llmEndpointID: UUID?
+    public var sttModel: String?
+    public var llmModel: String?
+    public var llmSystemPrompt: String?
     public var endpoints: [APIEndpoint] = []
 
     // MARK: Persistence

@@ -114,13 +114,14 @@ AISettings (persisted in UserDefaults as Codable blob)
 ├── transcriptionMode: .offline | .cloud
 ├── postProcessingMode: .regex | .llm | .regexThenLLM
 ├── sttEndpointID / llmEndpointID (UUID references)
+├── sttModel / llmModel / llmSystemPrompt (task-level config)
 └── endpoints: [APIEndpoint]
         ├── apiProtocol: .openAI | .anthropic | .google
         ├── baseURL (supports custom gateways)
-        ├── apiKeyRef (Keychain account name, NOT raw key)
-        ├── sttModel / llmModel
-        └── llmSystemPrompt
+        └── apiKeyRef (Keychain account name, NOT raw key)
 ```
+
+Model selection (STT model, LLM model, system prompt) lives on `AISettings` rather than on individual endpoints, since models are chosen per-task, not per-provider. Endpoints define only connectivity (protocol, URL, API key).
 
 API keys are stored in the macOS **Keychain** via `KeychainHelper`, never in UserDefaults.
 
@@ -178,8 +179,8 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 ## Settings
 
 `SettingsView` provides a tabbed settings window (opened via "Settings..." in the menu bar):
-- **AI tab**: transcription mode picker (offline/cloud), post-processing mode picker (regex/LLM/regex+LLM), endpoint selector pickers, endpoint list with add/edit/delete
-- **Endpoint editor**: protocol picker, base URL, API key (stored in Keychain), STT/LLM model names, system prompt, enable/disable toggle, "Test Connection" button
+- **AI tab**: transcription mode picker (offline/cloud) with inline STT model field, post-processing mode picker (regex/LLM/regex+LLM) with inline LLM model + system prompt fields, endpoint selector pickers, endpoint list with add/edit/delete
+- **Endpoint editor**: connectivity only — protocol picker, base URL, API key (stored in Keychain), enable/disable toggle
 
 `SettingsWindowController` manages the `NSWindow` lifecycle (single instance, bring-to-front on re-open).
 

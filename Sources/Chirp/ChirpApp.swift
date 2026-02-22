@@ -251,35 +251,36 @@ public final class AppState {
             return RegexPostProcessor()
         case .llm:
             guard let client = buildLLMClient() else { return RegexPostProcessor() }
-            return LLMPostProcessor(client: client, systemPrompt: aiSettings.llmEndpoint()?.llmSystemPrompt)
+            return LLMPostProcessor(client: client, systemPrompt: aiSettings.llmSystemPrompt)
         case .regexThenLLM:
             guard let client = buildLLMClient() else { return RegexPostProcessor() }
             return ChainedPostProcessor(
-                llm: LLMPostProcessor(client: client, systemPrompt: aiSettings.llmEndpoint()?.llmSystemPrompt)
+                llm: LLMPostProcessor(client: client, systemPrompt: aiSettings.llmSystemPrompt)
             )
         }
     }
 
     private func buildLLMClient() -> (any LLMClient)? {
         guard let endpoint = aiSettings.llmEndpoint(),
-              let apiKey = KeychainHelper.load(account: endpoint.apiKeyRef) else { return nil }
+              let apiKey = KeychainHelper.load(account: endpoint.apiKeyRef),
+              let model = aiSettings.llmModel, !model.isEmpty else { return nil }
         switch endpoint.apiProtocol {
         case .openAI:
-            return OpenAILLMClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: endpoint.llmModel ?? "gpt-4o-mini")
+            return OpenAILLMClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: model)
         case .anthropic:
-            return AnthropicLLMClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: endpoint.llmModel ?? "claude-sonnet-4-6-20250514")
+            return AnthropicLLMClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: model)
         case .google:
-            return GoogleLLMClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: endpoint.llmModel ?? "gemini-2.0-flash")
+            return GoogleLLMClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: model)
         }
     }
 
     private func buildSTTClient() -> (any STTClient)? {
         guard let endpoint = aiSettings.sttEndpoint(),
               let apiKey = KeychainHelper.load(account: endpoint.apiKeyRef),
-              endpoint.sttModel != nil else { return nil }
+              let model = aiSettings.sttModel, !model.isEmpty else { return nil }
         switch endpoint.apiProtocol {
         case .openAI:
-            return OpenAISTTClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: endpoint.sttModel ?? "whisper-1")
+            return OpenAISTTClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: model)
         case .google:
             return GoogleSTTClient(baseURL: endpoint.baseURL, apiKey: apiKey)
         case .anthropic:

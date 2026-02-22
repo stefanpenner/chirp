@@ -75,9 +75,13 @@ struct AISettingsTab: View {
                     }
                     .padding(.leading, 20)
                     if sttCapableEndpoints.isEmpty {
-                        Text("Add a provider with a speech-to-text model configured")
+                        Text("Add a provider above first")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .padding(.leading, 20)
+                    }
+                    if appState.aiSettings.sttEndpointID != nil {
+                        TextField("Model", text: sttModelBinding, prompt: Text("e.g. whisper-1"))
                             .padding(.leading, 20)
                     }
                 }
@@ -106,9 +110,18 @@ struct AISettingsTab: View {
                     }
                     .padding(.leading, 20)
                     if llmCapableEndpoints.isEmpty {
-                        Text("Add a provider with an LLM model")
+                        Text("Add a provider above first")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .padding(.leading, 20)
+                    }
+                    if appState.aiSettings.llmEndpointID != nil {
+                        TextField("Model", text: llmModelBinding, prompt: Text("e.g. gpt-4o-mini"))
+                            .padding(.leading, 20)
+                        TextEditor(text: systemPromptBinding)
+                            .frame(minHeight: 80)
+                            .scrollDisabled(true)
+                            .font(.system(size: 12, design: .monospaced))
                             .padding(.leading, 20)
                     }
                 }
@@ -132,12 +145,33 @@ struct AISettingsTab: View {
         }
     }
 
+    private var sttModelBinding: Binding<String> {
+        Binding(
+            get: { appState.aiSettings.sttModel ?? "" },
+            set: { appState.aiSettings.sttModel = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    private var llmModelBinding: Binding<String> {
+        Binding(
+            get: { appState.aiSettings.llmModel ?? "" },
+            set: { appState.aiSettings.llmModel = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    private var systemPromptBinding: Binding<String> {
+        Binding(
+            get: { appState.aiSettings.llmSystemPrompt ?? LLMPostProcessor.defaultSystemPrompt },
+            set: { appState.aiSettings.llmSystemPrompt = $0 }
+        )
+    }
+
     private var sttCapableEndpoints: [APIEndpoint] {
-        appState.aiSettings.endpoints.filter { $0.isEnabled && $0.sttModel != nil }
+        appState.aiSettings.endpoints.filter { $0.isEnabled }
     }
 
     private var llmCapableEndpoints: [APIEndpoint] {
-        appState.aiSettings.endpoints.filter { $0.isEnabled && $0.llmModel != nil }
+        appState.aiSettings.endpoints.filter { $0.isEnabled }
     }
 
     private func saveEndpoint(_ endpoint: APIEndpoint) {
@@ -183,18 +217,6 @@ private struct EndpointRow: View {
                         )
                         .foregroundStyle(cBlue)
                 }
-                HStack(spacing: 8) {
-                    if let stt = endpoint.sttModel {
-                        Text("Speech-to-text: \(stt)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let llm = endpoint.llmModel {
-                        Text("Language model: \(llm)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
             }
             Spacer()
             if !endpoint.isEnabled {
@@ -220,11 +242,6 @@ struct EndpointEditorView: View {
     let onSave: (APIEndpoint) -> Void
     let onCancel: () -> Void
     @State private var apiKeyText = ""
-    @State private var isTesting = false
-    @State private var testStatus: TestStatus?
-    @State private var testMessage: String?
-
-    enum TestStatus { case pass, fail }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -248,94 +265,25 @@ struct EndpointEditorView: View {
                         }
                     Toggle("Enabled", isOn: $endpoint.isEnabled)
                 }
-
-                Section("Models") {
-                    TextField("STT Model", text: sttModelBinding, prompt: Text("e.g. whisper-1"))
-                    Text("Speech-to-text — converts your voice to text")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField("LLM Model", text: llmModelBinding, prompt: Text("e.g. gpt-4o-mini"))
-                    Text("Language model — cleans up grammar and punctuation")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("LLM System Prompt") {
-                    TextEditor(text: systemPromptBinding)
-                        .frame(height: 80)
-                        .font(.system(size: 12, design: .monospaced))
-                }
             }
             .formStyle(.grouped)
 
-            VStack(spacing: 8) {
-                HStack {
-                    Button {
-                        testConnection()
-                    } label: {
-                        HStack(spacing: 6) {
-                            if isTesting {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .transition(.opacity)
-                            } else if let status = testStatus {
-                                Image(systemName: status == .pass ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                    .foregroundStyle(status == .pass ? .green : .red)
-                                    .transition(.opacity)
-                            }
-                            Text(isTesting ? "Testing\u{2026}" : "Test Connection")
-                        }
-                        .animation(.easeInOut(duration: 0.2), value: isTesting)
-                        .animation(.easeInOut(duration: 0.2), value: testStatus)
-                    }
-                    .disabled(isTesting || apiKeyText.isEmpty)
-
-                    Spacer()
-                    Button("Cancel", action: onCancel)
-                    Button(isNew ? "Add" : "Save") { save() }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(endpoint.name.isEmpty)
-                }
-
-                if let msg = testMessage {
-                    Text(msg)
-                        .font(.system(size: 11))
-                        .foregroundColor(testStatus == .pass ? .secondary : .red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                Button(isNew ? "Add" : "Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(endpoint.name.isEmpty)
             }
             .padding()
-            .animation(.easeInOut(duration: 0.2), value: testMessage)
         }
-        .frame(width: 460, height: 520)
+        .frame(width: 460, height: 300)
     }
 
     private var baseURLBinding: Binding<String> {
         Binding(
             get: { endpoint.baseURL.absoluteString },
             set: { if let url = URL(string: $0) { endpoint.baseURL = url } }
-        )
-    }
-
-    private var sttModelBinding: Binding<String> {
-        Binding(
-            get: { endpoint.sttModel ?? "" },
-            set: { endpoint.sttModel = $0.isEmpty ? nil : $0 }
-        )
-    }
-
-    private var llmModelBinding: Binding<String> {
-        Binding(
-            get: { endpoint.llmModel ?? "" },
-            set: { endpoint.llmModel = $0.isEmpty ? nil : $0 }
-        )
-    }
-
-    private var systemPromptBinding: Binding<String> {
-        Binding(
-            get: { endpoint.llmSystemPrompt ?? LLMPostProcessor.defaultSystemPrompt },
-            set: { endpoint.llmSystemPrompt = $0 }
         )
     }
 
@@ -347,39 +295,5 @@ struct EndpointEditorView: View {
             KeychainHelper.save(account: endpoint.apiKeyRef, key: apiKeyText)
         }
         onSave(endpoint)
-    }
-
-    private func testConnection() {
-        isTesting = true
-        testStatus = nil
-        testMessage = nil
-        Task {
-            do {
-                if let model = endpoint.llmModel, !model.isEmpty {
-                    let client = buildLLMClient()
-                    let result = try await client.complete(system: "Reply with OK", user: "test")
-                    testStatus = .pass
-                    testMessage = "OK \u{2014} \(result.prefix(50))"
-                } else {
-                    testStatus = .fail
-                    testMessage = "No model configured to test"
-                }
-            } catch {
-                testStatus = .fail
-                testMessage = error.localizedDescription
-            }
-            isTesting = false
-        }
-    }
-
-    private func buildLLMClient() -> any LLMClient {
-        switch endpoint.apiProtocol {
-        case .openAI:
-            return OpenAILLMClient(baseURL: endpoint.baseURL, apiKey: apiKeyText, model: endpoint.llmModel ?? "gpt-4o-mini")
-        case .anthropic:
-            return AnthropicLLMClient(baseURL: endpoint.baseURL, apiKey: apiKeyText, model: endpoint.llmModel ?? "claude-sonnet-4-6-20250514")
-        case .google:
-            return GoogleLLMClient(baseURL: endpoint.baseURL, apiKey: apiKeyText, model: endpoint.llmModel ?? "gemini-2.0-flash")
-        }
     }
 }
