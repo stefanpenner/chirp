@@ -239,48 +239,19 @@ final class HotkeyRecorderPanel {
 @Observable
 public final class InlineHotkeyRecorder {
     public var isRecording = false
-    public var capturedConfig: HotkeyConfig?
     private var monitor: Any?
     private var pendingModifierKeyCode: UInt16?
     private weak var appState: AppState?
 
     public init() {}
 
-    public var displayLabel: String {
-        if isRecording { return "Press a key\u{2026}" }
-        if let captured = capturedConfig { return captured.label }
-        return ""
-    }
-
-    public var canSave: Bool { capturedConfig != nil }
-
     public func startRecording(appState: AppState) {
         guard !isRecording else { return }
         self.appState = appState
         appState.hotkeyManager?.suppressOnly = true
         isRecording = true
-        capturedConfig = nil
         pendingModifierKeyCode = nil
         installMonitor()
-    }
-
-    public func cancel() {
-        capturedConfig = nil
-        stopRecording()
-    }
-
-    public func save() {
-        guard let config = capturedConfig, let appState else { return }
-        appState.updateHotkey(config)
-        capturedConfig = nil
-        stopRecording()
-    }
-
-    public func resetToFn() {
-        guard let appState else { return }
-        appState.updateHotkey(.fn)
-        capturedConfig = nil
-        stopRecording()
     }
 
     private func stopRecording() {
@@ -315,20 +286,18 @@ public final class InlineHotkeyRecorder {
     ) -> Bool {
         switch type {
         case .keyDown:
-            if keyCode == 0x35 {
+            if keyCode == 0x35 {  // ESC — cancel
                 stopRecording()
                 return true
             }
             let nsMods = modifierFlags.intersection(.deviceIndependentFlagsMask)
                 .subtracting([.capsLock, .numericPad, .function])
             let cgMods = HotkeyConfig.nsModsToCGFlags(nsMods)
-            let label = HotkeyConfig.buildLabel(
-                keyCode: keyCode, isModifier: false, modifiers: cgMods
-            )
-            capturedConfig = HotkeyConfig(
+            let label = HotkeyConfig.buildLabel(keyCode: keyCode, isModifier: false, modifiers: cgMods)
+            appState?.updateHotkey(HotkeyConfig(
                 keyCode: keyCode, isModifier: false,
                 modifierMask: nil, requiredModifiers: cgMods, label: label
-            )
+            ))
             pendingModifierKeyCode = nil
             stopRecording()
             return true
@@ -345,10 +314,10 @@ public final class InlineHotkeyRecorder {
                     return true
                 }
                 let label = HotkeyConfig.buildLabel(keyCode: mkc, isModifier: true)
-                capturedConfig = HotkeyConfig(
+                appState?.updateHotkey(HotkeyConfig(
                     keyCode: mkc, isModifier: true,
                     modifierMask: mask, requiredModifiers: [], label: label
-                )
+                ))
                 pendingModifierKeyCode = nil
                 stopRecording()
             }

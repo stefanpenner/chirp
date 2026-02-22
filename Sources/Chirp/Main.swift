@@ -40,6 +40,13 @@ struct ChirpApp: App {
             }
             .padding(.vertical, 8)
             .frame(width: 260)
+            // ESC closes the popover (the InlineHotkeyRecorder's local monitor
+            // consumes ESC during recording first, so there's no conflict).
+            .background {
+                Button("") { NSApp.keyWindow?.orderOut(nil) }
+                    .keyboardShortcut(.cancelAction)
+                    .hidden()
+            }
         }
         .menuBarExtraStyle(.window)
     }
@@ -124,56 +131,26 @@ struct ChirpApp: App {
 
     @ViewBuilder
     private var hotkeySection: some View {
-        if hotkeyRecorder.isRecording || hotkeyRecorder.capturedConfig != nil {
-            // Recording or captured state
-            VStack(spacing: 6) {
-                HStack {
-                    Text(hotkeyRecorder.isRecording
-                        ? "Press a key\u{2026}"
-                        : hotkeyRecorder.displayLabel)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(hotkeyRecorder.isRecording
-                            ? .primary.opacity(0.4) : .primary.opacity(0.9))
-                    Spacer()
-                    if hotkeyRecorder.isRecording {
-                        Text("esc to cancel")
-                            .font(.system(size: 9))
-                            .foregroundColor(.primary.opacity(0.2))
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(
-                            hotkeyRecorder.isRecording ? cBlue.opacity(0.5) : cBlue.opacity(0.2),
-                            lineWidth: hotkeyRecorder.isRecording ? 1 : 0.5
-                        )
-                        .padding(.horizontal, 4)
-                )
-
-                if hotkeyRecorder.canSave {
-                    HStack(spacing: 8) {
-                        Button("Reset to fn") { hotkeyRecorder.resetToFn() }
-                            .font(.system(size: 10))
-                            .foregroundColor(.primary.opacity(0.4))
-                            .buttonStyle(.plain)
-                        Spacer()
-                        Button("Cancel") { hotkeyRecorder.cancel() }
-                            .font(.system(size: 10))
-                            .foregroundColor(.primary.opacity(0.4))
-                            .buttonStyle(.plain)
-                        Button("Save") { hotkeyRecorder.save() }
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(cBlue)
-                            .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 4)
-                }
+        if hotkeyRecorder.isRecording {
+            // Recording state — press any key to set; ESC to cancel
+            HStack {
+                Text("Press a key\u{2026}")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primary.opacity(0.4))
+                Spacer()
+                Text("esc to cancel")
+                    .font(.system(size: 9))
+                    .foregroundColor(.primary.opacity(0.2))
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(cBlue.opacity(0.5), lineWidth: 1)
+                    .padding(.horizontal, 4)
+            )
         } else {
-            // Normal state — show current hotkey
+            // Normal state — show current hotkey, click to change
             Button {
                 hotkeyRecorder.startRecording(appState: appState)
             } label: {
