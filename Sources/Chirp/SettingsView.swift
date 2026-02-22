@@ -65,6 +65,9 @@ struct AISettingsTab: View {
                     EmptyView()
                 }
                 .pickerStyle(.radioGroup)
+                Text("Offline runs on this Mac with no internet. Cloud sends audio to an API for higher accuracy.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 if appState.aiSettings.transcriptionMode == .cloud {
                     Picker("Provider", selection: $appState.aiSettings.sttEndpointID) {
@@ -93,6 +96,9 @@ struct AISettingsTab: View {
                     EmptyView()
                 }
                 .pickerStyle(.radioGroup)
+                Text("Regex applies pattern-based fixes (filler words, stutters). LLM uses AI to refine grammar and punctuation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 if appState.aiSettings.postProcessingMode != .regex {
                     Picker("Provider", selection: $appState.aiSettings.llmEndpointID) {
@@ -187,12 +193,12 @@ private struct EndpointRow: View {
                 }
                 HStack(spacing: 8) {
                     if let stt = endpoint.sttModel {
-                        Text("STT: \(stt)")
+                        Text("Speech-to-text: \(stt)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     if let llm = endpoint.llmModel {
-                        Text("LLM: \(llm)")
+                        Text("Language model: \(llm)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -254,8 +260,14 @@ struct EndpointEditorView: View {
                 Section("Models") {
                     if endpoint.apiProtocol != .anthropic {
                         TextField("STT Model", text: sttModelBinding, prompt: Text("e.g. whisper-1"))
+                        Text("Speech-to-text — converts your voice to text")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     TextField("LLM Model", text: llmModelBinding, prompt: Text("e.g. gpt-4o-mini"))
+                    Text("Language model — cleans up grammar and punctuation")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("LLM System Prompt") {
