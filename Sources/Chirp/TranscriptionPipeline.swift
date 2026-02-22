@@ -55,17 +55,13 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
         for raw in segments {
             let text = TextPostProcessor.process(raw)
             guard !text.isEmpty else { continue }
-            if usesLLM {
-                accumulatedText.append(text)
-            } else {
-                results.append(text)
-            }
+            if usesLLM { accumulatedText.append(text) }
+            results.append(text)
         }
         return results
     }
 
     func peekTranscription() async -> String? {
-        guard !usesLLM else { return nil }
         guard let raw = await transcriber.peekTranscription() else { return nil }
         return TextPostProcessor.process(raw)
     }

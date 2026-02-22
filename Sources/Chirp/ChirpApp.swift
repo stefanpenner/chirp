@@ -230,7 +230,7 @@ public final class AppState {
         case .offline:
             pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, postProcessor: postProcessor)
             pipelineTypesIncrementally = !actuallyUsesLLM
-            pipelineSupportsPreview = !actuallyUsesLLM
+            pipelineSupportsPreview = true  // local inference is fast — always preview
         case .cloud:
             if let sttClient = buildSTTClient() {
                 pipeline = CloudTranscriptionPipeline(sttClient: sttClient, postProcessor: postProcessor)
@@ -240,7 +240,7 @@ public final class AppState {
                 // No valid STT endpoint — fall back to offline
                 pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, postProcessor: postProcessor)
                 pipelineTypesIncrementally = !actuallyUsesLLM
-                pipelineSupportsPreview = !actuallyUsesLLM
+                pipelineSupportsPreview = true
             }
         }
     }
