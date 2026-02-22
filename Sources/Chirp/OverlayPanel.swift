@@ -171,6 +171,12 @@ struct IslandView: View {
         return false
     }
 
+    /// Label shown during the transcribing state.
+    /// "Processing..." for cloud/LLM modes, "Finalizing..." for offline+regex.
+    private var transcribingLabel: String {
+        appState.pipelineTypesIncrementally ? "Finalizing..." : "Processing..."
+    }
+
     private var breathe: CGFloat {
         isRecording ? 1.0 + CGFloat(min(appState.audioLevel * 0.8, 1)) * 0.015 : 1.0
     }
@@ -310,7 +316,7 @@ struct IslandView: View {
                             }
                         }
                     } else {
-                        Text(isRecording ? "Listening..." : isTranscribing ? "Finalizing..." : "Ready")
+                        Text(isRecording ? "Listening..." : isTranscribing ? transcribingLabel : "Ready")
                             .foregroundStyle(.primary.opacity(0.4))
                     }
                 }

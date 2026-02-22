@@ -69,6 +69,27 @@ public final class AppState {
     private var audioConsumerTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<[Float]>.Continuation?
 
+    // MARK: - Pipeline
+
+    /// The active transcription pipeline. Built from aiSettings via rebuildPipeline().
+    private(set) var pipeline: any TranscriptionPipeline
+
+    /// Whether the current pipeline types text incrementally during recording.
+    /// False for cloud STT or LLM post-processing (text typed once on flush).
+    public private(set) var pipelineTypesIncrementally: Bool = true
+
+    /// Whether the current pipeline supports speculative preview during recording.
+    /// False for cloud STT or LLM post-processing.
+    public private(set) var pipelineSupportsPreview: Bool = true
+
+    // MARK: - AI Settings
+
+    /// Cloud AI configuration (endpoints, modes). Persisted to UserDefaults.
+    public var aiSettings: AISettings = AISettings()
+
+    /// Settings window controller. Created lazily on first showSettings().
+    var settingsWindowController: SettingsWindowController?
+
     /// Monotonically increasing session counter. Incremented each time
     /// startRecording() is called. Checked after every await to discard
     /// work from a previous recording session.
@@ -83,10 +104,22 @@ public final class AppState {
     private var commitGen = 0
 
     public convenience init() {
-        self.init(audioRecorder: AudioRecorder(), transcriber: Transcriber(), textInserter: TextInserter())
+        let transcriber = Transcriber()
+        self.init(audioRecorder: AudioRecorder(), transcriber: transcriber, textInserter: TextInserter(), startListening: false)
         self.modelFileCheck = {
             ModelManager.findExisting() != nil
         }
+        self.aiSettings = .saved
+        rebuildPipeline()
+
+        overlayPanel = OverlayPanel(appState: self)
+        hotkeyManager = HotkeyManager(
+            onPress: { [weak self] in self?.startRecording() },
+            onRelease: { [weak self] in self?.stopRecording() },
+            onCancel: { [weak self] in self?.cancelSession() }
+        )
+        textInserter.checkAccessibilityPermission()
+        ensureModel()
     }
 
     init(
@@ -98,6 +131,7 @@ public final class AppState {
         self.audioRecorder = audioRecorder
         self.transcriber = transcriber
         self.textInserter = textInserter
+        self.pipeline = OfflineTranscriptionPipeline(transcriber: transcriber)
         guard startListening else { return }
         overlayPanel = OverlayPanel(appState: self)
         hotkeyManager = HotkeyManager(
@@ -182,6 +216,83 @@ public final class AppState {
         case .error, .needsModel: ensureModel()
         default: break
         }
+    }
+
+    // MARK: - Pipeline management
+
+    /// Rebuild the transcription pipeline from current aiSettings.
+    /// Called when AI settings change in the Settings UI.
+    public func rebuildPipeline() {
+        let postProcessor = buildPostProcessor()
+        let actuallyUsesLLM = !(postProcessor is RegexPostProcessor)
+
+        switch aiSettings.transcriptionMode {
+        case .offline:
+            pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, postProcessor: postProcessor)
+            pipelineTypesIncrementally = !actuallyUsesLLM
+            pipelineSupportsPreview = !actuallyUsesLLM
+        case .cloud:
+            if let sttClient = buildSTTClient() {
+                pipeline = CloudTranscriptionPipeline(sttClient: sttClient, postProcessor: postProcessor)
+                pipelineTypesIncrementally = false
+                pipelineSupportsPreview = false
+            } else {
+                // No valid STT endpoint — fall back to offline
+                pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, postProcessor: postProcessor)
+                pipelineTypesIncrementally = !actuallyUsesLLM
+                pipelineSupportsPreview = !actuallyUsesLLM
+            }
+        }
+    }
+
+    private func buildPostProcessor() -> any TextPostProcessing {
+        switch aiSettings.postProcessingMode {
+        case .regex:
+            return RegexPostProcessor()
+        case .llm:
+            guard let client = buildLLMClient() else { return RegexPostProcessor() }
+            return LLMPostProcessor(client: client, systemPrompt: aiSettings.llmEndpoint()?.llmSystemPrompt)
+        case .regexThenLLM:
+            guard let client = buildLLMClient() else { return RegexPostProcessor() }
+            return ChainedPostProcessor(
+                llm: LLMPostProcessor(client: client, systemPrompt: aiSettings.llmEndpoint()?.llmSystemPrompt)
+            )
+        }
+    }
+
+    private func buildLLMClient() -> (any LLMClient)? {
+        guard let endpoint = aiSettings.llmEndpoint(),
+              let apiKey = KeychainHelper.load(account: endpoint.apiKeyRef) else { return nil }
+        switch endpoint.apiProtocol {
+        case .openAI:
+            return OpenAILLMClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: endpoint.llmModel ?? "gpt-4o-mini")
+        case .anthropic:
+            return AnthropicLLMClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: endpoint.llmModel ?? "claude-sonnet-4-6-20250514")
+        case .google:
+            return GoogleLLMClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: endpoint.llmModel ?? "gemini-2.0-flash")
+        }
+    }
+
+    private func buildSTTClient() -> (any STTClient)? {
+        guard let endpoint = aiSettings.sttEndpoint(),
+              let apiKey = KeychainHelper.load(account: endpoint.apiKeyRef) else { return nil }
+        switch endpoint.apiProtocol {
+        case .openAI:
+            return OpenAISTTClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: endpoint.sttModel ?? "whisper-1")
+        case .google:
+            return GoogleSTTClient(baseURL: endpoint.baseURL, apiKey: apiKey)
+        case .anthropic:
+            return nil // Anthropic doesn't offer STT
+        }
+    }
+
+    // MARK: - Settings
+
+    public func showSettings() {
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController(appState: self)
+        }
+        settingsWindowController?.show()
     }
 
     // MARK: - Hotkey
@@ -281,10 +392,11 @@ public final class AppState {
             continuation.yield(samples)
         }
 
-        let transcriber = self.transcriber
+        let pipeline = self.pipeline
+        let typesIncrementally = self.pipelineTypesIncrementally
         audioConsumerTask = Task { [weak self] in
             // Guaranteed to run before first feedAudio — no ordering race.
-            await transcriber.resetVAD()
+            await pipeline.resetVAD()
 
             for await samples in stream {
                 guard !Task.isCancelled else { break }
@@ -292,7 +404,7 @@ public final class AppState {
                 let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
                 let level = min(rms * 6, 1)
 
-                let segments = await transcriber.feedAudio(samples: samples)
+                let segments = await pipeline.feedAudio(samples: samples)
 
                 // Session guard is sufficient — status may be .transcribing if
                 // stopRecording() ran mid-feedAudio, and we must still process
@@ -300,15 +412,16 @@ public final class AppState {
                 guard let self, self.recordingSession == session else { break }
 
                 self.audioLevel = level
-                for raw in segments {
-                    let text = TextPostProcessor.process(raw)
+                for text in segments {
                     guard !text.isEmpty else { continue }
                     self.commitGen += 1
                     self.speculativeText = ""
                     let needsSpace = !self.transcribedText.isEmpty
                     if needsSpace { self.transcribedText += " " }
                     self.transcribedText += text
-                    self.textInserter.typeText(needsSpace ? " \(text)" : text)
+                    if typesIncrementally {
+                        self.textInserter.typeText(needsSpace ? " \(text)" : text)
+                    }
                 }
             }
 
@@ -317,15 +430,20 @@ public final class AppState {
             guard !Task.isCancelled else { return }
             guard let self, self.recordingSession == session else { return }
 
-            let raw = await transcriber.flush()
+            let remaining = await pipeline.flush()
             guard !Task.isCancelled else { return }
             guard self.recordingSession == session else { return }
-            let remaining = TextPostProcessor.process(raw)
             if !remaining.isEmpty {
-                let needsSpace = !self.transcribedText.isEmpty
-                if needsSpace { self.transcribedText += " " }
-                self.transcribedText += remaining
-                self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
+                if typesIncrementally {
+                    let needsSpace = !self.transcribedText.isEmpty
+                    if needsSpace { self.transcribedText += " " }
+                    self.transcribedText += remaining
+                    self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
+                } else {
+                    // Non-incremental: pipeline returns full processed text on flush
+                    self.transcribedText = remaining
+                    self.textInserter.typeText(remaining)
+                }
             }
             self.audioLevel = 0
             self.hotkeyManager?.sessionActive = false
@@ -339,11 +457,12 @@ public final class AppState {
         }
     }
 
-    /// Polls the transcriber every 400 ms for a speculative preview of
+    /// Polls the pipeline every 400 ms for a speculative preview of
     /// the current (uncommitted) audio. Discarded if a committed segment
     /// arrives in the meantime (checked via commitGen and recordingSession).
     private func startPeeking() {
-        let transcriber = self.transcriber
+        guard pipelineSupportsPreview else { return }
+        let pipeline = self.pipeline
         let session = recordingSession
         peekTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -352,11 +471,11 @@ public final class AppState {
                 guard let self, self.recordingSession == session else { break }
                 guard case .recording = self.status else { break }
                 let gen = self.commitGen
-                let preview = await transcriber.peekTranscription()
+                let preview = await pipeline.peekTranscription()
                 guard self.recordingSession == session else { break }
                 guard case .recording = self.status else { break }
                 guard self.commitGen == gen else { continue }
-                self.speculativeText = preview.map { TextPostProcessor.process($0) } ?? ""
+                self.speculativeText = preview ?? ""
             }
         }
     }
@@ -401,4 +520,3 @@ public final class AppState {
         overlayPanel?.hideOverlay()
     }
 }
-

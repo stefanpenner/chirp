@@ -39,7 +39,7 @@ sh_test(
 swift_library(
     name = "ChirpLib",
     srcs = glob(
-        ["Sources/Chirp/*.swift"],
+        ["Sources/Chirp/*.swift", "Sources/Chirp/Providers/*.swift"],
         exclude = ["Sources/Chirp/Main.swift"],
     ),
     module_name = "Chirp",

@@ -25,8 +25,10 @@ struct ChirpApp: App {
         MenuBarExtra("Chirp", systemImage: "waveform") {
             VStack(spacing: 0) {
                 hotkeySection
+                aiModeLabel
                 microphoneSection
                 CheckForUpdatesView(updater: updaterController.updater)
+                MenuRow("Settings\u{2026}") { appState.showSettings() }
 
                 SectionDivider()
 
@@ -56,6 +58,38 @@ struct ChirpApp: App {
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return "v\(version) (\(build))"
+    }
+
+    // MARK: - AI Mode Label
+
+    @ViewBuilder
+    private var aiModeLabel: some View {
+        let mode = appState.aiSettings.transcriptionMode
+        let pp = appState.aiSettings.postProcessingMode
+        if mode != .offline || pp != .regex {
+            HStack {
+                Text("AI Mode")
+                    .font(.system(size: 13))
+                    .foregroundColor(.primary.opacity(0.7))
+                Spacer()
+                Text(aiModeText(mode: mode, pp: pp))
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundColor(cBlue.opacity(0.8))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func aiModeText(mode: TranscriptionMode, pp: PostProcessingMode) -> String {
+        var parts: [String] = []
+        if mode == .cloud { parts.append("Cloud STT") }
+        switch pp {
+        case .regex: break
+        case .llm: parts.append("LLM")
+        case .regexThenLLM: parts.append("Regex+LLM")
+        }
+        return parts.joined(separator: " + ")
     }
 
     // MARK: - Microphone Section

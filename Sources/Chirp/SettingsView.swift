@@ -1,0 +1,347 @@
+// SettingsView.swift — Settings window UI with General and AI tabs.
+// General tab: hotkey, microphone (moved from menu bar for richer UI).
+// AI tab: transcription mode, post-processing mode, endpoint management.
+
+import SwiftUI
+
+// Catppuccin Mocha palette
+private let cBlue = Color(red: 0.35, green: 0.58, blue: 1.0)
+
+// MARK: - Settings View
+
+struct SettingsView: View {
+    @Bindable var appState: AppState
+    @State private var selectedTab = "AI"
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            AISettingsTab(appState: appState)
+                .tabItem { Label("AI", systemImage: "cpu") }
+                .tag("AI")
+        }
+        .frame(width: 520, height: 480)
+    }
+}
+
+// MARK: - AI Settings Tab
+
+struct AISettingsTab: View {
+    @Bindable var appState: AppState
+    @State private var editingEndpoint: APIEndpoint?
+    @State private var showingEndpointEditor = false
+
+    var body: some View {
+        Form {
+            Section("Transcription") {
+                Picker("Mode", selection: $appState.aiSettings.transcriptionMode) {
+                    Text("Offline (Local)").tag(TranscriptionMode.offline)
+                    Text("Cloud").tag(TranscriptionMode.cloud)
+                }
+                .pickerStyle(.segmented)
+
+                if appState.aiSettings.transcriptionMode == .cloud {
+                    Picker("STT Endpoint", selection: $appState.aiSettings.sttEndpointID) {
+                        Text("None").tag(nil as UUID?)
+                        ForEach(sttCapableEndpoints) { endpoint in
+                            Text(endpoint.name).tag(endpoint.id as UUID?)
+                        }
+                    }
+                    if sttCapableEndpoints.isEmpty {
+                        Text("Add an endpoint with STT support (OpenAI or Google)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section("Post-Processing") {
+                Picker("Mode", selection: $appState.aiSettings.postProcessingMode) {
+                    Text("Regex Only").tag(PostProcessingMode.regex)
+                    Text("LLM").tag(PostProcessingMode.llm)
+                    Text("Regex + LLM").tag(PostProcessingMode.regexThenLLM)
+                }
+                .pickerStyle(.segmented)
+
+                if appState.aiSettings.postProcessingMode != .regex {
+                    Picker("LLM Endpoint", selection: $appState.aiSettings.llmEndpointID) {
+                        Text("None").tag(nil as UUID?)
+                        ForEach(llmCapableEndpoints) { endpoint in
+                            Text(endpoint.name).tag(endpoint.id as UUID?)
+                        }
+                    }
+                    if llmCapableEndpoints.isEmpty {
+                        Text("Add an endpoint with LLM support")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section("Endpoints") {
+                ForEach(appState.aiSettings.endpoints) { endpoint in
+                    EndpointRow(endpoint: endpoint) {
+                        editingEndpoint = endpoint
+                        showingEndpointEditor = true
+                    } onDelete: {
+                        deleteEndpoint(endpoint)
+                    }
+                }
+
+                Button("Add Endpoint") {
+                    let newEndpoint = APIEndpoint(
+                        name: "New Endpoint",
+                        apiProtocol: .openAI,
+                        baseURL: APIEndpoint.defaultBaseURL(for: .openAI)
+                    )
+                    editingEndpoint = newEndpoint
+                    showingEndpointEditor = true
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onChange(of: appState.aiSettings) { _, newValue in
+            newValue.save()
+            appState.rebuildPipeline()
+        }
+        .sheet(isPresented: $showingEndpointEditor) {
+            if let endpoint = editingEndpoint {
+                EndpointEditorView(
+                    endpoint: endpoint,
+                    isNew: !appState.aiSettings.endpoints.contains(where: { $0.id == endpoint.id })
+                ) { saved in
+                    saveEndpoint(saved)
+                    showingEndpointEditor = false
+                } onCancel: {
+                    showingEndpointEditor = false
+                }
+            }
+        }
+    }
+
+    private var sttCapableEndpoints: [APIEndpoint] {
+        appState.aiSettings.endpoints.filter { endpoint in
+            endpoint.isEnabled && endpoint.sttModel != nil &&
+            (endpoint.apiProtocol == .openAI || endpoint.apiProtocol == .google)
+        }
+    }
+
+    private var llmCapableEndpoints: [APIEndpoint] {
+        appState.aiSettings.endpoints.filter { $0.isEnabled && $0.llmModel != nil }
+    }
+
+    private func saveEndpoint(_ endpoint: APIEndpoint) {
+        if let idx = appState.aiSettings.endpoints.firstIndex(where: { $0.id == endpoint.id }) {
+            appState.aiSettings.endpoints[idx] = endpoint
+        } else {
+            appState.aiSettings.endpoints.append(endpoint)
+        }
+    }
+
+    private func deleteEndpoint(_ endpoint: APIEndpoint) {
+        appState.aiSettings.endpoints.removeAll { $0.id == endpoint.id }
+        KeychainHelper.delete(account: endpoint.apiKeyRef)
+        if appState.aiSettings.sttEndpointID == endpoint.id {
+            appState.aiSettings.sttEndpointID = nil
+        }
+        if appState.aiSettings.llmEndpointID == endpoint.id {
+            appState.aiSettings.llmEndpointID = nil
+        }
+    }
+}
+
+// MARK: - Endpoint Row
+
+private struct EndpointRow: View {
+    let endpoint: APIEndpoint
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(endpoint.name)
+                        .font(.system(size: 13, weight: .medium))
+                    Text(endpoint.apiProtocol.rawValue)
+                        .font(.system(size: 10, weight: .medium))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(cBlue.opacity(0.15))
+                        )
+                        .foregroundStyle(cBlue)
+                }
+                HStack(spacing: 8) {
+                    if let stt = endpoint.sttModel {
+                        Text("STT: \(stt)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let llm = endpoint.llmModel {
+                        Text("LLM: \(llm)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Spacer()
+            if !endpoint.isEnabled {
+                Text("Disabled")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Button("Edit", action: onEdit)
+                .buttonStyle(.borderless)
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+}
+
+// MARK: - Endpoint Editor
+
+struct EndpointEditorView: View {
+    @State var endpoint: APIEndpoint
+    let isNew: Bool
+    let onSave: (APIEndpoint) -> Void
+    let onCancel: () -> Void
+    @State private var apiKeyText = ""
+    @State private var testResult: String?
+    @State private var isTesting = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                Section("Endpoint") {
+                    TextField("Name", text: $endpoint.name)
+                    Picker("Protocol", selection: $endpoint.apiProtocol) {
+                        ForEach(APIProtocol.allCases, id: \.self) { proto in
+                            Text(proto.rawValue).tag(proto)
+                        }
+                    }
+                    .onChange(of: endpoint.apiProtocol) { _, newValue in
+                        endpoint.baseURL = APIEndpoint.defaultBaseURL(for: newValue)
+                    }
+                    TextField("Base URL", text: baseURLBinding)
+                    Toggle("Enabled", isOn: $endpoint.isEnabled)
+                }
+
+                Section("Authentication") {
+                    SecureField("API Key", text: $apiKeyText)
+                        .onAppear {
+                            if !endpoint.apiKeyRef.isEmpty {
+                                apiKeyText = KeychainHelper.load(account: endpoint.apiKeyRef) ?? ""
+                            }
+                        }
+                }
+
+                Section("Models") {
+                    if endpoint.apiProtocol != .anthropic {
+                        TextField("STT Model", text: sttModelBinding, prompt: Text("e.g. whisper-1"))
+                    }
+                    TextField("LLM Model", text: llmModelBinding, prompt: Text("e.g. gpt-4o-mini"))
+                }
+
+                Section("LLM System Prompt") {
+                    TextEditor(text: systemPromptBinding)
+                        .frame(height: 80)
+                        .font(.system(size: 12, design: .monospaced))
+                }
+
+                if let result = testResult {
+                    Section("Test Result") {
+                        Text(result)
+                            .font(.caption)
+                            .foregroundStyle(result.hasPrefix("Error") ? .red : .green)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+
+            HStack {
+                Button("Test Connection") { testConnection() }
+                    .disabled(isTesting || apiKeyText.isEmpty)
+                Spacer()
+                Button("Cancel", action: onCancel)
+                Button(isNew ? "Add" : "Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(endpoint.name.isEmpty)
+            }
+            .padding()
+        }
+        .frame(width: 460, height: 520)
+    }
+
+    private var baseURLBinding: Binding<String> {
+        Binding(
+            get: { endpoint.baseURL.absoluteString },
+            set: { if let url = URL(string: $0) { endpoint.baseURL = url } }
+        )
+    }
+
+    private var sttModelBinding: Binding<String> {
+        Binding(
+            get: { endpoint.sttModel ?? "" },
+            set: { endpoint.sttModel = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    private var llmModelBinding: Binding<String> {
+        Binding(
+            get: { endpoint.llmModel ?? "" },
+            set: { endpoint.llmModel = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    private var systemPromptBinding: Binding<String> {
+        Binding(
+            get: { endpoint.llmSystemPrompt ?? LLMPostProcessor.defaultSystemPrompt },
+            set: { endpoint.llmSystemPrompt = $0 }
+        )
+    }
+
+    private func save() {
+        // Generate apiKeyRef if needed
+        if endpoint.apiKeyRef.isEmpty {
+            endpoint.apiKeyRef = "chirp-\(endpoint.id.uuidString.prefix(8))"
+        }
+        // Save key to Keychain
+        if !apiKeyText.isEmpty {
+            KeychainHelper.save(account: endpoint.apiKeyRef, key: apiKeyText)
+        }
+        onSave(endpoint)
+    }
+
+    private func testConnection() {
+        isTesting = true
+        testResult = nil
+        Task {
+            do {
+                if let model = endpoint.llmModel, !model.isEmpty {
+                    let client = buildLLMClient()
+                    let result = try await client.complete(system: "Reply with OK", user: "test")
+                    testResult = "LLM OK: \(result.prefix(50))"
+                } else {
+                    testResult = "No model configured to test"
+                }
+            } catch {
+                testResult = "Error: \(error.localizedDescription)"
+            }
+            isTesting = false
+        }
+    }
+
+    private func buildLLMClient() -> any LLMClient {
+        switch endpoint.apiProtocol {
+        case .openAI:
+            return OpenAILLMClient(baseURL: endpoint.baseURL, apiKey: apiKeyText, model: endpoint.llmModel ?? "gpt-4o-mini")
+        case .anthropic:
+            return AnthropicLLMClient(baseURL: endpoint.baseURL, apiKey: apiKeyText, model: endpoint.llmModel ?? "claude-sonnet-4-6-20250514")
+        case .google:
+            return GoogleLLMClient(baseURL: endpoint.baseURL, apiKey: apiKeyText, model: endpoint.llmModel ?? "gemini-2.0-flash")
+        }
+    }
+}
