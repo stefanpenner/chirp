@@ -1,6 +1,5 @@
-// SettingsView.swift — Settings window UI with General and AI tabs.
-// General tab: hotkey, microphone (moved from menu bar for richer UI).
-// AI tab: transcription mode, post-processing mode, endpoint management.
+// SettingsView.swift — Settings window UI.
+// Provider-first layout: configure providers (name + key), then toggle features.
 
 import SwiftUI
 
@@ -32,52 +31,8 @@ struct AISettingsTab: View {
 
     var body: some View {
         Form {
-            Section("Transcription") {
-                Picker("Mode", selection: $appState.aiSettings.transcriptionMode) {
-                    Text("Offline (Local)").tag(TranscriptionMode.offline)
-                    Text("Cloud").tag(TranscriptionMode.cloud)
-                }
-                .pickerStyle(.segmented)
-
-                if appState.aiSettings.transcriptionMode == .cloud {
-                    Picker("STT Endpoint", selection: $appState.aiSettings.sttEndpointID) {
-                        Text("None").tag(nil as UUID?)
-                        ForEach(sttCapableEndpoints) { endpoint in
-                            Text(endpoint.name).tag(endpoint.id as UUID?)
-                        }
-                    }
-                    if sttCapableEndpoints.isEmpty {
-                        Text("Add an endpoint with STT support (OpenAI or Google)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Section("Post-Processing") {
-                Picker("Mode", selection: $appState.aiSettings.postProcessingMode) {
-                    Text("Regex Only").tag(PostProcessingMode.regex)
-                    Text("LLM").tag(PostProcessingMode.llm)
-                    Text("Regex + LLM").tag(PostProcessingMode.regexThenLLM)
-                }
-                .pickerStyle(.segmented)
-
-                if appState.aiSettings.postProcessingMode != .regex {
-                    Picker("LLM Endpoint", selection: $appState.aiSettings.llmEndpointID) {
-                        Text("None").tag(nil as UUID?)
-                        ForEach(llmCapableEndpoints) { endpoint in
-                            Text(endpoint.name).tag(endpoint.id as UUID?)
-                        }
-                    }
-                    if llmCapableEndpoints.isEmpty {
-                        Text("Add an endpoint with LLM support")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Section("Endpoints") {
+            // --- Providers ---
+            Section("Providers") {
                 ForEach(appState.aiSettings.endpoints) { endpoint in
                     EndpointRow(endpoint: endpoint) {
                         editingEndpoint = endpoint
@@ -87,14 +42,72 @@ struct AISettingsTab: View {
                     }
                 }
 
-                Button("Add Endpoint") {
+                Button {
                     let newEndpoint = APIEndpoint(
-                        name: "New Endpoint",
+                        name: "",
                         apiProtocol: .openAI,
                         baseURL: APIEndpoint.defaultBaseURL(for: .openAI)
                     )
                     editingEndpoint = newEndpoint
                     showingEndpointEditor = true
+                } label: {
+                    Label("Add Provider", systemImage: "plus")
+                }
+                .buttonStyle(.borderless)
+            }
+
+            // --- Transcription ---
+            Section("Transcription") {
+                Picker(selection: $appState.aiSettings.transcriptionMode) {
+                    Text("Offline (local)").tag(TranscriptionMode.offline)
+                    Text("Cloud").tag(TranscriptionMode.cloud)
+                } label: {
+                    EmptyView()
+                }
+                .pickerStyle(.radioGroup)
+
+                if appState.aiSettings.transcriptionMode == .cloud {
+                    Picker("Provider", selection: $appState.aiSettings.sttEndpointID) {
+                        Text("None").tag(nil as UUID?)
+                        ForEach(sttCapableEndpoints) { endpoint in
+                            Text(endpoint.name).tag(endpoint.id as UUID?)
+                        }
+                    }
+                    .padding(.leading, 20)
+                    if sttCapableEndpoints.isEmpty {
+                        Text("Add a provider with an STT model (OpenAI or Google)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 20)
+                    }
+                }
+            }
+
+            // --- Post-Processing ---
+            Section("Post-Processing") {
+                Picker(selection: $appState.aiSettings.postProcessingMode) {
+                    Text("Regex only").tag(PostProcessingMode.regex)
+                    Text("LLM").tag(PostProcessingMode.llm)
+                    Text("Regex then LLM").tag(PostProcessingMode.regexThenLLM)
+                } label: {
+                    EmptyView()
+                }
+                .pickerStyle(.radioGroup)
+
+                if appState.aiSettings.postProcessingMode != .regex {
+                    Picker("Provider", selection: $appState.aiSettings.llmEndpointID) {
+                        Text("None").tag(nil as UUID?)
+                        ForEach(llmCapableEndpoints) { endpoint in
+                            Text(endpoint.name).tag(endpoint.id as UUID?)
+                        }
+                    }
+                    .padding(.leading, 20)
+                    if llmCapableEndpoints.isEmpty {
+                        Text("Add a provider with an LLM model")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 20)
+                    }
                 }
             }
         }
@@ -218,8 +231,8 @@ struct EndpointEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             Form {
-                Section("Endpoint") {
-                    TextField("Name", text: $endpoint.name)
+                Section("Provider") {
+                    TextField("Name", text: $endpoint.name, prompt: Text("e.g. Work OpenAI"))
                     Picker("Protocol", selection: $endpoint.apiProtocol) {
                         ForEach(APIProtocol.allCases, id: \.self) { proto in
                             Text(proto.rawValue).tag(proto)
@@ -229,16 +242,13 @@ struct EndpointEditorView: View {
                         endpoint.baseURL = APIEndpoint.defaultBaseURL(for: newValue)
                     }
                     TextField("Base URL", text: baseURLBinding)
-                    Toggle("Enabled", isOn: $endpoint.isEnabled)
-                }
-
-                Section("Authentication") {
                     SecureField("API Key", text: $apiKeyText)
                         .onAppear {
                             if !endpoint.apiKeyRef.isEmpty {
                                 apiKeyText = KeychainHelper.load(account: endpoint.apiKeyRef) ?? ""
                             }
                         }
+                    Toggle("Enabled", isOn: $endpoint.isEnabled)
                 }
 
                 Section("Models") {
@@ -253,7 +263,6 @@ struct EndpointEditorView: View {
                         .frame(height: 80)
                         .font(.system(size: 12, design: .monospaced))
                 }
-
             }
             .formStyle(.grouped)
 
@@ -329,11 +338,9 @@ struct EndpointEditorView: View {
     }
 
     private func save() {
-        // Generate apiKeyRef if needed
         if endpoint.apiKeyRef.isEmpty {
             endpoint.apiKeyRef = "chirp-\(endpoint.id.uuidString.prefix(8))"
         }
-        // Save key to Keychain
         if !apiKeyText.isEmpty {
             KeychainHelper.save(account: endpoint.apiKeyRef, key: apiKeyText)
         }
