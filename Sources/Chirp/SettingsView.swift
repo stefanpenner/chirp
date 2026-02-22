@@ -209,8 +209,11 @@ struct EndpointEditorView: View {
     let onSave: (APIEndpoint) -> Void
     let onCancel: () -> Void
     @State private var apiKeyText = ""
-    @State private var testResult: String?
     @State private var isTesting = false
+    @State private var testStatus: TestStatus?
+    @State private var testMessage: String?
+
+    enum TestStatus { case pass, fail }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -251,26 +254,48 @@ struct EndpointEditorView: View {
                         .font(.system(size: 12, design: .monospaced))
                 }
 
-                if let result = testResult {
-                    Section("Test Result") {
-                        Text(result)
-                            .font(.caption)
-                            .foregroundStyle(result.hasPrefix("Error") ? .red : .green)
-                    }
-                }
             }
             .formStyle(.grouped)
 
-            HStack {
-                Button("Test Connection") { testConnection() }
+            VStack(spacing: 8) {
+                HStack {
+                    Button {
+                        testConnection()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if isTesting {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .transition(.opacity)
+                            } else if let status = testStatus {
+                                Image(systemName: status == .pass ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .foregroundStyle(status == .pass ? .green : .red)
+                                    .transition(.opacity)
+                            }
+                            Text(isTesting ? "Testing\u{2026}" : "Test Connection")
+                        }
+                        .animation(.easeInOut(duration: 0.2), value: isTesting)
+                        .animation(.easeInOut(duration: 0.2), value: testStatus)
+                    }
                     .disabled(isTesting || apiKeyText.isEmpty)
-                Spacer()
-                Button("Cancel", action: onCancel)
-                Button(isNew ? "Add" : "Save") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(endpoint.name.isEmpty)
+
+                    Spacer()
+                    Button("Cancel", action: onCancel)
+                    Button(isNew ? "Add" : "Save") { save() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(endpoint.name.isEmpty)
+                }
+
+                if let msg = testMessage {
+                    Text(msg)
+                        .font(.system(size: 11))
+                        .foregroundColor(testStatus == .pass ? .secondary : .red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
             .padding()
+            .animation(.easeInOut(duration: 0.2), value: testMessage)
         }
         .frame(width: 460, height: 520)
     }
@@ -317,18 +342,22 @@ struct EndpointEditorView: View {
 
     private func testConnection() {
         isTesting = true
-        testResult = nil
+        testStatus = nil
+        testMessage = nil
         Task {
             do {
                 if let model = endpoint.llmModel, !model.isEmpty {
                     let client = buildLLMClient()
                     let result = try await client.complete(system: "Reply with OK", user: "test")
-                    testResult = "LLM OK: \(result.prefix(50))"
+                    testStatus = .pass
+                    testMessage = "OK \u{2014} \(result.prefix(50))"
                 } else {
-                    testResult = "No model configured to test"
+                    testStatus = .fail
+                    testMessage = "No model configured to test"
                 }
             } catch {
-                testResult = "Error: \(error.localizedDescription)"
+                testStatus = .fail
+                testMessage = error.localizedDescription
             }
             isTesting = false
         }
