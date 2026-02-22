@@ -14,6 +14,9 @@ final class SettingsWindowController {
     }
 
     func show() {
+        // Dismiss the menu bar popover before opening settings
+        NSApp.keyWindow?.orderOut(nil)
+
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)

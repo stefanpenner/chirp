@@ -27,7 +27,6 @@ struct SettingsView: View {
 struct AISettingsTab: View {
     @Bindable var appState: AppState
     @State private var editingEndpoint: APIEndpoint?
-    @State private var showingEndpointEditor = false
 
     var body: some View {
         Form {
@@ -36,7 +35,6 @@ struct AISettingsTab: View {
                 ForEach(appState.aiSettings.endpoints) { endpoint in
                     EndpointRow(endpoint: endpoint) {
                         editingEndpoint = endpoint
-                        showingEndpointEditor = true
                     } onDelete: {
                         deleteEndpoint(endpoint)
                     }
@@ -49,7 +47,6 @@ struct AISettingsTab: View {
                         baseURL: APIEndpoint.defaultBaseURL(for: .openAI)
                     )
                     editingEndpoint = newEndpoint
-                    showingEndpointEditor = true
                 } label: {
                     Label("Add Provider", systemImage: "plus")
                 }
@@ -78,7 +75,7 @@ struct AISettingsTab: View {
                     }
                     .padding(.leading, 20)
                     if sttCapableEndpoints.isEmpty {
-                        Text("Add a provider with an STT model (OpenAI or Google)")
+                        Text("Add a provider with a speech-to-text model configured")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.leading, 20)
@@ -122,26 +119,21 @@ struct AISettingsTab: View {
             newValue.save()
             appState.rebuildPipeline()
         }
-        .sheet(isPresented: $showingEndpointEditor) {
-            if let endpoint = editingEndpoint {
-                EndpointEditorView(
-                    endpoint: endpoint,
-                    isNew: !appState.aiSettings.endpoints.contains(where: { $0.id == endpoint.id })
-                ) { saved in
-                    saveEndpoint(saved)
-                    showingEndpointEditor = false
-                } onCancel: {
-                    showingEndpointEditor = false
-                }
+        .sheet(item: $editingEndpoint) { endpoint in
+            EndpointEditorView(
+                endpoint: endpoint,
+                isNew: !appState.aiSettings.endpoints.contains(where: { $0.id == endpoint.id })
+            ) { saved in
+                saveEndpoint(saved)
+                editingEndpoint = nil
+            } onCancel: {
+                editingEndpoint = nil
             }
         }
     }
 
     private var sttCapableEndpoints: [APIEndpoint] {
-        appState.aiSettings.endpoints.filter { endpoint in
-            endpoint.isEnabled && endpoint.sttModel != nil &&
-            (endpoint.apiProtocol == .openAI || endpoint.apiProtocol == .google)
-        }
+        appState.aiSettings.endpoints.filter { $0.isEnabled && $0.sttModel != nil }
     }
 
     private var llmCapableEndpoints: [APIEndpoint] {
@@ -258,12 +250,10 @@ struct EndpointEditorView: View {
                 }
 
                 Section("Models") {
-                    if endpoint.apiProtocol != .anthropic {
-                        TextField("STT Model", text: sttModelBinding, prompt: Text("e.g. whisper-1"))
-                        Text("Speech-to-text — converts your voice to text")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    TextField("STT Model", text: sttModelBinding, prompt: Text("e.g. whisper-1"))
+                    Text("Speech-to-text — converts your voice to text")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     TextField("LLM Model", text: llmModelBinding, prompt: Text("e.g. gpt-4o-mini"))
                     Text("Language model — cleans up grammar and punctuation")
                         .font(.caption)

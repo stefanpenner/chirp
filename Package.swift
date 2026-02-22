@@ -18,7 +18,7 @@ let package = Package(
                 "CSherpaOnnx",
             ],
             path: "Sources/Chirp",
-            exclude: ["Info.plist", "Chirp.entitlements", "Main.swift"],
+            exclude: ["Info.plist", "Chirp.entitlements", "Main.swift", "AppIcon.icns"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ],

@@ -275,14 +275,15 @@ public final class AppState {
 
     private func buildSTTClient() -> (any STTClient)? {
         guard let endpoint = aiSettings.sttEndpoint(),
-              let apiKey = KeychainHelper.load(account: endpoint.apiKeyRef) else { return nil }
+              let apiKey = KeychainHelper.load(account: endpoint.apiKeyRef),
+              endpoint.sttModel != nil else { return nil }
         switch endpoint.apiProtocol {
         case .openAI:
             return OpenAISTTClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: endpoint.sttModel ?? "whisper-1")
         case .google:
             return GoogleSTTClient(baseURL: endpoint.baseURL, apiKey: apiKey)
         case .anthropic:
-            return nil // Anthropic doesn't offer STT
+            return nil
         }
     }
 
