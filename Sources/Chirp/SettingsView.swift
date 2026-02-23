@@ -70,7 +70,7 @@ struct ComboBoxField: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    final class Coordinator: NSObject, NSComboBoxDelegate, NSTextFieldDelegate {
+    @MainActor final class Coordinator: NSObject, NSComboBoxDelegate, NSTextFieldDelegate {
         var parent: ComboBoxField
 
         init(_ parent: ComboBoxField) { self.parent = parent }
