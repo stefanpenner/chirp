@@ -77,17 +77,18 @@ AppState delegates to a `TranscriptionPipeline` protocol instead of calling the 
 
 **OfflineTranscriptionPipeline** wraps the existing `Transcriber` + post-processor. In regex-only mode, it streams segments incrementally (existing behavior: text typed as you speak, speculative preview every 400ms). In LLM mode, it accumulates regex-cleaned segments internally, then runs the LLM on the full text during flush — no text is typed until the user releases the hotkey.
 
-**CloudTranscriptionPipeline** accumulates raw audio during recording (overlay shows "Listening..."), then sends it to a cloud STT service on flush. Post-processing (regex, LLM, or chained) runs after cloud STT returns. The overlay shows "Processing..." during the cloud call. No speculative preview in cloud mode.
+**CloudTranscriptionPipeline** accumulates raw audio during recording, then sends it to a cloud STT service on flush. Post-processing (regex, LLM, or chained) runs after cloud STT returns. The overlay shows "Processing..." during the cloud call. The pipeline also feeds the local transcriber in parallel for speculative preview — users see live local preview while recording, but the final typed text comes from the higher-quality cloud STT.
 
 Two boolean flags on AppState control UX behavior:
 - `pipelineTypesIncrementally` — true only for offline+regex (text typed during recording)
-- `pipelineSupportsPreview` — true only for offline+regex (speculative peek enabled)
+- `pipelineSupportsPreview` — true for offline modes and cloud mode (local transcriber provides peek in both cases)
 
 These are set by `rebuildPipeline()` when AI settings change.
 
 ### Post-Processing
 
-`TextPostProcessing` protocol with five implementations:
+`TextPostProcessing` protocol with six implementations:
+- **PassthroughPostProcessor** — no-op, returns text unchanged (for `.none` mode)
 - **RegexPostProcessor** — wraps existing `TextPostProcessor` (sub-ms, synchronous)
 - **LLMPostProcessor** — sends text to a cloud LLM for grammar/punctuation cleanup
 - **ChainedPostProcessor** — regex first, then cloud LLM refinement
@@ -114,17 +115,20 @@ The `baseURL` on each endpoint enables gateways: a company proxy at `https://ai.
 
 ```
 AISettings (persisted in UserDefaults as Codable blob)
-├── transcriptionMode: .offline | .cloud
-├── postProcessingMode: .regex | .llm | .regexThenLLM | .offlineLLM | .regexThenOfflineLLM
-├── sttEndpointID / llmEndpointID (UUID references)
-├── sttModel / llmModel / llmSystemPrompt (task-level config)
-└── endpoints: [APIEndpoint]
-        ├── apiProtocol: .openAI | .anthropic | .google
-        ├── baseURL (supports custom gateways)
-        └── apiKeyRef (Keychain account name, NOT raw key)
+├── endpoints: [APIEndpoint]          — shared provider pool
+│       ├── apiProtocol: .openAI | .anthropic | .google
+│       ├── baseURL (supports custom gateways)
+│       └── apiKeyRef (Keychain account name, NOT raw key)
+├── modes: [AIMode]                   — named pipeline presets
+│       ├── name: String
+│       ├── transcriptionMode: .offline | .cloud
+│       ├── postProcessingMode: .none | .regex | .llm | .regexThenLLM | .offlineLLM | .regexThenOfflineLLM
+│       ├── sttEndpointID / llmEndpointID (UUID references into endpoints)
+│       └── sttModel / llmModel / llmSystemPrompt (per-mode config)
+└── activeModeID: UUID?               — currently selected mode
 ```
 
-Model selection (STT model, LLM model, system prompt) lives on `AISettings` rather than on individual endpoints, since models are chosen per-task, not per-provider. Endpoints define only connectivity (protocol, URL, API key).
+Each **AIMode** is a self-contained pipeline preset with its own provider and model selections. Two defaults ship: "Offline" (local STT + regex) and "Offline + Fixup" (local STT + regex + offline T5 LLM). Users can create custom modes (e.g. "Cloud Dictation" with cloud STT + cloud LLM targeting specific providers). Endpoints define connectivity (protocol, URL, API key); modes reference endpoints by UUID. The custom decoder handles backward compatibility — old flat settings are replaced with defaults while preserving endpoints.
 
 API keys are stored in the macOS **Keychain** via `KeychainHelper`, never in UserDefaults.
 
@@ -176,7 +180,7 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 - **Loading state**: indeterminate spinner with model name and size
 - **needsModel state**: overlay hidden; menu shows "No model loaded" with download button
 - **Recording state**: animated sine-wave waveform driven by audio level
-- Committed text (white) + speculative text (gray), in an auto-scrolling ScrollView (maxHeight 120) for long transcriptions
+- Committed text (white, left-aligned) + speculative text (gray), in a dynamically growing ScrollView (measured via preference key, animated height, max 300pt) that keeps the text area visible mid-session
 - **Transcribing state**: shows "Finalizing..." (offline+regex) or "Processing..." (cloud/LLM)
 - Conic gradient glow border (active during recording, transcribing, and download)
 - Catppuccin-inspired color palette
@@ -184,12 +188,12 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 ## Settings
 
 `SettingsView` provides a tabbed settings window (opened via "Settings..." in the menu bar):
-- **AI tab**: transcription mode picker (offline/cloud) with inline STT model field, post-processing mode picker (regex/offline LLM/cloud LLM and chained variants) with T5 model status view (download/progress/ready/delete) or cloud LLM config (provider + model + system prompt), endpoint list with add/edit/delete
-- **Endpoint editor**: connectivity only — protocol picker, base URL, API key (stored in Keychain), enable/disable toggle
+- **Providers section**: endpoint list with add/edit/delete. **Endpoint editor** sheet: protocol picker, base URL, API key (stored in Keychain), enable/disable toggle
+- **AI Modes section**: list of named modes with radio selection (active indicator), edit/delete. **AI Mode editor** sheet: name, transcription source (offline/cloud with provider + model combo box), regex toggle, LLM toggle (cloud/offline engine, provider + model combo box, system prompt). Model combo boxes use `NSComboBox` (via `ComboBoxField` NSViewRepresentable) with protocol-aware suggestions
 
 `SettingsWindowController` manages the `NSWindow` lifecycle (single instance, bring-to-front on re-open).
 
-The menu bar shows an "AI Mode" label (e.g. "Cloud STT + LLM") when non-default modes are active.
+The menu bar shows an expandable "AI Mode" picker (same pattern as the microphone picker) listing all user-defined modes. Selecting a mode sets `activeModeID`, saves, and rebuilds the pipeline.
 
 ## Testing
 
@@ -231,7 +235,7 @@ The pipeline abstraction is transparent to existing tests: the default `OfflineT
 | `Providers/OpenAIProvider.swift` | OpenAI-compatible STT (Whisper) + LLM (GPT) |
 | `Providers/AnthropicProvider.swift` | Anthropic Messages API (LLM only) |
 | `Providers/GoogleProvider.swift` | Google Cloud Speech + Gemini |
-| `APIConfiguration.swift` | Data models: APIEndpoint, AISettings, Codable persistence |
+| `APIConfiguration.swift` | Data models: APIEndpoint, AIMode, AISettings, Codable persistence |
 | `KeychainHelper.swift` | Keychain CRUD for API keys |
 | `SettingsView.swift` | Settings window UI (AI tab, endpoint editor) |
 | `SettingsWindow.swift` | NSWindow management for Settings |
