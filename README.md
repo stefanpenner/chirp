@@ -1,8 +1,8 @@
 # Chirp
 
 
-**Free, Fast,  Offline voice-to-text for macOS.**
-Hold `fn`, speak, release — text appears at your cursor. All transcription runs on-device — no accounts, no servers, no data leaves your machine.
+**Free, Fast, Offline voice-to-text for macOS.**
+Hold `fn`, speak, release — text appears at your cursor. Works fully offline by default — no accounts, no servers, no data leaves your machine. Optionally connect cloud providers for higher-accuracy transcription and LLM post-processing.
 
 <img width="680" height="151" alt="chirp-0 3 16-transcribing" src="https://github.com/user-attachments/assets/a4cb6c75-6b77-486b-9aec-8ea2d688d453" />
 
@@ -29,10 +29,12 @@ bazel run //:Chirp       # build and launch
 <img width="310" height="257" alt="chirp-0 3 11-main" src="https://github.com/user-attachments/assets/de9c3483-3615-4f36-8415-998dc37e94cc" />
 
 
-- **Hold-to-talk** — Press `fn` (configurable) to record, release to transcribe, hotkey can be changed
+- **Hold-to-talk** — Press `fn` (configurable) to record, release to transcribe
 - **Works everywhere** — Text is typed at your cursor in any app
-- **Speculative preview** — See partial transcription as you speak
+- **Speculative preview** — See partial transcription as you speak (even in cloud mode)
 - **Fast** — Parakeet TDT 0.6b v2 with Silero VAD, all on-device
+- **AI Modes** — Named pipeline presets you can switch from the menu bar. Ships with "Offline" and "Offline + Fixup"; create your own with cloud STT, LLM post-processing, or any combination
+- **Cloud providers** — Optional support for OpenAI, Anthropic, and Google APIs (plus any OpenAI-compatible gateway like OpenRouter)
 - **Menu bar app** — No dock icon, no clutter
 - **Auto-updates** — Check for updates from the menu bar
 
@@ -88,7 +90,9 @@ Chirp needs internet access for the initial model download. If it fails, check y
 
 ## Privacy
 
-All transcription runs locally. Your audio is processed in memory and never recorded or stored. No telemetry, no tracking, no data leaves your machine. Other than downloading the open-source models, Chirp requires no network access.
+In the default "Offline" mode, all transcription runs locally. Your audio is processed in memory and never recorded or stored. No telemetry, no tracking, no data leaves your machine.
+
+When you opt into cloud AI modes, audio or text is sent to the provider you configure (OpenAI, Anthropic, Google, or a custom gateway). No data is sent unless you explicitly create and activate a cloud AI mode.
 
 ## Acknowledgments
 
