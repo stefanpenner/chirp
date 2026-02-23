@@ -110,6 +110,10 @@ final class ONNXSession: @unchecked Sendable {
     /// Run inference with named inputs. Returns outputs for the requested output names.
     func run(inputs: [ONNXTensor], outputNames: [String]) throws -> [ONNXTensor] {
         // Create input OrtValues
+        // Pin input data as NSData so pointers remain valid for the entire Run() call.
+        // CreateTensorWithDataAsOrtValue wraps the pointer without copying,
+        // so the underlying memory must stay alive until Run() completes.
+        var pinnedData: [NSData] = []
         var inputValues: [OpaquePointer?] = []
         var inputNamePtrs: [UnsafePointer<CChar>?] = []
         var inputNameStrings: [String] = []
@@ -118,7 +122,9 @@ final class ONNXSession: @unchecked Sendable {
         }
 
         for input in inputs {
-            let value = try createTensorValue(tensor: input)
+            let nsData = input.data as NSData
+            pinnedData.append(nsData)
+            let value = try createTensorValue(nsData: nsData, shape: input.shape, elementType: input.elementType)
             inputValues.append(value)
             inputNameStrings.append(input.name)
         }
@@ -179,7 +185,7 @@ final class ONNXSession: @unchecked Sendable {
 
     // MARK: - Private helpers
 
-    private func createTensorValue(tensor: ONNXTensor) throws -> OpaquePointer {
+    private func createTensorValue(nsData: NSData, shape: [Int64], elementType: ONNXElementType) throws -> OpaquePointer {
         // Create memory info for CPU
         var memInfo: OpaquePointer?
         let miStatus = api.pointee.CreateCpuMemoryInfo(
@@ -192,22 +198,22 @@ final class ONNXSession: @unchecked Sendable {
         }
         defer { if let memInfo { api.pointee.ReleaseMemoryInfo(memInfo) } }
 
-        var shape = tensor.shape
+        var shape = shape
         var value: OpaquePointer?
 
-        let createStatus = tensor.data.withUnsafeBytes { rawBuf -> OpaquePointer? in
-            // ORT doesn't mutate the data during inference, but the API takes void*
-            let mutPtr = UnsafeMutableRawPointer(mutating: rawBuf.baseAddress!)
-            return api.pointee.CreateTensorWithDataAsOrtValue(
-                memInfo,
-                mutPtr,
-                rawBuf.count,
-                &shape,
-                shape.count,
-                tensor.elementType.ortType,
-                &value
-            )
-        }
+        // NSData.bytes returns a pointer stable for the object's lifetime.
+        // The caller keeps the NSData alive (via pinnedData array) for the
+        // duration of the ORT Run() call.
+        let mutPtr = UnsafeMutableRawPointer(mutating: nsData.bytes)
+        let createStatus = api.pointee.CreateTensorWithDataAsOrtValue(
+            memInfo,
+            mutPtr,
+            nsData.length,
+            &shape,
+            shape.count,
+            elementType.ortType,
+            &value
+        )
 
         if let createStatus {
             let msg = Self.extractMessage(api: api, status: createStatus)

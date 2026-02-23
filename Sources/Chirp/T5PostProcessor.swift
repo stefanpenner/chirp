@@ -145,9 +145,17 @@ final class T5PostProcessor: TextPostProcessing, @unchecked Sendable {
                 elementType: .int64
             )
 
+            // Rename encoder output for decoder input
+            let encoderInput = ONNXTensor(
+                name: "encoder_hidden_states",
+                data: encoderHiddenStates.data,
+                shape: encoderHiddenStates.shape,
+                elementType: encoderHiddenStates.elementType
+            )
+
             // Run decoder
             let decoderOutputs = try decoder.run(
-                inputs: [decoderInputTensor, encoderHiddenStates, encoderMaskTensor],
+                inputs: [decoderInputTensor, encoderInput, encoderMaskTensor],
                 outputNames: ["logits"]
             )
 
