@@ -82,6 +82,47 @@ final class MockAudioRecorder: AudioRecording {
     }
 }
 
+actor MockSpeakerVerifier: SpeakerVerifying {
+    var verifyResult: Float = 1.0
+    var extractResult: [Float] = Array(repeating: 0, count: 192)
+    var loadCalled = false
+    var enrollCalled = false
+    var verifyCalled = false
+    var _hasReference = false
+
+    var hasReference: Bool { _hasReference }
+
+    func loadModel(path: String) throws {
+        loadCalled = true
+    }
+
+    func extractEmbedding(samples: [Float]) throws -> [Float] {
+        extractResult
+    }
+
+    func verify(samples: [Float]) throws -> Float {
+        verifyCalled = true
+        return verifyResult
+    }
+
+    func isMatch(samples: [Float], threshold: Float) throws -> Bool {
+        verifyCalled = true
+        return verifyResult >= threshold
+    }
+
+    func enroll(embeddings: [[Float]]) {
+        enrollCalled = true
+        _hasReference = true
+    }
+
+    func setReferenceEmbedding(_ embedding: [Float]?) {
+        _hasReference = embedding != nil
+    }
+
+    func setVerifyResult(_ value: Float) { verifyResult = value }
+    func setHasReference(_ value: Bool) { _hasReference = value }
+}
+
 @MainActor
 final class MockTextInserter: TextInserting {
     var accessibilityChecked = false

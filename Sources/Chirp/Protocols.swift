@@ -47,3 +47,13 @@ extension AudioRecording {
     func typeText(_ text: String)
     func deleteBackward(count: Int)
 }
+
+protocol SpeakerVerifying: Sendable {
+    func loadModel(path: String) async throws
+    func extractEmbedding(samples: [Float]) async throws -> [Float]
+    func verify(samples: [Float]) async throws -> Float
+    func isMatch(samples: [Float], threshold: Float) async throws -> Bool
+    func enroll(embeddings: [[Float]]) async
+    func setReferenceEmbedding(_ embedding: [Float]?) async
+    var hasReference: Bool { get async }
+}

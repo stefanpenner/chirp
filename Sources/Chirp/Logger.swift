@@ -12,4 +12,5 @@ enum Log {
     static let transcription = os.Logger(subsystem: subsystem, category: "transcription")
     static let cloud = os.Logger(subsystem: subsystem, category: "cloud")
     static let model = os.Logger(subsystem: subsystem, category: "model")
+    static let speaker = os.Logger(subsystem: subsystem, category: "speaker")
 }

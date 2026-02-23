@@ -22,6 +22,9 @@ hotkey press/release          microphone
           (sherpa-onnx)    │
                │           │
                ▼           ▼
+          SpeakerVerifier (optional gate)
+               │
+               ▼
           PostProcessing
         ┌───┬────┴────┬───────┬──────────┐
       Regex  LLM   Chained  OfflineLLM  ChainedOffline
@@ -33,7 +36,7 @@ hotkey press/release          microphone
         TextInserter ──→ keystrokes into focused app
 ```
 
-**AppState** orchestrates everything. **ModelManager** handles first-run ASR model download. All speech inference runs through the **CSherpaOnnx** C bridge to sherpa-onnx + onnxruntime dylibs. Optional cloud features use **STTClient** and **LLMClient** protocols with provider implementations for OpenAI, Anthropic, and Google. Offline post-processing uses **T5PostProcessor** which runs T5-small inference via the **COnnxRuntime** C bridge (same onnxruntime dylib, separate Swift module exposing the raw ORT C API).
+**AppState** orchestrates everything. **ModelManager** handles first-run ASR model download. All speech inference runs through the **CSherpaOnnx** C bridge to sherpa-onnx + onnxruntime dylibs. Optional cloud features use **STTClient** and **LLMClient** protocols with provider implementations for OpenAI, Anthropic, and Google. Offline post-processing uses **T5PostProcessor** which runs T5-small inference via the **COnnxRuntime** C bridge (same onnxruntime dylib, separate Swift module exposing the raw ORT C API). Optional **SpeakerVerifier** gates segments by comparing speaker embeddings against an enrolled reference via ECAPA-TDNN (~20 MB ONNX model).
 
 ## State Machine
 
@@ -78,6 +81,8 @@ AppState delegates to a `TranscriptionPipeline` protocol instead of calling the 
 **OfflineTranscriptionPipeline** wraps the existing `Transcriber` + post-processor. In regex-only mode, it streams segments incrementally (existing behavior: text typed as you speak, speculative preview every 400ms). In LLM mode, it accumulates regex-cleaned segments internally, then runs the LLM on the full text during flush — no text is typed until the user releases the hotkey.
 
 **CloudTranscriptionPipeline** accumulates raw audio during recording, then sends it to a cloud STT service on flush. Post-processing (regex, LLM, or chained) runs after cloud STT returns. The overlay shows "Processing..." during the cloud call. The pipeline also feeds the local transcriber in parallel for speculative preview — users see live local preview while recording, but the final typed text comes from the higher-quality cloud STT.
+
+Both pipeline implementations accept an optional `speakerVerifier` (conforming to `SpeakerVerifying`) and `speakerThreshold`. When a speaker is enrolled and verification is enabled, the pipeline gates each segment: in `OfflineTranscriptionPipeline`, accumulated audio is verified after transcription and rejected if the cosine similarity falls below the threshold; in `CloudTranscriptionPipeline`, the full accumulated audio is verified before sending to the cloud. On verification error, segments pass through (graceful degradation).
 
 Two boolean flags on AppState control UX behavior:
 - `pipelineTypesIncrementally` — true only for offline+regex (text typed during recording)
@@ -163,6 +168,8 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 
 `T5ModelManager` handles the optional T5-small model download (encoder_model.onnx, decoder_model.onnx, tokenizer.json — ~375 MB total from HuggingFace `optimum/t5-small`). Stored in `~/Library/Application Support/Chirp/models/t5-small-onnx/`. Downloads are triggered from the Settings UI, not on first launch. The model is only needed when offline LLM post-processing modes are selected.
 
+`SpeakerModelManager` handles the optional ECAPA-TDNN speaker embedding model download (`embedding_model.onnx` — ~20 MB from HuggingFace `speechbrain/spkrec-ecapa-voxceleb`). Stored in `~/Library/Application Support/Chirp/models/ecapa-tdnn/`. Download is triggered from the Speaker Verification section of the Audio settings tab. The model is only needed when speaker verification is enabled.
+
 ## Hotkey
 
 `HotkeyConfig` stores the configured hotkey: `keyCode`, `isModifier` flag, `modifierMask` (for modifier-only keys like fn), `requiredModifiers` (for key combos like ⌘⇧R), and a display `label`. Supports modifier-only keys (fn, Right ⌥), key combos (⌘Space), and plain keys (F5). Persisted in UserDefaults. Full ANSI keycode → label mapping for UI display.
@@ -188,7 +195,7 @@ Silero VAD is bundled in the app; only the ASR model is downloaded at runtime. F
 ## Settings
 
 `SettingsView` provides a tabbed settings window (opened via "Settings..." in the menu bar):
-- **Audio tab**: toggles for noise reduction (Apple Voice Processing IO) and silence gate (RMS energy gating). Both default to on, persisted in UserDefaults (`chirp.noiseReduction`, `chirp.silenceGate`). Toggling noise reduction while idle tears down and re-prepares the audio engine
+- **Audio tab**: toggles for noise reduction (Apple Voice Processing IO) and silence gate (RMS energy gating). Both default to on, persisted in UserDefaults (`chirp.noiseReduction`, `chirp.silenceGate`). Toggling noise reduction while idle tears down and re-prepares the audio engine. Speaker Verification section: enable toggle, model download status (`SpeakerModelStatusView`), enrollment flow (`SpeakerEnrollmentView` — 5 pangram phrases recorded via existing AudioRecorder), sensitivity slider (threshold 0.1–0.6). Enrollment data persisted as `SpeakerEnrollment` in UserDefaults (`chirp.speakerEnrollment`)
 - **AI tab**: Providers section (endpoint list with add/edit/delete, endpoint editor sheet: protocol picker, base URL, API key stored in Keychain, enable/disable toggle) and AI Modes section (list of named modes with radio selection, edit/delete, AI Mode editor sheet: name, transcription source, regex toggle, LLM toggle with cloud/offline engine, provider + model combo box, system prompt). Model combo boxes use `NSComboBox` (via `ComboBoxField` NSViewRepresentable) with protocol-aware suggestions
 
 `SettingsWindowController` manages the `NSWindow` lifecycle (single instance, bring-to-front on re-open).
@@ -197,7 +204,7 @@ The menu bar shows an expandable "AI Mode" picker (same pattern as the microphon
 
 ## Testing
 
-Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`) enables testing without hardware or ML models. Mock implementations live in `Tests/ChirpTests/Mocks.swift`. Tests use Swift Testing framework.
+Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`, `SpeakerVerifying`) enables testing without hardware or ML models. Mock implementations live in `Tests/ChirpTests/Mocks.swift` (`MockTranscriber`, `MockAudioRecorder`, `MockTextInserter`, `MockSpeakerVerifier`). Tests use Swift Testing framework.
 
 The pipeline abstraction is transparent to existing tests: the default `OfflineTranscriptionPipeline` wraps the injected `MockTranscriber` with `RegexPostProcessor`, preserving identical behavior. Cloud provider clients are tested via `MockURLProtocol` (custom `URLProtocol` subclass) injected through the `session` parameter, covering happy paths, error handling, and header verification across all five client types.
 
@@ -227,14 +234,14 @@ The pipeline abstraction is transparent to existing tests: the default `OfflineT
 |------|---------|
 | `ChirpApp.swift` | AppState state machine, pipeline management (public API for cross-module access) |
 | `Main.swift` | `@main` SwiftUI app entry point (window-style menu bar popover, AI mode label, Catppuccin theme) |
-| `Protocols.swift` | DI boundaries: TranscriberProtocol, AudioRecording, TextInserting |
+| `Protocols.swift` | DI boundaries: TranscriberProtocol, AudioRecording, TextInserting, SpeakerVerifying |
 | `TranscriptionPipeline.swift` | Pipeline protocol + Offline/Cloud implementations |
 | `TextPostProcessing.swift` | Post-processing protocol + Regex/LLM/Chained/OfflineLLM/ChainedOffline implementations |
 | `CloudSTT.swift` | STTClient protocol + WAV encoder |
 | `CloudLLM.swift` | LLMClient protocol |
 | `HTTPHelper.swift` | Shared HTTP request validation + JSON parsing for providers |
 | `RetryHelper.swift` | Exponential backoff retry for transient cloud API failures |
-| `Logger.swift` | Structured os.Logger categories (general, audio, transcription, cloud, model) |
+| `Logger.swift` | Structured os.Logger categories (general, audio, transcription, cloud, model, speaker) |
 | `Providers/OpenAIProvider.swift` | OpenAI-compatible STT (Whisper) + LLM (GPT) |
 | `Providers/AnthropicProvider.swift` | Anthropic Messages API (LLM only) |
 | `Providers/GoogleProvider.swift` | Google Cloud Speech + Gemini |
@@ -256,4 +263,7 @@ The pipeline abstraction is transparent to existing tests: the default `OfflineT
 | `T5Tokenizer.swift` | Pure-Swift SentencePiece Unigram tokenizer for T5 |
 | `T5ModelManager.swift` | T5 model download from HuggingFace, discovery, deletion |
 | `ONNXSession.swift` | Thin Swift wrapper around ORT C API (env, session, run) |
+| `SpeakerVerifier.swift` | ECAPA-TDNN actor: embedding extraction, cosine similarity, enrollment |
+| `SpeakerModelManager.swift` | Speaker model download from HuggingFace, discovery, deletion |
+| `SpeakerEnrollment.swift` | Speaker enrollment data persistence (UserDefaults) |
 | `AudioDucker.swift` | System volume duck/unduck during recording |

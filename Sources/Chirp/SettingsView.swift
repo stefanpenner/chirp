@@ -130,8 +130,302 @@ struct AudioSettingsTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Speaker Verification") {
+                Toggle("Enable speaker verification", isOn: Binding(
+                    get: { appState.speakerEnrollment.isEnabled },
+                    set: {
+                        appState.speakerEnrollment.isEnabled = $0
+                        appState.speakerEnrollment.save()
+                        appState.loadSpeakerVerifierIfNeeded()
+                    }
+                ))
+                Text("Only transcribe your voice. Other speakers are ignored during recording.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if appState.speakerEnrollment.isEnabled {
+                    SpeakerModelStatusView()
+                    SpeakerEnrollmentView(appState: appState)
+
+                    if appState.speakerEnrollment.isEnrolled {
+                        LabeledContent("Sensitivity") {
+                            HStack(spacing: 8) {
+                                Text("Strict")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Slider(value: Binding(
+                                    get: { appState.speakerEnrollment.threshold },
+                                    set: {
+                                        appState.speakerEnrollment.threshold = $0
+                                        appState.speakerEnrollment.save()
+                                        appState.rebuildPipeline()
+                                    }
+                                ), in: 0.1...0.6, step: 0.05)
+                                Text("Loose")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Speaker Model Status
+
+struct SpeakerModelStatusView: View {
+    enum ModelState {
+        case notDownloaded
+        case downloading(Double)
+        case ready
+        case error(String)
+    }
+
+    @State private var modelState: ModelState = .notDownloaded
+    @State private var manager: SpeakerModelManager?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            switch modelState {
+            case .notDownloaded:
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.down.circle")
+                        .foregroundStyle(.secondary)
+                    Text("Speaker model not downloaded (~20 MB)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Download") { startDownload() }
+                        .controlSize(.small)
+                }
+
+            case .downloading(let progress):
+                HStack(spacing: 8) {
+                    ProgressView(value: progress)
+                        .frame(width: 120)
+                    Text("\(Int(progress * 100))%")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                    Button("Cancel") { cancelDownload() }
+                        .controlSize(.small)
+                }
+
+            case .ready:
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("Speaker model ready")
+                        .font(.caption)
+                    Button(role: .destructive) { deleteModel() } label: {
+                        Image(systemName: "trash")
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderless)
+                }
+
+            case .error(let message):
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Retry") { startDownload() }
+                        .controlSize(.small)
+                }
+            }
+        }
+        .onAppear { checkModelState() }
+    }
+
+    private func checkModelState() {
+        modelState = SpeakerModelManager.isAvailable ? .ready : .notDownloaded
+    }
+
+    private func startDownload() {
+        modelState = .downloading(0)
+        manager = SpeakerModelManager(
+            onProgress: { progress in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self.modelState = .downloading(progress)
+                    }
+                }
+            },
+            onComplete: { result in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        switch result {
+                        case .success:
+                            self.modelState = .ready
+                        case .failure(let error):
+                            self.modelState = .error(error.localizedDescription)
+                        }
+                        self.manager = nil
+                    }
+                }
+            }
+        )
+        manager?.download()
+    }
+
+    private func cancelDownload() {
+        manager?.cancel()
+        manager = nil
+        modelState = .notDownloaded
+    }
+
+    private func deleteModel() {
+        try? SpeakerModelManager.deleteModel()
+        modelState = .notDownloaded
+    }
+}
+
+// MARK: - Speaker Enrollment
+
+private let enrollmentPhrases = [
+    "The quick brown fox jumps over the lazy dog",
+    "Pack my box with five dozen liquor jugs",
+    "She sells sea shells by the sea shore",
+    "How vexingly quick daft zebras jump",
+    "The five boxing wizards jump quickly",
+]
+
+struct SpeakerEnrollmentView: View {
+    @Bindable var appState: AppState
+    @State private var isEnrolling = false
+    @State private var currentPhraseIndex = 0
+    @State private var recordings: [[Float]] = []
+    @State private var isRecordingPhrase = false
+    @State private var currentSamples: [Float] = []
+    @State private var audioLevel: Float = 0
+    @State private var enrollmentComplete = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if appState.speakerEnrollment.isEnrolled && !isEnrolling {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("Voice enrolled (\(appState.speakerEnrollment.phraseCount) phrases)")
+                        .font(.caption)
+                    Button("Re-enroll") { startEnrollment() }
+                        .controlSize(.small)
+                    Button(role: .destructive) {
+                        appState.clearEnrollment()
+                    } label: {
+                        Text("Delete")
+                    }
+                    .controlSize(.small)
+                }
+            } else if isEnrolling {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Phrase \(currentPhraseIndex + 1) of \(enrollmentPhrases.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(enrollmentPhrases[currentPhraseIndex])
+                        .font(.system(size: 13))
+                        .italic()
+
+                    HStack(spacing: 8) {
+                        if isRecordingPhrase {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(.red.opacity(0.6))
+                                .frame(width: CGFloat(audioLevel) * 100, height: 4)
+                                .animation(.easeOut(duration: 0.1), value: audioLevel)
+                            Button("Stop") { stopPhrase() }
+                                .controlSize(.small)
+                        } else {
+                            Button("Record") { startPhrase() }
+                                .controlSize(.small)
+                        }
+                        Button("Cancel") { cancelEnrollment() }
+                            .controlSize(.small)
+                    }
+                }
+            } else if enrollmentComplete {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("Voice enrolled successfully!")
+                        .font(.caption)
+                }
+            } else if !SpeakerModelManager.isAvailable {
+                Text("Download the speaker model first to enroll your voice.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                HStack(spacing: 8) {
+                    Text("Record your voice to enable speaker verification.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Enroll Voice") { startEnrollment() }
+                        .controlSize(.small)
+                }
+            }
+        }
+    }
+
+    private func startEnrollment() {
+        guard SpeakerModelManager.isAvailable else { return }
+        isEnrolling = true
+        currentPhraseIndex = 0
+        recordings.removeAll()
+        enrollmentComplete = false
+        // Ensure verifier is loaded for enrollment
+        appState.loadSpeakerVerifierIfNeeded()
+    }
+
+    private func startPhrase() {
+        currentSamples.removeAll()
+        isRecordingPhrase = true
+        appState.audioRecorder.startRecording { samples in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.currentSamples.append(contentsOf: samples)
+                    let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
+                    self.audioLevel = min(rms * 6, 1)
+                }
+            }
+        }
+    }
+
+    private func stopPhrase() {
+        appState.audioRecorder.stopRecording()
+        isRecordingPhrase = false
+        audioLevel = 0
+        recordings.append(currentSamples)
+        currentSamples.removeAll()
+
+        if currentPhraseIndex + 1 < enrollmentPhrases.count {
+            currentPhraseIndex += 1
+        } else {
+            finishEnrollment()
+        }
+    }
+
+    private func finishEnrollment() {
+        isEnrolling = false
+        let recs = recordings
+        Task {
+            await appState.enrollSpeaker(recordings: recs)
+            enrollmentComplete = true
+        }
+    }
+
+    private func cancelEnrollment() {
+        if isRecordingPhrase {
+            appState.audioRecorder.stopRecording()
+        }
+        isEnrolling = false
+        isRecordingPhrase = false
+        recordings.removeAll()
+        currentSamples.removeAll()
+        audioLevel = 0
     }
 }
 

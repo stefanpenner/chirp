@@ -42,19 +42,55 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
     let postProcessor: any TextPostProcessing
     let usesLLM: Bool
     private var accumulatedText: [String] = []
+    private let speakerVerifier: (any SpeakerVerifying)?
+    private let speakerThreshold: Float
+    private var recentAudio: [Float] = []
+    private static let maxRecentSamples = 16000 * 15  // 15s at 16kHz
 
-    init(transcriber: any TranscriberProtocol, postProcessor: any TextPostProcessing = RegexPostProcessor()) {
+    init(
+        transcriber: any TranscriberProtocol,
+        postProcessor: any TextPostProcessing = RegexPostProcessor(),
+        speakerVerifier: (any SpeakerVerifying)? = nil,
+        speakerThreshold: Float = 0.25
+    ) {
         self.transcriber = transcriber
         self.postProcessor = postProcessor
         self.usesLLM = !(postProcessor is RegexPostProcessor)
+        self.speakerVerifier = speakerVerifier
+        self.speakerThreshold = speakerThreshold
     }
 
     func feedAudio(samples: [Float]) async -> [String] {
+        // Accumulate recent audio for speaker verification
+        if speakerVerifier != nil {
+            recentAudio.append(contentsOf: samples)
+            if recentAudio.count > Self.maxRecentSamples {
+                recentAudio.removeFirst(recentAudio.count - Self.maxRecentSamples)
+            }
+        }
+
         let segments = await transcriber.feedAudio(samples: samples)
         var results: [String] = []
         for raw in segments {
             let text = TextPostProcessor.process(raw)
             guard !text.isEmpty else { continue }
+
+            // Speaker verification gate
+            if let verifier = speakerVerifier, await verifier.hasReference {
+                let audioToVerify = recentAudio
+                recentAudio.removeAll()
+                do {
+                    let match = try await verifier.isMatch(samples: audioToVerify, threshold: speakerThreshold)
+                    if !match {
+                        Log.speaker.info("Segment rejected: speaker mismatch")
+                        continue
+                    }
+                } catch {
+                    // Graceful degradation: pass through on error
+                    Log.speaker.error("Speaker verification failed, passing through: \(error.localizedDescription)")
+                }
+            }
+
             if usesLLM { accumulatedText.append(text) }
             results.append(text)
         }
@@ -92,6 +128,7 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
 
     func resetVAD() async {
         accumulatedText.removeAll()
+        recentAudio.removeAll()
         await transcriber.resetVAD()
     }
 }
@@ -108,11 +145,21 @@ actor CloudTranscriptionPipeline: TranscriptionPipeline {
     let localTranscriber: any TranscriberProtocol
     private var accumulatedSamples: [Float] = []
     private let sampleRate = 16000
+    private let speakerVerifier: (any SpeakerVerifying)?
+    private let speakerThreshold: Float
 
-    init(sttClient: any STTClient, postProcessor: any TextPostProcessing = RegexPostProcessor(), localTranscriber: any TranscriberProtocol) {
+    init(
+        sttClient: any STTClient,
+        postProcessor: any TextPostProcessing = RegexPostProcessor(),
+        localTranscriber: any TranscriberProtocol,
+        speakerVerifier: (any SpeakerVerifying)? = nil,
+        speakerThreshold: Float = 0.25
+    ) {
         self.sttClient = sttClient
         self.postProcessor = postProcessor
         self.localTranscriber = localTranscriber
+        self.speakerVerifier = speakerVerifier
+        self.speakerThreshold = speakerThreshold
     }
 
     func feedAudio(samples: [Float]) async -> [String] {
@@ -133,6 +180,19 @@ actor CloudTranscriptionPipeline: TranscriptionPipeline {
 
         defer { accumulatedSamples.removeAll() }
         guard !accumulatedSamples.isEmpty else { return "" }
+
+        // Speaker verification gate: check accumulated audio before sending to cloud
+        if let verifier = speakerVerifier, await verifier.hasReference {
+            do {
+                let match = try await verifier.isMatch(samples: accumulatedSamples, threshold: speakerThreshold)
+                if !match {
+                    Log.speaker.info("Cloud flush rejected: speaker mismatch")
+                    return ""
+                }
+            } catch {
+                Log.speaker.error("Speaker verification failed in cloud flush, passing through: \(error.localizedDescription)")
+            }
+        }
 
         let client = sttClient
         let samples = accumulatedSamples

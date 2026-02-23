@@ -88,6 +88,12 @@ public final class AppState {
     /// Cloud AI configuration (endpoints, modes). Persisted to UserDefaults.
     public var aiSettings: AISettings = AISettings()
 
+    // MARK: - Speaker Verification
+
+    /// Speaker enrollment data (reference embedding, threshold). Persisted to UserDefaults.
+    public var speakerEnrollment: SpeakerEnrollment = SpeakerEnrollment()
+    private var speakerVerifier: SpeakerVerifier?
+
     /// Whether Apple Voice Processing IO is enabled for noise suppression.
     public var noiseReductionEnabled: Bool = true {
         didSet {
@@ -128,6 +134,7 @@ public final class AppState {
             ModelManager.findExisting() != nil
         }
         self.aiSettings = .saved
+        self.speakerEnrollment = .saved
 
         // Load audio processing settings from UserDefaults
         let defaults = UserDefaults.standard
@@ -138,6 +145,7 @@ public final class AppState {
         audioRecorder.voiceProcessingEnabled = nr
         audioRecorder.silenceGateThreshold = sg ? 0.007 : 0
 
+        loadSpeakerVerifierIfNeeded()
         rebuildPipeline()
 
         overlayPanel = OverlayPanel(appState: self)
@@ -260,7 +268,8 @@ public final class AppState {
         }
         pipelineNeedsRebuild = false
         guard let mode = aiSettings.activeMode else {
-            pipeline = OfflineTranscriptionPipeline(transcriber: transcriber)
+            let verifier: (any SpeakerVerifying)? = (speakerEnrollment.isEnabled && speakerEnrollment.isEnrolled) ? speakerVerifier : nil
+            pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, speakerVerifier: verifier, speakerThreshold: speakerEnrollment.threshold)
             pipelineTypesIncrementally = true
             pipelineSupportsPreview = true
             return
@@ -269,18 +278,22 @@ public final class AppState {
         let postProcessor = buildPostProcessor(for: mode)
         let actuallyUsesLLM = !(postProcessor is RegexPostProcessor || postProcessor is PassthroughPostProcessor)
 
+        // Speaker verification: pass verifier to pipeline when enabled + enrolled
+        let verifier: (any SpeakerVerifying)? = (speakerEnrollment.isEnabled && speakerEnrollment.isEnrolled) ? speakerVerifier : nil
+        let threshold = speakerEnrollment.threshold
+
         switch mode.transcriptionMode {
         case .offline:
-            pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, postProcessor: postProcessor)
+            pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, postProcessor: postProcessor, speakerVerifier: verifier, speakerThreshold: threshold)
             pipelineTypesIncrementally = !actuallyUsesLLM
             pipelineSupportsPreview = true
         case .cloud:
             if let sttClient = buildSTTClient(for: mode) {
-                pipeline = CloudTranscriptionPipeline(sttClient: sttClient, postProcessor: postProcessor, localTranscriber: transcriber)
+                pipeline = CloudTranscriptionPipeline(sttClient: sttClient, postProcessor: postProcessor, localTranscriber: transcriber, speakerVerifier: verifier, speakerThreshold: threshold)
                 pipelineTypesIncrementally = false
                 pipelineSupportsPreview = true
             } else {
-                pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, postProcessor: postProcessor)
+                pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, postProcessor: postProcessor, speakerVerifier: verifier, speakerThreshold: threshold)
                 pipelineTypesIncrementally = !actuallyUsesLLM
                 pipelineSupportsPreview = true
             }
@@ -346,6 +359,77 @@ public final class AppState {
         case .anthropic:
             return nil
         }
+    }
+
+    // MARK: - Speaker Verification Lifecycle
+
+    /// Load speaker verifier if enrollment is enabled and model is available.
+    func loadSpeakerVerifierIfNeeded() {
+        guard speakerEnrollment.isEnabled,
+              speakerEnrollment.isEnrolled,
+              let modelPath = SpeakerModelManager.findExisting() else {
+            speakerVerifier = nil
+            return
+        }
+        let verifier = SpeakerVerifier()
+        speakerVerifier = verifier
+        Task {
+            do {
+                try await verifier.loadModel(path: modelPath)
+                if let ref = speakerEnrollment.referenceEmbedding {
+                    await verifier.setReferenceEmbedding(ref)
+                }
+                rebuildPipeline()
+                Log.speaker.info("Speaker verifier loaded and ready")
+            } catch {
+                Log.speaker.error("Failed to load speaker verifier: \(error.localizedDescription)")
+                speakerVerifier = nil
+            }
+        }
+    }
+
+    /// Enroll the user's voice from multiple recordings.
+    public func enrollSpeaker(recordings: [[Float]]) async {
+        guard let verifier = speakerVerifier else {
+            Log.speaker.error("Cannot enroll: speaker verifier not loaded")
+            return
+        }
+        var embeddings: [[Float]] = []
+        for recording in recordings {
+            do {
+                let emb = try await verifier.extractEmbedding(samples: recording)
+                embeddings.append(emb)
+            } catch {
+                Log.speaker.error("Failed to extract embedding during enrollment: \(error.localizedDescription)")
+            }
+        }
+        guard !embeddings.isEmpty else { return }
+        await verifier.enroll(embeddings: embeddings)
+        // Average the embeddings to store as reference
+        let dim = embeddings[0].count
+        var avg = [Float](repeating: 0, count: dim)
+        for emb in embeddings {
+            for i in 0..<min(dim, emb.count) { avg[i] += emb[i] }
+        }
+        let n = Float(embeddings.count)
+        for i in 0..<dim { avg[i] /= n }
+        let ref = SpeakerVerifier.l2Normalize(avg)
+
+        speakerEnrollment.referenceEmbedding = ref
+        speakerEnrollment.phraseCount = recordings.count
+        speakerEnrollment.enrolledAt = Date()
+        speakerEnrollment.save()
+        rebuildPipeline()
+    }
+
+    /// Clear enrollment data and disable speaker verification.
+    public func clearEnrollment() {
+        speakerEnrollment.referenceEmbedding = nil
+        speakerEnrollment.phraseCount = 0
+        speakerEnrollment.enrolledAt = nil
+        speakerEnrollment.save()
+        Task { await speakerVerifier?.setReferenceEmbedding(nil) }
+        rebuildPipeline()
     }
 
     /// Tear down and re-prepare the recorder when not recording (needed for voice processing mode change).
