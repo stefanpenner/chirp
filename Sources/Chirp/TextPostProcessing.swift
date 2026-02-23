@@ -14,6 +14,12 @@ protocol TextPostProcessing: Sendable {
     func process(_ text: String) async throws -> String
 }
 
+// MARK: - Passthrough (no-op)
+
+struct PassthroughPostProcessor: TextPostProcessing {
+    func process(_ text: String) async throws -> String { text }
+}
+
 // MARK: - Regex (wraps existing TextPostProcessor)
 
 struct RegexPostProcessor: TextPostProcessing {

@@ -114,6 +114,7 @@ struct SettingsView: View {
 struct AISettingsTab: View {
     @Bindable var appState: AppState
     @State private var editingEndpoint: APIEndpoint?
+    @State private var editingMode: AIMode?
 
     var body: some View {
         Form {
@@ -140,97 +141,25 @@ struct AISettingsTab: View {
                 .buttonStyle(.borderless)
             }
 
-            // --- Transcription ---
-            Section("Transcription") {
-                Picker(selection: $appState.aiSettings.transcriptionMode) {
-                    Text("Offline (local)").tag(TranscriptionMode.offline)
-                    Text("Cloud").tag(TranscriptionMode.cloud)
+            // --- AI Modes ---
+            Section("AI Modes") {
+                ForEach(appState.aiSettings.modes) { mode in
+                    AIModeRow(
+                        mode: mode,
+                        isActive: appState.aiSettings.activeModeID == mode.id,
+                        onSelect: { appState.aiSettings.activeModeID = mode.id },
+                        onEdit: { editingMode = mode },
+                        onDelete: { deleteMode(mode) },
+                        canDelete: appState.aiSettings.modes.count > 1
+                    )
+                }
+
+                Button {
+                    editingMode = AIMode(name: "")
                 } label: {
-                    EmptyView()
+                    Label("Add AI Mode", systemImage: "plus")
                 }
-                .pickerStyle(.radioGroup)
-                Text("Offline runs on this Mac with no internet. Cloud sends audio to an API for higher accuracy.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if appState.aiSettings.transcriptionMode == .cloud {
-                    Picker("Provider", selection: $appState.aiSettings.sttEndpointID) {
-                        Text("None").tag(nil as UUID?)
-                        ForEach(sttCapableEndpoints) { endpoint in
-                            Text(endpoint.name).tag(endpoint.id as UUID?)
-                        }
-                    }
-                    .padding(.leading, 20)
-                    if sttCapableEndpoints.isEmpty {
-                        Text("Add a provider above first")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 20)
-                    }
-                    if appState.aiSettings.sttEndpointID != nil {
-                        ComboBoxField(
-                            items: sttModels(for: selectedSTTEndpoint?.apiProtocol),
-                            text: sttModelBinding,
-                            placeholder: "e.g. whisper-1"
-                        )
-                        .frame(height: 24)
-                        .padding(.leading, 20)
-                    }
-                }
-            }
-
-            // --- Post-Processing ---
-            Section("Post-Processing") {
-                Picker(selection: $appState.aiSettings.postProcessingMode) {
-                    Text("Regex only").tag(PostProcessingMode.regex)
-                    Text("Offline LLM (T5)").tag(PostProcessingMode.offlineLLM)
-                    Text("Regex then Offline LLM").tag(PostProcessingMode.regexThenOfflineLLM)
-                    Text("Cloud LLM").tag(PostProcessingMode.llm)
-                    Text("Regex then Cloud LLM").tag(PostProcessingMode.regexThenLLM)
-                } label: {
-                    EmptyView()
-                }
-                .pickerStyle(.radioGroup)
-                Text("Regex applies pattern-based fixes. Offline LLM runs T5-small locally (no internet). Cloud LLM sends text to an API.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if appState.aiSettings.postProcessingMode == .offlineLLM ||
-                   appState.aiSettings.postProcessingMode == .regexThenOfflineLLM {
-                    T5ModelStatusView()
-                        .padding(.leading, 20)
-                }
-
-                if appState.aiSettings.postProcessingMode == .llm ||
-                   appState.aiSettings.postProcessingMode == .regexThenLLM {
-                    Picker("Provider", selection: $appState.aiSettings.llmEndpointID) {
-                        Text("None").tag(nil as UUID?)
-                        ForEach(llmCapableEndpoints) { endpoint in
-                            Text(endpoint.name).tag(endpoint.id as UUID?)
-                        }
-                    }
-                    .padding(.leading, 20)
-                    if llmCapableEndpoints.isEmpty {
-                        Text("Add a provider above first")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 20)
-                    }
-                    if appState.aiSettings.llmEndpointID != nil {
-                        ComboBoxField(
-                            items: llmModels(for: selectedLLMEndpoint?.apiProtocol),
-                            text: llmModelBinding,
-                            placeholder: "e.g. gpt-4o-mini"
-                        )
-                        .frame(height: 24)
-                        .padding(.leading, 20)
-                        TextEditor(text: systemPromptBinding)
-                            .frame(minHeight: 80)
-                            .scrollDisabled(true)
-                            .font(.system(size: 12, design: .monospaced))
-                            .padding(.leading, 20)
-                    }
-                }
+                .buttonStyle(.borderless)
             }
         }
         .formStyle(.grouped)
@@ -249,46 +178,21 @@ struct AISettingsTab: View {
                 editingEndpoint = nil
             }
         }
+        .sheet(item: $editingMode) { mode in
+            AIModeEditorView(
+                mode: mode,
+                endpoints: appState.aiSettings.endpoints,
+                isNew: !appState.aiSettings.modes.contains(where: { $0.id == mode.id })
+            ) { saved in
+                saveMode(saved)
+                editingMode = nil
+            } onCancel: {
+                editingMode = nil
+            }
+        }
     }
 
-    private var sttModelBinding: Binding<String> {
-        Binding(
-            get: { appState.aiSettings.sttModel ?? "" },
-            set: { appState.aiSettings.sttModel = $0.isEmpty ? nil : $0 }
-        )
-    }
-
-    private var llmModelBinding: Binding<String> {
-        Binding(
-            get: { appState.aiSettings.llmModel ?? "" },
-            set: { appState.aiSettings.llmModel = $0.isEmpty ? nil : $0 }
-        )
-    }
-
-    private var systemPromptBinding: Binding<String> {
-        Binding(
-            get: { appState.aiSettings.llmSystemPrompt ?? LLMPostProcessor.defaultSystemPrompt },
-            set: { appState.aiSettings.llmSystemPrompt = $0 }
-        )
-    }
-
-    private var sttCapableEndpoints: [APIEndpoint] {
-        appState.aiSettings.endpoints.filter { $0.isEnabled }
-    }
-
-    private var llmCapableEndpoints: [APIEndpoint] {
-        appState.aiSettings.endpoints.filter { $0.isEnabled }
-    }
-
-    private var selectedSTTEndpoint: APIEndpoint? {
-        guard let id = appState.aiSettings.sttEndpointID else { return nil }
-        return appState.aiSettings.endpoints.first { $0.id == id }
-    }
-
-    private var selectedLLMEndpoint: APIEndpoint? {
-        guard let id = appState.aiSettings.llmEndpointID else { return nil }
-        return appState.aiSettings.endpoints.first { $0.id == id }
-    }
+    // MARK: - Endpoint helpers
 
     private func saveEndpoint(_ endpoint: APIEndpoint) {
         if let idx = appState.aiSettings.endpoints.firstIndex(where: { $0.id == endpoint.id }) {
@@ -301,12 +205,289 @@ struct AISettingsTab: View {
     private func deleteEndpoint(_ endpoint: APIEndpoint) {
         appState.aiSettings.endpoints.removeAll { $0.id == endpoint.id }
         KeychainHelper.delete(account: endpoint.apiKeyRef)
-        if appState.aiSettings.sttEndpointID == endpoint.id {
-            appState.aiSettings.sttEndpointID = nil
+        // Clear references in any mode that used this endpoint
+        for i in appState.aiSettings.modes.indices {
+            if appState.aiSettings.modes[i].sttEndpointID == endpoint.id {
+                appState.aiSettings.modes[i].sttEndpointID = nil
+            }
+            if appState.aiSettings.modes[i].llmEndpointID == endpoint.id {
+                appState.aiSettings.modes[i].llmEndpointID = nil
+            }
         }
-        if appState.aiSettings.llmEndpointID == endpoint.id {
-            appState.aiSettings.llmEndpointID = nil
+    }
+
+    // MARK: - Mode helpers
+
+    private func saveMode(_ mode: AIMode) {
+        if let idx = appState.aiSettings.modes.firstIndex(where: { $0.id == mode.id }) {
+            appState.aiSettings.modes[idx] = mode
+        } else {
+            appState.aiSettings.modes.append(mode)
+            // Auto-select if it's the only mode
+            if appState.aiSettings.modes.count == 1 {
+                appState.aiSettings.activeModeID = mode.id
+            }
         }
+    }
+
+    private func deleteMode(_ mode: AIMode) {
+        guard appState.aiSettings.modes.count > 1 else { return }
+        appState.aiSettings.modes.removeAll { $0.id == mode.id }
+        if appState.aiSettings.activeModeID == mode.id {
+            appState.aiSettings.activeModeID = appState.aiSettings.modes.first?.id
+        }
+    }
+}
+
+// MARK: - AI Mode Row
+
+private struct AIModeRow: View {
+    let mode: AIMode
+    let isActive: Bool
+    let onSelect: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    let canDelete: Bool
+
+    var body: some View {
+        HStack {
+            Button(action: onSelect) {
+                Image(systemName: isActive ? "circle.inset.filled" : "circle")
+                    .foregroundStyle(isActive ? cBlue : .secondary)
+                    .font(.system(size: 14))
+            }
+            .buttonStyle(.borderless)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(mode.name)
+                    .font(.system(size: 13, weight: .medium))
+                Text(modeSummary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Edit", action: onEdit)
+                .buttonStyle(.borderless)
+            if canDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+    }
+
+    private var modeSummary: String {
+        var parts: [String] = []
+        parts.append(mode.transcriptionMode == .cloud ? "Cloud STT" : "Offline")
+        switch mode.postProcessingMode {
+        case .none: break
+        case .regex: parts.append("Regex")
+        case .llm: parts.append("Cloud LLM")
+        case .regexThenLLM: parts.append("Regex + Cloud LLM")
+        case .offlineLLM: parts.append("Offline LLM")
+        case .regexThenOfflineLLM: parts.append("Regex + Offline LLM")
+        }
+        return parts.joined(separator: " · ")
+    }
+}
+
+// MARK: - AI Mode Editor
+
+struct AIModeEditorView: View {
+    @State var mode: AIMode
+    let endpoints: [APIEndpoint]
+    let isNew: Bool
+    let onSave: (AIMode) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    TextField("Name", text: $mode.name, prompt: Text("e.g. Cloud Dictation"))
+                }
+
+                Section("Transcription") {
+                    Picker("Source", selection: $mode.transcriptionMode) {
+                        Text("Offline").tag(TranscriptionMode.offline)
+                        Text("Cloud").tag(TranscriptionMode.cloud)
+                    }
+
+                    if mode.transcriptionMode == .cloud {
+                        Picker("Provider", selection: $mode.sttEndpointID) {
+                            Text("None").tag(nil as UUID?)
+                            ForEach(enabledEndpoints) { endpoint in
+                                Text(endpoint.name).tag(endpoint.id as UUID?)
+                            }
+                        }
+                        .padding(.leading, 20)
+                        if mode.sttEndpointID != nil {
+                            LabeledContent("Model") {
+                                ComboBoxField(
+                                    items: sttModels(for: selectedSTTEndpoint?.apiProtocol),
+                                    text: sttModelBinding,
+                                    placeholder: "e.g. whisper-1"
+                                )
+                                .frame(height: 24)
+                            }
+                            .padding(.leading, 20)
+                        }
+                    }
+                }
+
+                Section("Post-Processing") {
+                    Toggle("Apply regex cleanup", isOn: regexEnabledBinding)
+
+                    Toggle("LLM post-processing", isOn: llmEnabledBinding)
+
+                    if isLLMEnabled {
+                        Picker("Engine", selection: llmOfflineBinding) {
+                            Text("Cloud").tag(false)
+                            Text("Offline (T5)").tag(true)
+                        }
+                        .padding(.leading, 20)
+
+                        if isLLMOffline {
+                            T5ModelStatusView()
+                                .padding(.leading, 20)
+                        } else {
+                            Picker("Provider", selection: $mode.llmEndpointID) {
+                                Text("None").tag(nil as UUID?)
+                                ForEach(enabledEndpoints) { endpoint in
+                                    Text(endpoint.name).tag(endpoint.id as UUID?)
+                                }
+                            }
+                            .padding(.leading, 20)
+                            if mode.llmEndpointID != nil {
+                                LabeledContent("Model") {
+                                    ComboBoxField(
+                                        items: llmModels(for: selectedLLMEndpoint?.apiProtocol),
+                                        text: llmModelBinding,
+                                        placeholder: "e.g. gpt-4o-mini"
+                                    )
+                                    .frame(height: 24)
+                                }
+                                .padding(.leading, 20)
+                            }
+                        }
+
+                        LabeledContent("System prompt") {
+                            TextEditor(text: systemPromptBinding)
+                                .frame(minHeight: 60)
+                                .scrollDisabled(true)
+                                .font(.system(size: 12, design: .monospaced))
+                        }
+                        .padding(.leading, 20)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                Button(isNew ? "Add" : "Save") { onSave(mode) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(mode.name.isEmpty)
+            }
+            .padding()
+        }
+        .frame(width: 500, height: 480)
+    }
+
+    // MARK: - Derived post-processing state
+
+    private var isRegexEnabled: Bool {
+        switch mode.postProcessingMode {
+        case .regex, .regexThenLLM, .regexThenOfflineLLM: return true
+        case .none, .llm, .offlineLLM: return false
+        }
+    }
+
+    private var isLLMEnabled: Bool {
+        switch mode.postProcessingMode {
+        case .llm, .regexThenLLM, .offlineLLM, .regexThenOfflineLLM: return true
+        case .none, .regex: return false
+        }
+    }
+
+    private var isLLMOffline: Bool {
+        switch mode.postProcessingMode {
+        case .offlineLLM, .regexThenOfflineLLM: return true
+        default: return false
+        }
+    }
+
+    private func resolvedMode(regex: Bool, llm: Bool, offline: Bool) -> PostProcessingMode {
+        switch (regex, llm, offline) {
+        case (false, false, _):     return .none
+        case (true,  false, _):     return .regex
+        case (false, true,  false): return .llm
+        case (true,  true,  false): return .regexThenLLM
+        case (false, true,  true):  return .offlineLLM
+        case (true,  true,  true):  return .regexThenOfflineLLM
+        }
+    }
+
+    private var regexEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isRegexEnabled },
+            set: { mode.postProcessingMode = resolvedMode(regex: $0, llm: isLLMEnabled, offline: isLLMOffline) }
+        )
+    }
+
+    private var llmEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isLLMEnabled },
+            set: { mode.postProcessingMode = resolvedMode(regex: isRegexEnabled, llm: $0, offline: isLLMOffline) }
+        )
+    }
+
+    private var llmOfflineBinding: Binding<Bool> {
+        Binding(
+            get: { isLLMOffline },
+            set: { mode.postProcessingMode = resolvedMode(regex: isRegexEnabled, llm: true, offline: $0) }
+        )
+    }
+
+    // MARK: - Model bindings
+
+    private var sttModelBinding: Binding<String> {
+        Binding(
+            get: { mode.sttModel ?? "" },
+            set: { mode.sttModel = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    private var llmModelBinding: Binding<String> {
+        Binding(
+            get: { mode.llmModel ?? "" },
+            set: { mode.llmModel = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    private var systemPromptBinding: Binding<String> {
+        Binding(
+            get: { mode.llmSystemPrompt ?? LLMPostProcessor.defaultSystemPrompt },
+            set: { mode.llmSystemPrompt = $0 }
+        )
+    }
+
+    // MARK: - Endpoint helpers
+
+    private var enabledEndpoints: [APIEndpoint] {
+        endpoints.filter { $0.isEnabled }
+    }
+
+    private var selectedSTTEndpoint: APIEndpoint? {
+        guard let id = mode.sttEndpointID else { return nil }
+        return endpoints.first { $0.id == id }
+    }
+
+    private var selectedLLMEndpoint: APIEndpoint? {
+        guard let id = mode.llmEndpointID else { return nil }
+        return endpoints.first { $0.id == id }
     }
 }
 

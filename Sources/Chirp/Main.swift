@@ -20,6 +20,7 @@ struct ChirpApp: App {
     @State private var appState = AppState()
     @State private var hotkeyRecorder = InlineHotkeyRecorder()
     @State private var isMicPickerExpanded = false
+    @State private var isAIPickerExpanded = false
 
     var body: some Scene {
         MenuBarExtra("Chirp", systemImage: "waveform") {
@@ -60,38 +61,67 @@ struct ChirpApp: App {
         return "v\(version) (\(build))"
     }
 
-    // MARK: - AI Mode Label
+    // MARK: - AI Mode Picker
+
+    private var activeModeLabel: String {
+        appState.aiSettings.activeMode?.name ?? "Offline"
+    }
 
     @ViewBuilder
     private var aiModeLabel: some View {
-        let mode = appState.aiSettings.transcriptionMode
-        let pp = appState.aiSettings.postProcessingMode
-        if mode != .offline || pp != .regex {
+        SectionDivider()
+
+        Button {
+            if appState.aiSettings.modes.count > 1 {
+                isAIPickerExpanded.toggle()
+            }
+        } label: {
             HStack {
                 Text("AI Mode")
                     .font(.system(size: 13))
                     .foregroundColor(.primary.opacity(0.7))
                 Spacer()
-                Text(aiModeText(mode: mode, pp: pp))
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundColor(cBlue.opacity(0.8))
+                Text(activeModeLabel)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundColor(.primary.opacity(0.4))
+                    .lineLimit(1)
+                if appState.aiSettings.modes.count > 1 {
+                    Image(systemName: isAIPickerExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.primary.opacity(0.3))
+                }
             }
+            .contentShape(Rectangle())
             .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
         }
-    }
+        .buttonStyle(MenuRowStyle())
 
-    private func aiModeText(mode: TranscriptionMode, pp: PostProcessingMode) -> String {
-        var parts: [String] = []
-        if mode == .cloud { parts.append("Cloud STT") }
-        switch pp {
-        case .regex: break
-        case .llm: parts.append("LLM")
-        case .regexThenLLM: parts.append("Regex+LLM")
-        case .offlineLLM: parts.append("Offline LLM")
-        case .regexThenOfflineLLM: parts.append("Regex+Offline LLM")
+        if isAIPickerExpanded {
+            ForEach(appState.aiSettings.modes) { mode in
+                Button {
+                    appState.aiSettings.activeModeID = mode.id
+                    appState.aiSettings.save()
+                    appState.rebuildPipeline()
+                    isAIPickerExpanded = false
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(appState.aiSettings.activeModeID == mode.id ? cBlue : .clear)
+                            .frame(width: 14)
+                        Text(mode.name)
+                            .font(.system(size: 13))
+                            .foregroundColor(.primary.opacity(0.7))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(MenuRowStyle())
+            }
         }
-        return parts.joined(separator: " + ")
     }
 
     // MARK: - Microphone Section

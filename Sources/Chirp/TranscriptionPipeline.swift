@@ -91,29 +91,38 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
 // MARK: - Cloud Pipeline
 
 /// Accumulates audio during recording, then sends to a cloud STT service on flush.
-/// No incremental text during recording — overlay shows "Listening...".
+/// No incremental text during recording — text typed once after cloud returns.
+/// Uses the local transcriber in parallel for speculative preview during recording.
 /// Post-processing (regex, LLM, or chained) runs after cloud STT returns.
 actor CloudTranscriptionPipeline: TranscriptionPipeline {
     let sttClient: any STTClient
     let postProcessor: any TextPostProcessing
+    let localTranscriber: any TranscriberProtocol
     private var accumulatedSamples: [Float] = []
     private let sampleRate = 16000
 
-    init(sttClient: any STTClient, postProcessor: any TextPostProcessing = RegexPostProcessor()) {
+    init(sttClient: any STTClient, postProcessor: any TextPostProcessing = RegexPostProcessor(), localTranscriber: any TranscriberProtocol) {
         self.sttClient = sttClient
         self.postProcessor = postProcessor
+        self.localTranscriber = localTranscriber
     }
 
     func feedAudio(samples: [Float]) async -> [String] {
         accumulatedSamples.append(contentsOf: samples)
-        return [] // No incremental results in cloud mode
+        // Feed local transcriber for preview — discard segments (cloud handles final text)
+        _ = await localTranscriber.feedAudio(samples: samples)
+        return []
     }
 
     func peekTranscription() async -> String? {
-        nil // No speculative preview in cloud mode
+        guard let raw = await localTranscriber.peekTranscription() else { return nil }
+        return TextPostProcessor.process(raw)
     }
 
     func flush() async -> String {
+        // Flush local transcriber (discard result — it was only for preview)
+        _ = await localTranscriber.flush()
+
         defer { accumulatedSamples.removeAll() }
         guard !accumulatedSamples.isEmpty else { return "" }
 
@@ -133,5 +142,6 @@ actor CloudTranscriptionPipeline: TranscriptionPipeline {
 
     func resetVAD() async {
         accumulatedSamples.removeAll()
+        await localTranscriber.resetVAD()
     }
 }

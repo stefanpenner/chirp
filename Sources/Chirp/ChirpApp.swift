@@ -220,24 +220,30 @@ public final class AppState {
 
     // MARK: - Pipeline management
 
-    /// Rebuild the transcription pipeline from current aiSettings.
+    /// Rebuild the transcription pipeline from the active AI mode.
     /// Called when AI settings change in the Settings UI.
     public func rebuildPipeline() {
-        let postProcessor = buildPostProcessor()
-        let actuallyUsesLLM = !(postProcessor is RegexPostProcessor)
+        guard let mode = aiSettings.activeMode else {
+            pipeline = OfflineTranscriptionPipeline(transcriber: transcriber)
+            pipelineTypesIncrementally = true
+            pipelineSupportsPreview = true
+            return
+        }
 
-        switch aiSettings.transcriptionMode {
+        let postProcessor = buildPostProcessor(for: mode)
+        let actuallyUsesLLM = !(postProcessor is RegexPostProcessor || postProcessor is PassthroughPostProcessor)
+
+        switch mode.transcriptionMode {
         case .offline:
             pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, postProcessor: postProcessor)
             pipelineTypesIncrementally = !actuallyUsesLLM
-            pipelineSupportsPreview = true  // local inference is fast — always preview
+            pipelineSupportsPreview = true
         case .cloud:
-            if let sttClient = buildSTTClient() {
-                pipeline = CloudTranscriptionPipeline(sttClient: sttClient, postProcessor: postProcessor)
+            if let sttClient = buildSTTClient(for: mode) {
+                pipeline = CloudTranscriptionPipeline(sttClient: sttClient, postProcessor: postProcessor, localTranscriber: transcriber)
                 pipelineTypesIncrementally = false
-                pipelineSupportsPreview = false
+                pipelineSupportsPreview = true
             } else {
-                // No valid STT endpoint — fall back to offline
                 pipeline = OfflineTranscriptionPipeline(transcriber: transcriber, postProcessor: postProcessor)
                 pipelineTypesIncrementally = !actuallyUsesLLM
                 pipelineSupportsPreview = true
@@ -245,17 +251,19 @@ public final class AppState {
         }
     }
 
-    private func buildPostProcessor() -> any TextPostProcessing {
-        switch aiSettings.postProcessingMode {
+    private func buildPostProcessor(for mode: AIMode) -> any TextPostProcessing {
+        switch mode.postProcessingMode {
+        case .none:
+            return PassthroughPostProcessor()
         case .regex:
             return RegexPostProcessor()
         case .llm:
-            guard let client = buildLLMClient() else { return RegexPostProcessor() }
-            return LLMPostProcessor(client: client, systemPrompt: aiSettings.llmSystemPrompt)
+            guard let client = buildLLMClient(for: mode) else { return RegexPostProcessor() }
+            return LLMPostProcessor(client: client, systemPrompt: mode.llmSystemPrompt)
         case .regexThenLLM:
-            guard let client = buildLLMClient() else { return RegexPostProcessor() }
+            guard let client = buildLLMClient(for: mode) else { return RegexPostProcessor() }
             return ChainedPostProcessor(
-                llm: LLMPostProcessor(client: client, systemPrompt: aiSettings.llmSystemPrompt)
+                llm: LLMPostProcessor(client: client, systemPrompt: mode.llmSystemPrompt)
             )
         case .offlineLLM:
             guard let t5 = buildT5PostProcessor() else { return RegexPostProcessor() }
@@ -271,10 +279,10 @@ public final class AppState {
         return try? T5PostProcessor(modelDir: modelDir)
     }
 
-    private func buildLLMClient() -> (any LLMClient)? {
-        guard let endpoint = aiSettings.llmEndpoint(),
+    private func buildLLMClient(for mode: AIMode) -> (any LLMClient)? {
+        guard let endpoint = aiSettings.endpoint(for: mode.llmEndpointID),
               let apiKey = KeychainHelper.load(account: endpoint.apiKeyRef),
-              let model = aiSettings.llmModel, !model.isEmpty else { return nil }
+              let model = mode.llmModel, !model.isEmpty else { return nil }
         switch endpoint.apiProtocol {
         case .openAI:
             return OpenAILLMClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: model)
@@ -285,10 +293,10 @@ public final class AppState {
         }
     }
 
-    private func buildSTTClient() -> (any STTClient)? {
-        guard let endpoint = aiSettings.sttEndpoint(),
+    private func buildSTTClient(for mode: AIMode) -> (any STTClient)? {
+        guard let endpoint = aiSettings.endpoint(for: mode.sttEndpointID),
               let apiKey = KeychainHelper.load(account: endpoint.apiKeyRef),
-              let model = aiSettings.sttModel, !model.isEmpty else { return nil }
+              let model = mode.sttModel, !model.isEmpty else { return nil }
         switch endpoint.apiProtocol {
         case .openAI:
             return OpenAISTTClient(baseURL: endpoint.baseURL, apiKey: apiKey, model: model)
