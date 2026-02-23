@@ -7,6 +7,7 @@
 // startRecording/stopRecording only install/remove the tap — near-instant.
 
 @preconcurrency import AVFoundation
+import Accelerate
 import CoreAudio
 
 @MainActor
@@ -19,9 +20,18 @@ final class AudioRecorder: AudioRecording {
     private var configObserver: (any NSObjectProtocol)?
     private var parkTimer: Timer?
     private let audioDucker = AudioDucker()
+    /// Suppresses the next config-change notification (fired by setVoiceProcessingEnabled).
+    private var ignoreNextConfigChange = false
 
     /// The device ID to use for recording, or nil for the system default.
     var selectedDeviceID: AudioDeviceID?
+
+    /// When true, enables Apple Voice Processing IO for noise suppression, AEC, and AGC.
+    var voiceProcessingEnabled: Bool = true
+
+    /// RMS threshold below which audio buffers are dropped as silence.
+    /// Set to 0 to disable the gate.
+    var silenceGateThreshold: Float = 0.007
 
     func requestMicrophoneAccess() async -> Bool {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -65,6 +75,19 @@ final class AudioRecorder: AudioRecording {
         }
 
         let inputNode = engine.inputNode
+
+        if voiceProcessingEnabled {
+            do {
+                // setVoiceProcessingEnabled fires AVAudioEngineConfigurationChange;
+                // suppress that to avoid a tearDown/prepare cycle that crashes.
+                ignoreNextConfigChange = true
+                try inputNode.setVoiceProcessingEnabled(true)
+            } catch {
+                ignoreNextConfigChange = false
+                NSLog("Chirp: Failed to enable voice processing: %@", error.localizedDescription)
+            }
+        }
+
         let inFormat = inputNode.outputFormat(forBus: 0)
 
         guard let tgtFormat = AVAudioFormat(
@@ -77,8 +100,20 @@ final class AudioRecorder: AudioRecording {
             return
         }
 
-        guard let conv = AVAudioConverter(from: inFormat, to: tgtFormat) else {
-            NSLog("Chirp: Failed to create audio converter (%@ → %@)", inFormat.description, tgtFormat.description)
+        // VP may expose multiple internal channels (e.g. 9 ch on some Macs).
+        // The converter source must be mono — we extract channel 0 in the tap block.
+        let convSource: AVAudioFormat
+        if inFormat.channelCount > 1, let mono = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32, sampleRate: inFormat.sampleRate,
+            channels: 1, interleaved: false
+        ) {
+            convSource = mono
+        } else {
+            convSource = inFormat
+        }
+
+        guard let conv = AVAudioConverter(from: convSource, to: tgtFormat) else {
+            NSLog("Chirp: Failed to create audio converter (%@ → %@)", convSource.description, tgtFormat.description)
             return
         }
 
@@ -99,8 +134,16 @@ final class AudioRecorder: AudioRecording {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.tearDown()
-                self?.prepare()
+                guard let self else { return }
+                if self.ignoreNextConfigChange {
+                    self.ignoreNextConfigChange = false
+                    // VP-triggered config change: the engine is valid but the
+                    // format may have updated. Re-read and rebuild the converter.
+                    self.rebuildConverter()
+                    return
+                }
+                self.tearDown()
+                self.prepare()
             }
         }
     }
@@ -123,6 +166,7 @@ final class AudioRecorder: AudioRecording {
             targetFormat: targetFormat,
             inputSampleRate: inputSampleRate,
             outputRate: rate,
+            silenceGateThreshold: silenceGateThreshold,
             onSamples: onSamples
         )
         if !engine.isRunning {
@@ -146,6 +190,7 @@ final class AudioRecorder: AudioRecording {
         targetFormat: AVAudioFormat,
         inputSampleRate: Double,
         outputRate: Double,
+        silenceGateThreshold: Float,
         onSamples: @escaping @Sendable ([Float]) -> Void
     ) -> @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void {
         return { buffer, _ in
@@ -153,6 +198,24 @@ final class AudioRecorder: AudioRecording {
                 Double(buffer.frameLength) * outputRate / inputSampleRate
             )
             guard frameCount > 0 else { return }
+
+            // VP may expose multiple internal channels. Extract channel 0
+            // (the voice channel) into a mono buffer for conversion.
+            let source: AVAudioPCMBuffer
+            if buffer.format.channelCount > 1 {
+                guard let monoFmt = AVAudioFormat(
+                    commonFormat: .pcmFormatFloat32, sampleRate: buffer.format.sampleRate,
+                    channels: 1, interleaved: false
+                ),
+                let mono = AVAudioPCMBuffer(pcmFormat: monoFmt, frameCapacity: buffer.frameLength),
+                let src = buffer.floatChannelData?[0],
+                let dst = mono.floatChannelData?[0] else { return }
+                mono.frameLength = buffer.frameLength
+                memcpy(dst, src, Int(buffer.frameLength) * MemoryLayout<Float>.size)
+                source = mono
+            } else {
+                source = buffer
+            }
 
             guard let convertedBuffer = AVAudioPCMBuffer(
                 pcmFormat: targetFormat,
@@ -162,19 +225,26 @@ final class AudioRecorder: AudioRecording {
             var error: NSError?
             converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
                 outStatus.pointee = .haveData
-                return buffer
+                return source
             }
 
             if error != nil { return }
 
-            if let channelData = convertedBuffer.floatChannelData {
-                let count = Int(convertedBuffer.frameLength)
-                let chunk = Array(UnsafeBufferPointer(
-                    start: channelData[0],
-                    count: count
-                ))
-                onSamples(chunk)
+            guard let channelData = convertedBuffer.floatChannelData else { return }
+            let count = Int(convertedBuffer.frameLength)
+
+            // Energy gate: drop buffers below RMS threshold
+            if silenceGateThreshold > 0 {
+                var rms: Float = 0
+                vDSP_rmsqv(channelData[0], 1, &rms, vDSP_Length(count))
+                if rms < silenceGateThreshold { return }
             }
+
+            let chunk = Array(UnsafeBufferPointer(
+                start: channelData[0],
+                count: count
+            ))
+            onSamples(chunk)
         }
     }
 
@@ -202,6 +272,28 @@ final class AudioRecorder: AudioRecording {
         parkTimer = nil
         audioEngine?.stop()
         audioEngine?.prepare()
+    }
+
+    /// Re-reads the input format and rebuilds the converter without tearing down the engine.
+    /// Used after VP config changes where the engine is still valid.
+    private func rebuildConverter() {
+        guard let engine = audioEngine, let tgtFormat = targetFormat else { return }
+        let newFormat = engine.inputNode.outputFormat(forBus: 0)
+        let convSource: AVAudioFormat
+        if newFormat.channelCount > 1, let mono = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32, sampleRate: newFormat.sampleRate,
+            channels: 1, interleaved: false
+        ) {
+            convSource = mono
+        } else {
+            convSource = newFormat
+        }
+        guard let conv = AVAudioConverter(from: convSource, to: tgtFormat) else {
+            NSLog("Chirp: Failed to rebuild converter after config change (%@ → %@)", convSource.description, tgtFormat.description)
+            return
+        }
+        self.converter = conv
+        self.inputFormat = newFormat
     }
 
     func selectInputDevice(_ deviceID: AudioDeviceID?) {

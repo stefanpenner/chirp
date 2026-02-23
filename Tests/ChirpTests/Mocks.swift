@@ -60,6 +60,8 @@ final class MockAudioRecorder: AudioRecording {
     var lastOnSamples: (([Float]) -> Void)?
     var prepareCalled = false
     var microphoneAccessGranted = true
+    var voiceProcessingEnabled: Bool = false
+    var silenceGateThreshold: Float = 0
 
     func requestMicrophoneAccess() async -> Bool {
         microphoneAccessGranted

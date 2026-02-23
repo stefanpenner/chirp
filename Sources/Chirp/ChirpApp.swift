@@ -53,7 +53,7 @@ public final class AppState {
     public var transcribedText: String = ""
     public var speculativeText: String = ""
     public var audioLevel: Float = 0
-    let audioRecorder: any AudioRecording
+    private(set) var audioRecorder: any AudioRecording
     private(set) var transcriber: any TranscriberProtocol
     let textInserter: any TextInserting
     public var downloadNudge: Bool = false
@@ -88,6 +88,23 @@ public final class AppState {
     /// Cloud AI configuration (endpoints, modes). Persisted to UserDefaults.
     public var aiSettings: AISettings = AISettings()
 
+    /// Whether Apple Voice Processing IO is enabled for noise suppression.
+    public var noiseReductionEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(noiseReductionEnabled, forKey: "chirp.noiseReduction")
+            audioRecorder.voiceProcessingEnabled = noiseReductionEnabled
+            reprepareRecorderIfIdle()
+        }
+    }
+
+    /// Whether the RMS silence gate is enabled.
+    public var silenceGateEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(silenceGateEnabled, forKey: "chirp.silenceGate")
+            audioRecorder.silenceGateThreshold = silenceGateEnabled ? 0.007 : 0
+        }
+    }
+
     /// Settings window controller. Created lazily on first showSettings().
     var settingsWindowController: SettingsWindowController?
 
@@ -111,6 +128,16 @@ public final class AppState {
             ModelManager.findExisting() != nil
         }
         self.aiSettings = .saved
+
+        // Load audio processing settings from UserDefaults
+        let defaults = UserDefaults.standard
+        let nr = defaults.object(forKey: "chirp.noiseReduction") as? Bool ?? true
+        let sg = defaults.object(forKey: "chirp.silenceGate") as? Bool ?? true
+        noiseReductionEnabled = nr
+        silenceGateEnabled = sg
+        audioRecorder.voiceProcessingEnabled = nr
+        audioRecorder.silenceGateThreshold = sg ? 0.007 : 0
+
         rebuildPipeline()
 
         overlayPanel = OverlayPanel(appState: self)
@@ -319,6 +346,15 @@ public final class AppState {
         case .anthropic:
             return nil
         }
+    }
+
+    /// Tear down and re-prepare the recorder when not recording (needed for voice processing mode change).
+    private func reprepareRecorderIfIdle() {
+        switch status {
+        case .recording, .transcribing: return
+        default: break
+        }
+        audioRecorder.selectInputDevice(inputDeviceManager.selectedDeviceID)
     }
 
     // MARK: - Settings

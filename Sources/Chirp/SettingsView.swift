@@ -101,11 +101,37 @@ struct SettingsView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
+            AudioSettingsTab(appState: appState)
+                .tabItem { Label("Audio", systemImage: "waveform") }
+                .tag("Audio")
             AISettingsTab(appState: appState)
                 .tabItem { Label("AI", systemImage: "cpu") }
                 .tag("AI")
         }
         .frame(width: 520, height: 480)
+    }
+}
+
+// MARK: - Audio Settings Tab
+
+struct AudioSettingsTab: View {
+    @Bindable var appState: AppState
+
+    var body: some View {
+        Form {
+            Section("Audio Processing") {
+                Toggle("Noise reduction", isOn: Bindable(appState).noiseReductionEnabled)
+                Text("Uses Apple Voice Processing for noise suppression, echo cancellation, and automatic gain control.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Silence gate", isOn: Bindable(appState).silenceGateEnabled)
+                Text("Drops quiet audio buffers before they reach the transcription pipeline, reducing false positives.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

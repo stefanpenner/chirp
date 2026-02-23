@@ -24,12 +24,22 @@ protocol TranscriberProtocol: Sendable {
     func startRecording(onSamples: @escaping @Sendable ([Float]) -> Void)
     func stopRecording()
     func selectInputDevice(_ deviceID: AudioDeviceID?)
+    var voiceProcessingEnabled: Bool { get set }
+    var silenceGateThreshold: Float { get set }
 }
 
 extension AudioRecording {
     func prepare() {}
     func requestMicrophoneAccess() async -> Bool { true }
     func selectInputDevice(_ deviceID: AudioDeviceID?) {}
+    var voiceProcessingEnabled: Bool {
+        get { false }
+        set {}
+    }
+    var silenceGateThreshold: Float {
+        get { 0 }
+        set {}
+    }
 }
 
 @MainActor protocol TextInserting {
