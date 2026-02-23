@@ -135,16 +135,24 @@ public struct AISettings: Codable, Sendable, Equatable {
     private static let userDefaultsKey = "chirp.aiSettings"
 
     public static var saved: AISettings {
-        guard let data = UserDefaults.standard.data(forKey: userDefaultsKey),
-              let settings = try? JSONDecoder().decode(AISettings.self, from: data) else {
+        guard let data = UserDefaults.standard.data(forKey: userDefaultsKey) else {
             return AISettings()
         }
-        return settings
+        do {
+            return try JSONDecoder().decode(AISettings.self, from: data)
+        } catch {
+            Log.general.error("Failed to decode AISettings, using defaults: \(error.localizedDescription)")
+            return AISettings()
+        }
     }
 
     public func save() {
-        guard let data = try? JSONEncoder().encode(self) else { return }
-        UserDefaults.standard.set(data, forKey: Self.userDefaultsKey)
+        do {
+            let data = try JSONEncoder().encode(self)
+            UserDefaults.standard.set(data, forKey: Self.userDefaultsKey)
+        } catch {
+            Log.general.error("Failed to encode AISettings: \(error.localizedDescription)")
+        }
     }
 
     // MARK: Active Mode

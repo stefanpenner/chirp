@@ -1080,6 +1080,66 @@ struct AppStateTests {
         #expect(state.transcribedText == "Hi")
         #expect(recorder.isRecording)
     }
+
+    // MARK: - Pipeline rebuild guard
+
+    @Test("rebuildPipeline deferred during recording")
+    func rebuildPipelineDeferredDuringRecording() async throws {
+        let mock = MockTranscriber()
+        await mock.setFlushResult("")
+        let recorder = MockAudioRecorder()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder)
+
+        state.status = .ready
+        state.startRecording()
+        guard case .recording = state.status else {
+            Issue.record("Expected .recording")
+            return
+        }
+
+        // Calling rebuildPipeline during recording should defer
+        state.rebuildPipeline()
+
+        // Stop and wait for ready
+        state.stopRecording()
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if case .ready = state.status { break }
+        }
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready, got \(state.status)")
+            return
+        }
+        // Pipeline was rebuilt after session ended (no crash, state is clean)
+    }
+
+    @Test("rebuildPipeline deferred during recording and applied after cancel")
+    func rebuildPipelineDeferredDuringRecordingCancel() async throws {
+        let mock = MockTranscriber()
+        await mock.setFlushResult("")
+        let recorder = MockAudioRecorder()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder)
+
+        state.status = .ready
+        state.startRecording()
+        guard case .recording = state.status else {
+            Issue.record("Expected .recording")
+            return
+        }
+
+        // Calling rebuildPipeline during recording should defer
+        state.rebuildPipeline()
+
+        // Cancel session
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready, got \(state.status)")
+            return
+        }
+        // Pipeline was rebuilt after cancel (no crash, state is clean)
+    }
 }
 
 // Helper extension for setting mock values

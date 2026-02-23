@@ -365,7 +365,7 @@ final class HotkeyManager {
             },
             userInfo: nil
         ) else {
-            NSLog("Chirp: Failed to create event tap — check Accessibility permissions")
+            Log.general.error("Failed to create event tap — check Accessibility permissions")
             if accessibilityPoller == nil {
                 startAccessibilityPoller()
             }

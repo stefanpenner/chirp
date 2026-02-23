@@ -7,11 +7,13 @@ struct AnthropicLLMClient: LLMClient, Sendable {
     let baseURL: URL
     let apiKey: String
     let model: String
+    let session: URLSession
 
-    init(baseURL: URL, apiKey: String, model: String = "claude-sonnet-4-6-20250514") {
+    init(baseURL: URL, apiKey: String, model: String = "claude-sonnet-4-6-20250514", session: URLSession = .shared) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.model = model
+        self.session = session
     }
 
     func complete(system: String, user: String) async throws -> String {
@@ -35,18 +37,14 @@ struct AnthropicLLMClient: LLMClient, Sendable {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw LLMError.invalidResponse
-        }
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? ""
-            throw LLMError.httpError(statusCode: httpResponse.statusCode, body: errorBody)
+        let data = try await HTTPHelper.performRequest(request, session: session) { code, body in
+            LLMError.httpError(statusCode: code, body: body)
         }
 
+        let json = try HTTPHelper.parseJSON(data) { LLMError.invalidResponse }
+
         // Parse Anthropic response: {"content": [{"type": "text", "text": "..."}]}
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let content = json["content"] as? [[String: Any]],
+        guard let content = json["content"] as? [[String: Any]],
               let first = content.first,
               let text = first["text"] as? String else {
             throw LLMError.invalidResponse

@@ -75,8 +75,16 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
             let fullText = accumulatedText.joined(separator: " ")
             accumulatedText.removeAll()
             guard !fullText.isEmpty else { return "" }
-            // Run LLM post-processing on full text, fallback to regex-cleaned text
-            return (try? await postProcessor.process(fullText)) ?? fullText
+            // Run LLM post-processing on full text with retry, fallback to regex-cleaned text
+            let processor = postProcessor
+            do {
+                return try await RetryHelper.withRetry {
+                    try await processor.process(fullText)
+                }
+            } catch {
+                Log.cloud.error("LLM post-processing failed, using regex-cleaned text: \(error.localizedDescription)")
+                return fullText
+            }
         } else {
             return remaining
         }
@@ -126,16 +134,26 @@ actor CloudTranscriptionPipeline: TranscriptionPipeline {
         defer { accumulatedSamples.removeAll() }
         guard !accumulatedSamples.isEmpty else { return "" }
 
+        let client = sttClient
+        let samples = accumulatedSamples
+        let rate = sampleRate
+        let processor = postProcessor
         do {
-            let raw = try await sttClient.transcribe(samples: accumulatedSamples, sampleRate: sampleRate)
-            // Try full post-processing, fall back to regex on LLM error
+            let raw = try await RetryHelper.withRetry {
+                try await client.transcribe(samples: samples, sampleRate: rate)
+            }
+            // Try full post-processing with retry, fall back to regex on LLM error
             do {
-                return try await postProcessor.process(raw)
+                return try await RetryHelper.withRetry {
+                    try await processor.process(raw)
+                }
             } catch {
+                Log.cloud.error("Post-processing failed, falling back to regex: \(error.localizedDescription)")
                 return TextPostProcessor.process(raw)
             }
         } catch {
-            // Cloud STT failed — no fallback
+            // Cloud STT failed — log and return empty
+            Log.cloud.error("Cloud STT failed: \(error.localizedDescription)")
             return ""
         }
     }

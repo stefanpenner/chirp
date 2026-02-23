@@ -10,11 +10,13 @@ struct OpenAISTTClient: STTClient, Sendable {
     let baseURL: URL
     let apiKey: String
     let model: String
+    let session: URLSession
 
-    init(baseURL: URL, apiKey: String, model: String = "whisper-1") {
+    init(baseURL: URL, apiKey: String, model: String = "whisper-1", session: URLSession = .shared) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.model = model
+        self.session = session
     }
 
     func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
@@ -49,18 +51,14 @@ struct OpenAISTTClient: STTClient, Sendable {
 
         request.httpBody = body
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw STTError.invalidResponse
-        }
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? ""
-            throw STTError.httpError(statusCode: httpResponse.statusCode, body: errorBody)
+        let data = try await HTTPHelper.performRequest(request, session: session) { code, body in
+            STTError.httpError(statusCode: code, body: body)
         }
 
+        let json = try HTTPHelper.parseJSON(data) { STTError.invalidResponse }
+
         // Parse {"text": "..."}
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let text = json["text"] as? String else {
+        guard let text = json["text"] as? String else {
             throw STTError.invalidResponse
         }
 
@@ -74,11 +72,13 @@ struct OpenAILLMClient: LLMClient, Sendable {
     let baseURL: URL
     let apiKey: String
     let model: String
+    let session: URLSession
 
-    init(baseURL: URL, apiKey: String, model: String = "gpt-4o-mini") {
+    init(baseURL: URL, apiKey: String, model: String = "gpt-4o-mini", session: URLSession = .shared) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.model = model
+        self.session = session
     }
 
     func complete(system: String, user: String) async throws -> String {
@@ -101,17 +101,13 @@ struct OpenAILLMClient: LLMClient, Sendable {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw LLMError.invalidResponse
-        }
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? ""
-            throw LLMError.httpError(statusCode: httpResponse.statusCode, body: errorBody)
+        let data = try await HTTPHelper.performRequest(request, session: session) { code, body in
+            LLMError.httpError(statusCode: code, body: body)
         }
 
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
+        let json = try HTTPHelper.parseJSON(data) { LLMError.invalidResponse }
+
+        guard let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
               let message = first["message"] as? [String: Any],
               let content = message["content"] as? String else {

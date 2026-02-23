@@ -151,6 +151,13 @@ swift_test(
 )
 
 swift_test(
+    name = "ProviderTests",
+    srcs = ["Tests/ChirpTests/ProviderTests.swift"],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+)
+
+swift_test(
     name = "T5Tests",
     srcs = [
         "Tests/ChirpTests/T5TokenizerTests.swift",

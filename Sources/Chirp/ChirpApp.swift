@@ -68,6 +68,7 @@ public final class AppState {
     private var nudgeTask: Task<Void, Never>?
     private var audioConsumerTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<[Float]>.Continuation?
+    private var pipelineNeedsRebuild = false
 
     // MARK: - Pipeline
 
@@ -223,6 +224,14 @@ public final class AppState {
     /// Rebuild the transcription pipeline from the active AI mode.
     /// Called when AI settings change in the Settings UI.
     public func rebuildPipeline() {
+        switch status {
+        case .recording, .transcribing:
+            pipelineNeedsRebuild = true
+            return
+        default:
+            break
+        }
+        pipelineNeedsRebuild = false
         guard let mode = aiSettings.activeMode else {
             pipeline = OfflineTranscriptionPipeline(transcriber: transcriber)
             pipelineTypesIncrementally = true
@@ -276,7 +285,12 @@ public final class AppState {
 
     private func buildT5PostProcessor() -> T5PostProcessor? {
         guard let modelDir = T5ModelManager.findExisting() else { return nil }
-        return try? T5PostProcessor(modelDir: modelDir)
+        do {
+            return try T5PostProcessor(modelDir: modelDir)
+        } catch {
+            Log.model.error("Failed to initialize T5 post-processor: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     private func buildLLMClient(for mode: AIMode) -> (any LLMClient)? {
@@ -475,6 +489,9 @@ public final class AppState {
             }
             self.status = .ready
             self.overlayPanel?.hideOverlay()
+            if self.pipelineNeedsRebuild {
+                self.rebuildPipeline()
+            }
         }
     }
 
@@ -539,5 +556,8 @@ public final class AppState {
         hotkeyManager?.sessionActive = false
         status = .ready
         overlayPanel?.hideOverlay()
+        if pipelineNeedsRebuild {
+            rebuildPipeline()
+        }
     }
 }
