@@ -83,7 +83,7 @@ Two boolean flags on AppState control UX behavior:
 - `pipelineTypesIncrementally` — true only for offline+regex (text typed during recording)
 - `pipelineSupportsPreview` — true for offline modes and cloud mode (local transcriber provides peek in both cases)
 
-These are set by `rebuildPipeline()` when AI settings change.
+These are set by `rebuildPipeline()` when AI settings change. If settings change during an active recording/transcribing session, the rebuild is deferred (`pipelineNeedsRebuild` flag) and applied automatically when the session ends (natural flush or ESC cancel).
 
 ### Post-Processing
 
@@ -95,7 +95,7 @@ These are set by `rebuildPipeline()` when AI settings change.
 - **OfflineLLMPostProcessor** — runs T5-small locally via ONNX Runtime (no internet needed)
 - **ChainedOfflinePostProcessor** — regex first, then offline T5 refinement
 
-On LLM error (cloud or offline), the pipeline silently falls back to regex-only output.
+On LLM error (cloud or offline), the pipeline logs the failure via `Log.cloud` and falls back to regex-only output. Cloud API calls (STT and LLM post-processing) are wrapped with `RetryHelper.withRetry` — up to 3 attempts with exponential backoff (1s, 2s, 4s + jitter) for transient failures (URLError, HTTP 429, HTTP 5xx). Non-transient errors (noAPIKey, invalidResponse) fail immediately.
 
 ### Cloud Providers
 
@@ -109,7 +109,7 @@ Implementations:
 └── GoogleProvider    — STT (Cloud Speech) + LLM (Gemini)
 ```
 
-The `baseURL` on each endpoint enables gateways: a company proxy at `https://ai.internal.corp/v1` speaking OpenAI protocol works out of the box. OpenRouter and other OpenAI-compatible services work the same way.
+All providers share HTTP request/response boilerplate via `HTTPHelper` (status code validation, JSON parsing). Each provider accepts an injectable `URLSession` (default `.shared`) for testability. The `baseURL` on each endpoint enables gateways: a company proxy at `https://ai.internal.corp/v1` speaking OpenAI protocol works out of the box. OpenRouter and other OpenAI-compatible services work the same way.
 
 ### API Configuration
 
@@ -199,7 +199,7 @@ The menu bar shows an expandable "AI Mode" picker (same pattern as the microphon
 
 Protocol-based DI (`TranscriberProtocol`, `AudioRecording`, `TextInserting`) enables testing without hardware or ML models. Mock implementations live in `Tests/ChirpTests/Mocks.swift`. Tests use Swift Testing framework.
 
-The pipeline abstraction is transparent to existing tests: the default `OfflineTranscriptionPipeline` wraps the injected `MockTranscriber` with `RegexPostProcessor`, preserving identical behavior.
+The pipeline abstraction is transparent to existing tests: the default `OfflineTranscriptionPipeline` wraps the injected `MockTranscriber` with `RegexPostProcessor`, preserving identical behavior. Cloud provider clients are tested via `MockURLProtocol` (custom `URLProtocol` subclass) injected through the `session` parameter, covering happy paths, error handling, and header verification across all five client types.
 
 ## Build & Distribution
 
@@ -232,6 +232,9 @@ The pipeline abstraction is transparent to existing tests: the default `OfflineT
 | `TextPostProcessing.swift` | Post-processing protocol + Regex/LLM/Chained/OfflineLLM/ChainedOffline implementations |
 | `CloudSTT.swift` | STTClient protocol + WAV encoder |
 | `CloudLLM.swift` | LLMClient protocol |
+| `HTTPHelper.swift` | Shared HTTP request validation + JSON parsing for providers |
+| `RetryHelper.swift` | Exponential backoff retry for transient cloud API failures |
+| `Logger.swift` | Structured os.Logger categories (general, audio, transcription, cloud, model) |
 | `Providers/OpenAIProvider.swift` | OpenAI-compatible STT (Whisper) + LLM (GPT) |
 | `Providers/AnthropicProvider.swift` | Anthropic Messages API (LLM only) |
 | `Providers/GoogleProvider.swift` | Google Cloud Speech + Gemini |
