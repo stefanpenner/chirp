@@ -159,8 +159,10 @@ struct T5Tokenizer: Sendable {
     func decode(_ ids: [Int]) -> String {
         var pieces: [String] = []
         for id in ids {
-            if id == eosTokenID || id == padTokenID { continue }
+            if id == eosTokenID || id == padTokenID || id == unkTokenID { continue }
             if let token = idToToken[id] {
+                // Skip T5 special tokens (<extra_id_N>, <unk>, etc.)
+                if token.hasPrefix("<") && token.hasSuffix(">") { continue }
                 pieces.append(token)
             }
         }
@@ -168,7 +170,7 @@ struct T5Tokenizer: Sendable {
         // Replace SentencePiece space markers with actual spaces, then trim leading space
         return joined
             .replacingOccurrences(of: Self.spaceMarkerStr, with: " ")
-            .trimmingCharacters(in: .init(charactersIn: " "))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Vocabulary size.

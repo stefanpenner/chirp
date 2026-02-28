@@ -67,8 +67,16 @@ final class T5PostProcessor: TextPostProcessing, @unchecked Sendable {
             encoderInputIDs: inputIDs
         )
 
-        // Decode back to text
-        let result = tokenizer.decode(outputIDs)
+        // Decode back to text, stripping echoed task prefix if present.
+        // The model sometimes echoes the prefix in various languages/forms
+        // (e.g. "Fix punctuation:", "grammatikalischen und punctuationen:").
+        // Match a prefix that looks like a task instruction (words ending with
+        // a colon) rather than stripping at any colon, which would mangle
+        // legitimate output like "Meeting at 3:00 PM".
+        var result = tokenizer.decode(outputIDs)
+        if let match = result.range(of: #"^[A-Za-z\s]{4,48}:\s*"#, options: .regularExpression) {
+            result = String(result[match.upperBound...])
+        }
         return result.isEmpty ? text : result
     }
 
