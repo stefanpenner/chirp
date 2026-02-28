@@ -166,3 +166,27 @@ swift_test(
     deps = [":ChirpLib"],
     copts = ["-swift-version", "6"],
 )
+
+swift_test(
+    name = "AudioRecorderTests",
+    srcs = ["Tests/ChirpTests/AudioRecorderTests.swift"],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+)
+
+swift_test(
+    name = "TranscriberIntegrationTests",
+    srcs = [
+        "Tests/ChirpTests/TranscriberIntegrationTests.swift",
+        "Tests/ChirpTests/Mocks.swift",
+    ],
+    data = [
+        "Tests/ChirpTests/hello_world.wav",
+        "@silero_vad//file",
+    ],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+    env_inherit = ["HOME"],
+    local = True,
+    tags = ["manual"],  # requires local model; run explicitly
+)
