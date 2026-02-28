@@ -124,11 +124,6 @@ struct AudioSettingsTab: View {
                 Text("Uses Apple Voice Processing for noise suppression, echo cancellation, and automatic gain control.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-
-                Toggle("Silence gate", isOn: Bindable(appState).silenceGateEnabled)
-                Text("Drops quiet audio buffers before they reach the transcription pipeline, reducing false positives.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section("Speaker Verification") {
@@ -467,6 +462,7 @@ struct AISettingsTab: View {
                     AIModeRow(
                         mode: mode,
                         isActive: appState.aiSettings.activeModeID == mode.id,
+                        isDefault: mode.name == AIMode.defaultModeName,
                         onSelect: { appState.aiSettings.activeModeID = mode.id },
                         onEdit: { editingMode = mode },
                         onDelete: { deleteMode(mode) },
@@ -564,6 +560,7 @@ struct AISettingsTab: View {
 private struct AIModeRow: View {
     let mode: AIMode
     let isActive: Bool
+    let isDefault: Bool
     let onSelect: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -579,8 +576,21 @@ private struct AIModeRow: View {
             .buttonStyle(.borderless)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(mode.name)
-                    .font(.system(size: 13, weight: .medium))
+                HStack(spacing: 6) {
+                    Text(mode.name)
+                        .font(.system(size: 13, weight: .medium))
+                    if isDefault {
+                        Text("Default")
+                            .font(.system(size: 9, weight: .medium))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(
+                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    .fill(.secondary.opacity(0.15))
+                            )
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Text(modeSummary)
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)

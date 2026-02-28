@@ -103,14 +103,6 @@ public final class AppState {
         }
     }
 
-    /// Whether the RMS silence gate is enabled.
-    public var silenceGateEnabled: Bool = true {
-        didSet {
-            UserDefaults.standard.set(silenceGateEnabled, forKey: "chirp.silenceGate")
-            audioRecorder.silenceGateThreshold = silenceGateEnabled ? 0.007 : 0
-        }
-    }
-
     /// Settings window controller. Created lazily on first showSettings().
     var settingsWindowController: SettingsWindowController?
 
@@ -139,11 +131,8 @@ public final class AppState {
         // Load audio processing settings from UserDefaults
         let defaults = UserDefaults.standard
         let nr = defaults.object(forKey: "chirp.noiseReduction") as? Bool ?? true
-        let sg = defaults.object(forKey: "chirp.silenceGate") as? Bool ?? true
         noiseReductionEnabled = nr
-        silenceGateEnabled = sg
         audioRecorder.voiceProcessingEnabled = nr
-        audioRecorder.silenceGateThreshold = sg ? 0.007 : 0
 
         loadSpeakerVerifierIfNeeded()
         rebuildPipeline()

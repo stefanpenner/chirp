@@ -25,7 +25,6 @@ protocol TranscriberProtocol: Sendable {
     func stopRecording()
     func selectInputDevice(_ deviceID: AudioDeviceID?)
     var voiceProcessingEnabled: Bool { get set }
-    var silenceGateThreshold: Float { get set }
 }
 
 extension AudioRecording {
@@ -34,10 +33,6 @@ extension AudioRecording {
     func selectInputDevice(_ deviceID: AudioDeviceID?) {}
     var voiceProcessingEnabled: Bool {
         get { false }
-        set {}
-    }
-    var silenceGateThreshold: Float {
-        get { 0 }
         set {}
     }
 }

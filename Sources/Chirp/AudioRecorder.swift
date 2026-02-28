@@ -7,7 +7,6 @@
 // startRecording/stopRecording only install/remove the tap — near-instant.
 
 @preconcurrency import AVFoundation
-import Accelerate
 import CoreAudio
 
 @MainActor
@@ -20,18 +19,15 @@ final class AudioRecorder: AudioRecording {
     private var configObserver: (any NSObjectProtocol)?
     private var parkTimer: Timer?
     private let audioDucker = AudioDucker()
-    /// Suppresses the next config-change notification (fired by setVoiceProcessingEnabled).
-    private var ignoreNextConfigChange = false
+    /// Suppresses config-change notifications fired as a side-effect of prepare().
+    /// VP and engine.prepare() can each fire one; a boolean only catches one of them.
+    private var suppressConfigChanges = false
 
     /// The device ID to use for recording, or nil for the system default.
     var selectedDeviceID: AudioDeviceID?
 
     /// When true, enables Apple Voice Processing IO for noise suppression, AEC, and AGC.
     var voiceProcessingEnabled: Bool = true
-
-    /// RMS threshold below which audio buffers are dropped as silence.
-    /// Set to 0 to disable the gate.
-    var silenceGateThreshold: Float = 0.007
 
     func requestMicrophoneAccess() async -> Bool {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -78,12 +74,8 @@ final class AudioRecorder: AudioRecording {
 
         if voiceProcessingEnabled {
             do {
-                // setVoiceProcessingEnabled fires AVAudioEngineConfigurationChange;
-                // suppress that to avoid a tearDown/prepare cycle that crashes.
-                ignoreNextConfigChange = true
                 try inputNode.setVoiceProcessingEnabled(true)
             } catch {
-                ignoreNextConfigChange = false
                 NSLog("Chirp: Failed to enable voice processing: %@", error.localizedDescription)
             }
         }
@@ -135,16 +127,21 @@ final class AudioRecorder: AudioRecording {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                if self.ignoreNextConfigChange {
-                    self.ignoreNextConfigChange = false
-                    // VP-triggered config change: the engine is valid but the
-                    // format may have updated. Re-read and rebuild the converter.
+                if self.suppressConfigChanges {
                     self.rebuildConverter()
                     return
                 }
                 self.tearDown()
                 self.prepare()
             }
+        }
+
+        // VP's setVoiceProcessingEnabled and engine.prepare() can each fire a
+        // config-change notification. Suppress all of them until the next run
+        // loop iteration, when we clear the flag.
+        suppressConfigChanges = true
+        DispatchQueue.main.async { [weak self] in
+            self?.suppressConfigChanges = false
         }
     }
 
@@ -166,7 +163,6 @@ final class AudioRecorder: AudioRecording {
             targetFormat: targetFormat,
             inputSampleRate: inputSampleRate,
             outputRate: rate,
-            silenceGateThreshold: silenceGateThreshold,
             onSamples: onSamples
         )
         if !engine.isRunning {
@@ -179,18 +175,16 @@ final class AudioRecorder: AudioRecording {
         }
 
         engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat, block: tapBlock)
-
         audioDucker.duck()
     }
 
     // nonisolated: prevents @MainActor executor checks from leaking
     // into the returned closure, which runs on AVAudioEngine's I/O thread.
-    nonisolated private static func makeTapBlock(
+    nonisolated static func makeTapBlock(
         converter: AVAudioConverter,
         targetFormat: AVAudioFormat,
         inputSampleRate: Double,
         outputRate: Double,
-        silenceGateThreshold: Float,
         onSamples: @escaping @Sendable ([Float]) -> Void
     ) -> @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void {
         return { buffer, _ in
@@ -232,14 +226,6 @@ final class AudioRecorder: AudioRecording {
 
             guard let channelData = convertedBuffer.floatChannelData else { return }
             let count = Int(convertedBuffer.frameLength)
-
-            // Energy gate: drop buffers below RMS threshold
-            if silenceGateThreshold > 0 {
-                var rms: Float = 0
-                vDSP_rmsqv(channelData[0], 1, &rms, vDSP_Length(count))
-                if rms < silenceGateThreshold { return }
-            }
-
             let chunk = Array(UnsafeBufferPointer(
                 start: channelData[0],
                 count: count
