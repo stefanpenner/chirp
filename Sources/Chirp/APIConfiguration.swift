@@ -99,9 +99,11 @@ public struct AIMode: Codable, Identifiable, Sendable, Equatable {
         self.llmSystemPrompt = llmSystemPrompt
     }
 
+    public static let defaultModeName = "Offline + Fixup"
+
     public static let defaults: [AIMode] = [
-        AIMode(name: "Offline", transcriptionMode: .offline, postProcessingMode: .regex),
         AIMode(name: "Offline + Fixup", transcriptionMode: .offline, postProcessingMode: .regexThenOfflineLLM),
+        AIMode(name: "Offline", transcriptionMode: .offline, postProcessingMode: .regex),
     ]
 }
 
