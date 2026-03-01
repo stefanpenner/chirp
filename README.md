@@ -1,10 +1,10 @@
 # Chirp
 
+**Free, fast, offline voice-to-text for macOS.**
 
-**Free, Fast, Offline voice-to-text for macOS.**
-Hold `fn`, speak, release — text appears at your cursor. Works fully offline by default — no accounts, no servers, no data leaves your machine. Optionally connect cloud providers for higher-accuracy transcription and LLM post-processing.
+Hold `fn`, speak, release — text appears at your cursor. Works fully offline by default with no accounts, no servers, and no data leaving your machine. Optionally connect cloud providers for higher-accuracy transcription and AI post-processing.
 
-<img width="680" height="151" alt="chirp-0 3 16-transcribing" src="https://github.com/user-attachments/assets/a4cb6c75-6b77-486b-9aec-8ea2d688d453" />
+<img width="680" height="151" alt="chirp transcribing" src="https://github.com/user-attachments/assets/a4cb6c75-6b77-486b-9aec-8ea2d688d453" />
 
 ## Install
 
@@ -21,8 +21,8 @@ brew install --cask stefanpenner/chirp/chirp
 ### Build from source
 
 ```
-brew install bazelisk    # install Bazel via Bazelisk
-bazel run //:Chirp       # build and launch
+brew install bazelisk
+bazel run //:Chirp
 ```
 
 ## Features
@@ -31,13 +31,14 @@ bazel run //:Chirp       # build and launch
 
 - **Hold-to-talk** — Press `fn` (configurable) to record, release to transcribe
 - **Works everywhere** — Text is typed at your cursor in any app
-- **Speculative preview** — See partial transcription as you speak (even in cloud mode)
-- **Fast** — Parakeet TDT 0.6b v2 with Silero VAD, all on-device
-- **AI Modes** — Named pipeline presets you can switch from the menu bar. Ships with "Offline" and "Offline + Fixup"; create your own with cloud STT, LLM post-processing, or any combination
-- **Cloud providers** — Optional support for OpenAI, Anthropic, and Google APIs (plus any OpenAI-compatible gateway like OpenRouter)
+- **Speculative preview** — See partial transcription as you speak
+- **Fast** — Parakeet TDT 0.6b v3 with Silero VAD, all on-device
+- **AI Modes** — Pipeline presets switchable from the menu bar. Ships with "Offline" and "Offline + Fixup" (on-device T5 grammar correction); create your own with cloud STT, LLM post-processing, or any combination
+- **Cloud providers** — Optional OpenAI, Anthropic, and Google APIs (plus any OpenAI-compatible endpoint)
 - **Speaker verification** — Enroll your voice so Chirp only transcribes you, ignoring other speakers
-- **Menu bar app** — No dock icon, no clutter
-- **Auto-updates** — Check for updates from the menu bar
+- **Noise reduction** — Apple Voice Processing for noise suppression, echo cancellation, and automatic gain control
+- **Menu bar app** — Lives in the menu bar, no dock icon
+- **Auto-updates** — Built-in update checks via Sparkle
 
 <img width="480" alt="settings - AI modes" src="docs/screenshots/settings-ai.jpg" />
 
@@ -45,27 +46,16 @@ bazel run //:Chirp       # build and launch
 
 ## Setup
 
-### Permissions
-
 Chirp needs two permissions on first launch:
 
-1. **Microphone** — macOS will prompt automatically. Click Allow.
-2. **Accessibility** — Required for typing text at your cursor. Go to:
-   - **System Settings → Privacy & Security → Accessibility**
-   - Click the `+` button, find Chirp in Applications, and add it
-   - Make sure the toggle is enabled
+1. **Microphone** — macOS will prompt automatically
+2. **Accessibility** — Required for typing text at your cursor: **System Settings → Privacy & Security → Accessibility**, add Chirp and enable the toggle
 
-If Chirp can transcribe but text doesn't appear, Accessibility permission is missing.
-
-### Model download
-
-On first launch, Chirp downloads the Parakeet TDT 0.6b v2 speech recognition model (~460 MB download, ~631 MB on disk). This is a one-time download stored in `~/Library/Application Support/Chirp/`. After that, Chirp works fully offline.
+On first launch, Chirp downloads the speech recognition model (~465 MB). This is a one-time download stored in `~/Library/Application Support/Chirp/`.
 
 ## Updating
 
-Chirp checks for updates automatically. You can also check manually from the menu bar icon → **Check for Updates…**
-
-Or with Homebrew:
+Chirp checks for updates automatically. You can also check manually from the menu bar → **Check for Updates…**
 
 ```
 brew upgrade chirp
@@ -73,39 +63,28 @@ brew upgrade chirp
 
 ## Troubleshooting
 
-### Text doesn't appear after transcription
+**Text doesn't appear** — Accessibility permission isn't enabled. Check **System Settings → Privacy & Security → Accessibility**. You may need to remove and re-add Chirp if you moved the app.
 
-Accessibility permission isn't enabled. Go to **System Settings → Privacy & Security → Accessibility** and make sure Chirp is listed and toggled on. You may need to remove and re-add it if you moved the app.
+**No audio detected** — Check **System Settings → Privacy & Security → Microphone** and ensure Chirp is allowed. Verify your input device in the Chirp menu bar → Microphone.
 
-### No audio detected / microphone not working
-
-- Check **System Settings → Privacy & Security → Microphone** and ensure Chirp is allowed
-- Make sure your input device is set correctly in **System Settings → Sound → Input**
-
-### Model download fails
-
-Chirp needs internet access for the initial model download. If it fails, check your network connection and restart the app. The download resumes where it left off.
+**Model download fails** — Check your network connection and restart the app. The download resumes where it left off.
 
 ## Requirements
 
-- macOS 26+
+- macOS 15+
 - ~700 MB disk space (app + model)
-- Microphone permission
-- Accessibility permission
 
 ## Privacy
 
-In the default "Offline" mode, all transcription runs locally. Your audio is processed in memory and never recorded or stored. No telemetry, no tracking, no data leaves your machine.
+In the default offline modes, all processing runs locally. Audio is processed in memory, never recorded or stored. No telemetry, no tracking.
 
-When you opt into cloud AI modes, audio or text is sent to the provider you configure (OpenAI, Anthropic, Google, or a custom gateway). No data is sent unless you explicitly create and activate a cloud AI mode.
+When you use a cloud AI mode, audio or text is sent to the provider you configure. No data is sent unless you explicitly create and activate a cloud mode.
 
 ## Acknowledgments
 
-Chirp is built on these open-source projects:
-
 - [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) — speech recognition engine (Apache 2.0)
 - [ONNX Runtime](https://github.com/microsoft/onnxruntime) — model inference runtime (MIT)
-- [NVIDIA Parakeet TDT 0.6b v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) — speech-to-text model ([CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/))
+- [NVIDIA Parakeet TDT 0.6b v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) — speech-to-text model ([CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/))
 - [Silero VAD](https://github.com/snakers4/silero-vad) — voice activity detection (MIT)
 - [Sparkle](https://github.com/sparkle-project/Sparkle) — auto-update framework (MIT)
 
@@ -113,12 +92,10 @@ Full license texts are in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
 
 ## Development
 
-Install [Bazelisk](https://github.com/bazelbuild/bazelisk), which reads `.bazelversion` and fetches the right Bazel automatically:
-
 ```
 brew install bazelisk
-bazel build //:Chirp                  # build
-bazel run //:Chirp                    # build and launch
-bazel test //...                      # run tests
-bazel run //:package -- 0.3.0         # create signed DMG
+bazel build //:Chirp           # build
+bazel run //:Chirp             # build and launch
+bazel test //...               # run tests
+bazel run //:package -- 0.3.0  # create signed DMG
 ```
