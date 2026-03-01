@@ -8,6 +8,7 @@ import CoreAudio
 @MainActor
 protocol VolumeControl {
     func defaultOutputDevice() -> AudioDeviceID?
+    func isBluetooth(device: AudioDeviceID) -> Bool
     func getVolume(device: AudioDeviceID, channel: UInt32) -> Float32?
     func setVolume(device: AudioDeviceID, channel: UInt32, volume: Float32)
 }
@@ -30,6 +31,20 @@ struct SystemVolumeControl: VolumeControl {
 
         guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
         return deviceID
+    }
+
+    func isBluetooth(device: AudioDeviceID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var transportType: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(device, &address, 0, nil, &size, &transportType)
+        guard status == noErr else { return false }
+        return transportType == kAudioDeviceTransportTypeBluetooth
+            || transportType == kAudioDeviceTransportTypeBluetoothLE
     }
 
     func getVolume(device: AudioDeviceID, channel: UInt32) -> Float32? {
@@ -80,6 +95,9 @@ final class AudioDucker {
     func duck() {
         guard !isDucked else { return }
         guard let deviceID = volumeControl.defaultOutputDevice() else { return }
+        // Bluetooth devices fight programmatic volume changes via AVRCP sync,
+        // causing the volume to jump erratically. Skip ducking entirely.
+        guard !volumeControl.isBluetooth(device: deviceID) else { return }
 
         savedVolumes = []
         savedDeviceID = deviceID

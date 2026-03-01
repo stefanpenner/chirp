@@ -79,7 +79,10 @@ final class AudioRecorder: AudioRecording {
 
         let inputNode = engine.inputNode
 
-        if voiceProcessingEnabled {
+        // Voice Processing creates an aggregate device coupling input+output
+        // for AEC. On Bluetooth, this fights the device's own echo/volume
+        // management via AVRCP, causing output volume to jump erratically.
+        if voiceProcessingEnabled && !isBluetoothInput() {
             do {
                 try inputNode.setVoiceProcessingEnabled(true)
             } catch {
@@ -142,7 +145,14 @@ final class AudioRecorder: AudioRecording {
                     return
                 }
                 self.tearDown()
-                self.prepare()
+                // Bluetooth: don't eagerly re-prepare. Accessing inputNode
+                // opens the BT device, which can trigger profile negotiation
+                // (A2DP → HFP) and fire another config change, creating a
+                // loop that causes output volume to jump. The engine will be
+                // lazily prepared in startRecording() instead.
+                if !self.isBluetoothInput() {
+                    self.prepare()
+                }
             }
         }
 
@@ -315,8 +325,14 @@ final class AudioRecorder: AudioRecording {
 
     private func parkEngine() {
         parkTimer = nil
-        audioEngine?.stop()
-        audioEngine?.prepare()
+        if isBluetoothInput() {
+            // Full teardown for Bluetooth — re-preparing the engine would
+            // reopen the BT device and risk profile-switch oscillation.
+            tearDown()
+        } else {
+            audioEngine?.stop()
+            audioEngine?.prepare()
+        }
     }
 
     /// Re-reads the input format and rebuilds the converter without tearing down the engine.
@@ -339,6 +355,41 @@ final class AudioRecorder: AudioRecording {
         }
         self.converter = conv
         self.inputFormat = newFormat
+    }
+
+    /// Returns true if the active input device uses Bluetooth transport.
+    private func isBluetoothInput() -> Bool {
+        let deviceID: AudioDeviceID
+        if let selected = selectedDeviceID {
+            deviceID = selected
+        } else {
+            // Query the system default input device.
+            var defaultID = AudioDeviceID(0)
+            var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            let status = AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address, 0, nil, &size, &defaultID
+            )
+            guard status == noErr, defaultID != kAudioObjectUnknown else { return false }
+            deviceID = defaultID
+        }
+
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var transportType: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &transportType)
+        guard status == noErr else { return false }
+        return transportType == kAudioDeviceTransportTypeBluetooth
+            || transportType == kAudioDeviceTransportTypeBluetoothLE
     }
 
     func selectInputDevice(_ deviceID: AudioDeviceID?) {

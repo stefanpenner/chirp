@@ -5,11 +5,16 @@ import CoreAudio
 @MainActor
 final class MockVolumeControl: VolumeControl {
     var device: AudioDeviceID? = 42
+    var bluetoothDevices: Set<AudioDeviceID> = []
     /// Channel → volume. Nil means the channel has no volume control.
     var volumes: [UInt32: Float32] = [0: 0.8]
     var setVolumeCalls: [(device: AudioDeviceID, channel: UInt32, volume: Float32)] = []
 
     func defaultOutputDevice() -> AudioDeviceID? { device }
+
+    func isBluetooth(device: AudioDeviceID) -> Bool {
+        bluetoothDevices.contains(device)
+    }
 
     func getVolume(device: AudioDeviceID, channel: UInt32) -> Float32? {
         volumes[channel]
@@ -78,6 +83,21 @@ struct AudioDuckerTests {
 
         #expect(!ducker.isDucked)
         #expect(vc.setVolumeCalls.isEmpty)
+    }
+
+    @Test("duck is no-op for Bluetooth devices")
+    func duckNoOpForBluetooth() {
+        let vc = MockVolumeControl()
+        vc.device = 42
+        vc.bluetoothDevices = [42]
+        vc.volumes = [0: 0.8]
+        let ducker = AudioDucker(volumeControl: vc)
+
+        ducker.duck()
+
+        #expect(!ducker.isDucked)
+        #expect(vc.setVolumeCalls.isEmpty)
+        #expect(vc.volumes[0]! == 0.8)
     }
 
     @Test("duck is no-op when device has no volume control")
