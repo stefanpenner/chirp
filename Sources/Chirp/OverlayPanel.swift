@@ -228,7 +228,7 @@ struct IslandView: View {
         VStack(spacing: 0) {
             if isActive {
                 Text(appState.aiSettings.activeMode?.name ?? "Offline")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(.primary.opacity(0.25))
                     .padding(.top, 10)
                     .transition(.opacity)
@@ -338,10 +338,10 @@ struct IslandView: View {
                         .onTapGesture { NSWorkspace.shared.open(ModelVariant.infoURL) }
 
                     Text("\(ModelVariant.sizeDescription) compressed")
-                        .font(.system(size: 11, weight: .regular))
+                        .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(.primary.opacity(0.25))
                 }
-                .font(.system(size: 13, weight: .regular))
+                .font(.system(size: 15, weight: .regular))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
@@ -384,7 +384,7 @@ struct IslandView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
-                .font(.system(size: 13, weight: .regular))
+                .font(.system(size: 15, weight: .regular))
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
@@ -404,7 +404,7 @@ struct IslandView: View {
 
             if isDownloading {
                 Text("Cancel")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.primary.opacity(0.35))
                     .onTapGesture { appState.cancelDownload() }
                     .onHover { inside in
@@ -417,20 +417,20 @@ struct IslandView: View {
                     .padding(.bottom, 8)
                     .transition(.opacity)
             } else if isRecording {
-                Text("release \(appState.hotkeyConfig.label)  \u{b7}  esc to cancel")
-                    .font(.system(size: 10, weight: .medium))
+                Text("release \(appState.hotkeyConfig.label) to finish")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.primary.opacity(0.2))
                     .padding(.bottom, 8)
                     .transition(.opacity)
             } else if isTranscribing {
-                Text("esc to cancel")
-                    .font(.system(size: 10, weight: .medium))
+                Text("esc to discard")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.primary.opacity(0.2))
                     .padding(.bottom, 8)
                     .transition(.opacity)
             }
         }
-        .frame(width: 320)
+        .frame(width: 360)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(colorScheme == .dark ? Color.black : Color.white)
