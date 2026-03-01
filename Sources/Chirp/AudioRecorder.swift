@@ -8,6 +8,7 @@
 
 @preconcurrency import AVFoundation
 import CoreAudio
+import os
 
 @MainActor
 final class AudioRecorder: AudioRecording {
@@ -22,6 +23,12 @@ final class AudioRecorder: AudioRecording {
     /// Suppresses config-change notifications fired as a side-effect of prepare().
     /// VP and engine.prepare() can each fire one; a boolean only catches one of them.
     private var suppressConfigChanges = false
+    /// True while a tap is installed and audio is flowing. Prevents config-change
+    /// notifications from tearing down the engine mid-recording.
+    private var isRecordingActive = false
+    /// Set when a config change fires during recording. The full tearDown+prepare
+    /// is deferred to stopRecording.
+    private var configChangeDeferred = false
 
     /// The device ID to use for recording, or nil for the system default.
     var selectedDeviceID: AudioDeviceID?
@@ -127,8 +134,11 @@ final class AudioRecorder: AudioRecording {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                if self.suppressConfigChanges {
+                // During recording, don't tear down — just rebuild the converter
+                // and defer the full rebuild to after recording stops.
+                if self.isRecordingActive || self.suppressConfigChanges {
                     self.rebuildConverter()
+                    if self.isRecordingActive { self.configChangeDeferred = true }
                     return
                 }
                 self.tearDown()
@@ -150,31 +160,73 @@ final class AudioRecorder: AudioRecording {
 
         if audioEngine == nil { prepare() }
 
-        guard let engine = audioEngine,
-              let converter,
-              let targetFormat,
-              let inputFormat else { return }
+        // Try to start the engine. If it fails (e.g. VP format mismatch after
+        // config change), rebuild from scratch. If that also fails, retry
+        // without voice processing as a last resort.
+        if let engine = audioEngine, !engine.isRunning {
+            do {
+                try engine.start()
+            } catch {
+                NSLog("Chirp: Engine start failed (%@), rebuilding", error.localizedDescription)
+                tearDown()
+                prepare()
+                if let engine = audioEngine, !engine.isRunning {
+                    do {
+                        try engine.start()
+                    } catch {
+                        NSLog("Chirp: Engine start failed after rebuild (%@), retrying without VP", error.localizedDescription)
+                        tearDown()
+                        let savedVP = voiceProcessingEnabled
+                        voiceProcessingEnabled = false
+                        prepare()
+                        voiceProcessingEnabled = savedVP
+                        if let engine = audioEngine, !engine.isRunning {
+                            do { try engine.start() } catch {
+                                NSLog("Chirp: Engine start failed without VP: %@", error.localizedDescription)
+                                return
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-        let inputSampleRate = inputFormat.sampleRate
-        let rate = sampleRate
+        guard let engine = audioEngine, engine.isRunning else { return }
+
+        // Re-read the format from the running engine — config changes since
+        // prepare() may have changed VP or the audio device.
+        let currentFormat = engine.inputNode.outputFormat(forBus: 0)
+        if currentFormat != inputFormat {
+            rebuildConverter()
+        }
+
+        guard let converter, let targetFormat, let inputFormat else { return }
+
+        // Validate format: degenerate formats (0 channels, 0 sample rate) cause
+        // installTap to throw an unrecoverable NSException.
+        guard inputFormat.channelCount > 0, inputFormat.sampleRate > 0 else {
+            Log.audio.error("Invalid audio format (\(inputFormat)); rebuilding engine")
+            tearDown()
+            prepare()
+            return
+        }
 
         let tapBlock = Self.makeTapBlock(
             converter: converter,
             targetFormat: targetFormat,
-            inputSampleRate: inputSampleRate,
-            outputRate: rate,
+            inputSampleRate: inputFormat.sampleRate,
+            outputRate: sampleRate,
             onSamples: onSamples
         )
-        if !engine.isRunning {
-            do {
-                try engine.start()
-            } catch {
-                NSLog("Chirp: Failed to restart parked engine: %@", error.localizedDescription)
-                return
-            }
-        }
 
-        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat, block: tapBlock)
+        // Defensive: remove any stale tap before installing a new one.
+        // installTap throws an unrecoverable NSException if a tap already exists.
+        engine.inputNode.removeTap(onBus: 0)
+        // Pass nil format — letting AVFAudio use the node's native output format
+        // avoids the assertion "format.sampleRate == inputHWFormat.sampleRate"
+        // when VP's output sample rate differs from hardware input sample rate.
+        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil, block: tapBlock)
+        isRecordingActive = true
         audioDucker.duck()
     }
 
@@ -235,8 +287,15 @@ final class AudioRecorder: AudioRecording {
     }
 
     func stopRecording() {
+        isRecordingActive = false
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioDucker.unduck()
+        // Apply deferred config change now that the tap is removed.
+        if configChangeDeferred {
+            configChangeDeferred = false
+            tearDown()
+            prepare()
+        }
         schedulePark()
     }
 
@@ -294,6 +353,8 @@ final class AudioRecorder: AudioRecording {
             NotificationCenter.default.removeObserver(obs)
             configObserver = nil
         }
+        isRecordingActive = false
+        configChangeDeferred = false
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil

@@ -144,6 +144,7 @@ actor CloudTranscriptionPipeline: TranscriptionPipeline {
     let postProcessor: any TextPostProcessing
     let localTranscriber: any TranscriberProtocol
     private var accumulatedSamples: [Float] = []
+    private var previewSegments: [String] = []
     private let sampleRate = 16000
     private let speakerVerifier: (any SpeakerVerifying)?
     private let speakerThreshold: Float
@@ -164,21 +165,35 @@ actor CloudTranscriptionPipeline: TranscriptionPipeline {
 
     func feedAudio(samples: [Float]) async -> [String] {
         accumulatedSamples.append(contentsOf: samples)
-        // Feed local transcriber for preview — discard segments (cloud handles final text)
-        _ = await localTranscriber.feedAudio(samples: samples)
+        // Feed local transcriber for preview. Retain committed segments so
+        // peek can show the full preview even after the VAD clears pendingAudio.
+        let segments = await localTranscriber.feedAudio(samples: samples)
+        for raw in segments {
+            let text = TextPostProcessor.process(raw)
+            if !text.isEmpty { previewSegments.append(text) }
+        }
         return []
     }
 
     func peekTranscription() async -> String? {
-        guard let raw = await localTranscriber.peekTranscription() else { return nil }
-        return TextPostProcessor.process(raw)
+        let peek = await localTranscriber.peekTranscription()
+        let processedPeek = peek.flatMap { raw -> String? in
+            let t = TextPostProcessor.process(raw)
+            return t.isEmpty ? nil : t
+        }
+        let parts = previewSegments + [processedPeek].compactMap { $0 }
+        let combined = parts.joined(separator: " ")
+        return combined.isEmpty ? nil : combined
     }
 
     func flush() async -> String {
         // Flush local transcriber (discard result — it was only for preview)
         _ = await localTranscriber.flush()
 
-        defer { accumulatedSamples.removeAll() }
+        defer {
+            accumulatedSamples.removeAll()
+            previewSegments.removeAll()
+        }
         guard !accumulatedSamples.isEmpty else { return "" }
 
         // Speaker verification gate: check accumulated audio before sending to cloud
@@ -220,6 +235,7 @@ actor CloudTranscriptionPipeline: TranscriptionPipeline {
 
     func resetVAD() async {
         accumulatedSamples.removeAll()
+        previewSegments.removeAll()
         await localTranscriber.resetVAD()
     }
 }

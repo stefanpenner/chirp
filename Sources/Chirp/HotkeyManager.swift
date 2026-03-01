@@ -197,9 +197,12 @@ final class HotkeyManager {
     nonisolated(unsafe) private var runLoopSource: CFRunLoopSource?
     nonisolated(unsafe) private var config: HotkeyConfig
     nonisolated(unsafe) private var accessibilityPoller: Task<Void, Never>?
-    private let onPress: @MainActor () -> Void
-    private let onRelease: @MainActor () -> Void
-    private let onCancel: @MainActor () -> Void
+    // nonisolated(unsafe) because these are read from the CGEvent tap C callback
+    // which has no Swift Task context. The closures themselves use
+    // MainActor.assumeIsolated to safely hop into the main actor.
+    nonisolated(unsafe) private let onPress: @Sendable () -> Void
+    nonisolated(unsafe) private let onRelease: @Sendable () -> Void
+    nonisolated(unsafe) private let onCancel: @Sendable () -> Void
 
     /// Tracks hotkey state. Accessed from the event tap callback thread
     /// and read from @MainActor context, so marked nonisolated(unsafe).
@@ -224,9 +227,11 @@ final class HotkeyManager {
         onCancel: @escaping @MainActor () -> Void
     ) {
         self.config = config
-        self.onPress = onPress
-        self.onRelease = onRelease
-        self.onCancel = onCancel
+        // Wrap @MainActor closures so they can be called safely from
+        // non-Task contexts (the CGEvent tap C callback).
+        self.onPress = { MainActor.assumeIsolated { onPress() } }
+        self.onRelease = { MainActor.assumeIsolated { onRelease() } }
+        self.onCancel = { MainActor.assumeIsolated { onCancel() } }
         HotkeyManager.current = self
         setupEventTap()
     }
@@ -299,7 +304,7 @@ final class HotkeyManager {
                 if type == .keyDown || type == .keyUp {
                     // ESC (0x35) cancels the active session
                     if type == .keyDown && keyCode == 0x35 && mgr.sessionActive {
-                        Task { @MainActor in mgr.onCancel() }
+                        DispatchQueue.main.async { mgr.onCancel() }
                         return nil
                     }
 
@@ -316,7 +321,7 @@ final class HotkeyManager {
                             if currentMods == cfg.requiredModifiers && !mgr.fnDown {
                                 mgr.fnDown = true
                                 if !mgr.suppressOnly {
-                                    Task { @MainActor in mgr.onPress() }
+                                    DispatchQueue.main.async { mgr.onPress() }
                                 }
                                 return nil
                             }
@@ -326,7 +331,7 @@ final class HotkeyManager {
                         if type == .keyUp && mgr.fnDown {
                             mgr.fnDown = false
                             if !mgr.suppressOnly {
-                                Task { @MainActor in mgr.onRelease() }
+                                DispatchQueue.main.async { mgr.onRelease() }
                             }
                             return nil
                         }
@@ -349,13 +354,13 @@ final class HotkeyManager {
                     if pressed && !mgr.fnDown {
                         mgr.fnDown = true
                         if !mgr.suppressOnly {
-                            Task { @MainActor in mgr.onPress() }
+                            DispatchQueue.main.async { mgr.onPress() }
                         }
                         return nil
                     } else if !pressed && mgr.fnDown {
                         mgr.fnDown = false
                         if !mgr.suppressOnly {
-                            Task { @MainActor in mgr.onRelease() }
+                            DispatchQueue.main.async { mgr.onRelease() }
                         }
                         return nil
                     }

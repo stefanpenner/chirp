@@ -577,6 +577,7 @@ public final class AppState {
             let remaining = await pipeline.flush()
             guard !Task.isCancelled else { return }
             guard self.recordingSession == session else { return }
+            self.speculativeText = ""
             if !remaining.isEmpty {
                 if typesIncrementally {
                     let needsSpace = !self.transcribedText.isEmpty
@@ -622,7 +623,11 @@ public final class AppState {
                 guard self.recordingSession == session else { break }
                 guard case .recording = self.status else { break }
                 guard self.commitGen == gen else { continue }
-                self.speculativeText = preview ?? ""
+                // Only update when we have a new preview — keep existing
+                // speculative text visible when VAD flickers to non-detected.
+                if let preview {
+                    self.speculativeText = preview
+                }
             }
         }
     }
@@ -641,7 +646,8 @@ public final class AppState {
         audioContinuation = nil
 
         status = .transcribing
-        speculativeText = ""
+        // Keep speculativeText visible until flush result replaces it,
+        // so the user doesn't see a blank overlay while waiting.
     }
 
     func cancelSession() {

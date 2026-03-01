@@ -7,6 +7,7 @@
 
 import Foundation
 import CSherpaOnnx
+import os
 
 actor Transcriber: TranscriberProtocol {
     // nonisolated(unsafe) so deinit can clean up C resources
@@ -87,16 +88,16 @@ actor Transcriber: TranscriberProtocol {
         recognizer = SherpaOnnxCreateOfflineRecognizer(&config)
 
         if recognizer == nil {
-            NSLog("Chirp: Failed to create offline recognizer")
+            Log.transcription.error("Failed to create offline recognizer")
             return false
         }
 
         if !initializeVAD(vadPath: paths.vadPath) {
-            NSLog("Chirp: Failed to create VAD")
+            Log.transcription.error("Failed to create VAD")
             return false
         }
 
-        NSLog("Chirp: Transcriber initialized successfully")
+        Log.transcription.info("Transcriber initialized successfully")
         return true
     }
 
@@ -171,6 +172,7 @@ actor Transcriber: TranscriberProtocol {
             pendingAudio.removeAll()
         }
 
+        Log.transcription.debug("feedAudio: pendingAudio=\(self.pendingAudio.count) committedSegments=\(results.count)")
         return results
     }
 
@@ -180,13 +182,18 @@ actor Transcriber: TranscriberProtocol {
     /// hallucinated words (e.g. "Yeah", "hm..") from silence/noise.
     func peekTranscription() -> String? {
         guard let vad else { return nil }
-        guard SherpaOnnxVoiceActivityDetectorDetected(vad) != 0 else { return nil }
+        let speechDetected = SherpaOnnxVoiceActivityDetectorDetected(vad) != 0
+        guard speechDetected else {
+            Log.transcription.debug("peek: pendingAudio=\(self.pendingAudio.count) speechDetected=false")
+            return nil
+        }
         guard pendingAudio.count >= 4800 else { return nil }
         let maxSamples = 16000 * 5
         let samples = pendingAudio.count > maxSamples
             ? Array(pendingAudio.suffix(maxSamples))
             : pendingAudio
         let text = transcribeSamples(samples)
+        Log.transcription.debug("peek: pendingAudio=\(self.pendingAudio.count) speechDetected=true text=\(text)")
         return text.isEmpty ? nil : text
     }
 
@@ -209,11 +216,13 @@ actor Transcriber: TranscriberProtocol {
         }
 
         guard hasPendingSpeech, pendingAudio.count >= 1600 else {
+            Log.transcription.debug("flush: pendingAudio=\(self.pendingAudio.count) hasPendingSpeech=\(hasPendingSpeech) — skipped")
             pendingAudio.removeAll()
             return ""
         }
 
         let text = transcribeSamples(pendingAudio)
+        Log.transcription.debug("flush: pendingAudio=\(self.pendingAudio.count) hasPendingSpeech=true text=\(text)")
         pendingAudio.removeAll()
         return text
     }

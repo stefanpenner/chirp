@@ -515,4 +515,99 @@ struct TranscriberIntegrationTests {
         print("E2E incremental final text: \"\(state.transcribedText)\"")
         #expect(!state.transcribedText.isEmpty, "No transcription after incremental recording")
     }
+
+    // MARK: - Noisy Audio Tests
+
+    /// Mix uniformly distributed random noise into audio samples at the given SNR (dB).
+    private static func addNoise(to samples: [Float], snr: Float) -> [Float] {
+        // RMS of the signal
+        let signalPower = samples.reduce(Float(0)) { $0 + $1 * $1 } / Float(samples.count)
+        let signalRMS = sqrtf(signalPower)
+
+        // Desired noise RMS from SNR: snr = 20 * log10(signalRMS / noiseRMS)
+        let noiseRMS = signalRMS / powf(10, snr / 20)
+
+        // Uniform noise in [-sqrt(3), sqrt(3)] has RMS = 1, scale to desired RMS
+        let scale = noiseRMS * sqrtf(3)
+        return samples.map { sample in
+            let noise = Float.random(in: -scale...scale)
+            return sample + noise
+        }
+    }
+
+    @Test("Transcription with moderate noise (20 dB SNR)")
+    func testTranscriptionWithModerateNoise() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: Model not found"); return
+        }
+        guard let wavPath = Self.findTestWAV() else {
+            print("SKIP: hello_world.wav not found"); return
+        }
+
+        let cleanSamples = try Self.loadWAV(path: wavPath)
+        let noisySamples = Self.addNoise(to: cleanSamples, snr: 20)
+        print("Noisy audio (20dB SNR): \(noisySamples.count) samples")
+
+        let transcriber = Transcriber()
+        let ok = await transcriber.initialize(paths: paths)
+        #expect(ok, "Transcriber failed to initialize")
+
+        // Feed in chunks like real-time streaming
+        let chunkSize = 1360  // ~85ms at 16kHz
+        var allSegments: [String] = []
+        for start in stride(from: 0, to: noisySamples.count, by: chunkSize) {
+            let end = min(start + chunkSize, noisySamples.count)
+            let chunk = Array(noisySamples[start..<end])
+            let segs = await transcriber.feedAudio(samples: chunk)
+            allSegments.append(contentsOf: segs)
+        }
+
+        let flushed = await transcriber.flush()
+
+        let allText = (allSegments + [flushed])
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        print("Moderate noise transcription: \"\(allText)\"")
+
+        #expect(!allText.isEmpty, "Transcriber produced no output from moderately noisy audio")
+    }
+
+    @Test("Transcription with heavy noise (3 dB SNR)")
+    func testTranscriptionWithHeavyNoise() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: Model not found"); return
+        }
+        guard let wavPath = Self.findTestWAV() else {
+            print("SKIP: hello_world.wav not found"); return
+        }
+
+        let cleanSamples = try Self.loadWAV(path: wavPath)
+        let noisySamples = Self.addNoise(to: cleanSamples, snr: 3)
+        print("Noisy audio (3dB SNR): \(noisySamples.count) samples")
+
+        let transcriber = Transcriber()
+        let ok = await transcriber.initialize(paths: paths)
+        #expect(ok, "Transcriber failed to initialize")
+
+        // Feed in chunks like real-time streaming
+        let chunkSize = 1360
+        var allSegments: [String] = []
+        for start in stride(from: 0, to: noisySamples.count, by: chunkSize) {
+            let end = min(start + chunkSize, noisySamples.count)
+            let chunk = Array(noisySamples[start..<end])
+            let segs = await transcriber.feedAudio(samples: chunk)
+            allSegments.append(contentsOf: segs)
+        }
+
+        let flushed = await transcriber.flush()
+
+        let allText = (allSegments + [flushed])
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        print("Heavy noise transcription: \"\(allText)\"")
+
+        // With heavy noise we just verify the transcriber doesn't crash
+        // and returns something (may be garbled or empty)
+        print("Heavy noise test completed without crash — output length: \(allText.count)")
+    }
 }

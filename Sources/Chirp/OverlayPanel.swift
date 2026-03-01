@@ -163,6 +163,7 @@ struct IslandView: View {
     @Environment(\.colorScheme) private var colorScheme
     var appState: AppState
     @State private var textHeight: CGFloat = 0
+    @State private var pulseOpacity: Double = 1.0
 
     /// True for `.recording` or `.transcribing` — drives glow border, padding, border opacity.
     private var isActive: Bool {
@@ -343,6 +344,7 @@ struct IslandView: View {
                                     .lineLimit(nil)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .frame(maxWidth: .infinity, alignment: .leading)
+                                    .opacity(isTranscribing ? pulseOpacity : 1.0)
                                     .background(GeometryReader { geo in
                                         Color.clear.preference(key: TextHeightKey.self, value: geo.size.height)
                                     })
@@ -376,6 +378,17 @@ struct IslandView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
                 .padding(.bottom, isActive ? 4 : 10)
+                .onChange(of: isTranscribing) { _, transcribing in
+                    if transcribing {
+                        withAnimation(.easeInOut(duration: 0.75).repeatForever(autoreverses: true)) {
+                            pulseOpacity = 0.4
+                        }
+                    } else {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            pulseOpacity = 1.0
+                        }
+                    }
+                }
             }
 
             if isDownloading {

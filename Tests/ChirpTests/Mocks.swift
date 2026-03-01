@@ -20,7 +20,7 @@ actor MockTranscriber: TranscriberProtocol {
         return initializeResult
     }
 
-    var feedAudioHandler: (([Float]) -> [String])? = nil
+    var feedAudioHandler: (@Sendable ([Float]) -> [String])? = nil
 
     func feedAudio(samples: [Float]) async -> [String] {
         feedAudioCallCount += 1
@@ -35,6 +35,8 @@ actor MockTranscriber: TranscriberProtocol {
     func setFeedAudioResult(_ value: [String]) { feedAudioResult = value }
     func setFeedAudioDelay(_ value: UInt64) { feedAudioDelay = value }
     func setFlushDelay(_ value: UInt64) { flushDelay = value }
+    func setPeekResult(_ value: String?) { peekResult = value }
+    func setFeedAudioHandler(_ handler: @escaping @Sendable ([Float]) -> [String]) { feedAudioHandler = handler }
 
     func peekTranscription() -> String? {
         peekCalled = true
@@ -61,6 +63,10 @@ final class MockAudioRecorder: AudioRecording {
     var prepareCalled = false
     var microphoneAccessGranted = true
     var voiceProcessingEnabled: Bool = false
+    var startCallCount = 0
+    var stopCallCount = 0
+    /// Tracks whether startRecording was called while already recording (double-start).
+    var doubleStartDetected = false
 
     func requestMicrophoneAccess() async -> Bool {
         microphoneAccessGranted
@@ -71,11 +77,14 @@ final class MockAudioRecorder: AudioRecording {
     }
 
     func startRecording(onSamples: @escaping @Sendable ([Float]) -> Void) {
+        if isRecording { doubleStartDetected = true }
+        startCallCount += 1
         isRecording = true
         lastOnSamples = onSamples
     }
 
     func stopRecording() {
+        stopCallCount += 1
         isRecording = false
         lastOnSamples = nil
     }
@@ -140,5 +149,23 @@ final class MockTextInserter: TextInserting {
     func deleteBackward(count: Int) {
         guard count > 0 else { return }
         deletedCounts.append(count)
+    }
+}
+
+final class Counter: Sendable {
+    private let lock = NSLock()
+    private nonisolated(unsafe) var _value = 0
+    func increment() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        _value += 1
+        return _value
+    }
+}
+
+struct MockSTTClient: STTClient {
+    let result: String
+    func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
+        result
     }
 }
