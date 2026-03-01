@@ -23,10 +23,16 @@ protocol TranscriptionPipeline: Sendable {
     func peekTranscription() async -> String?
 
     /// Flush remaining audio and return final post-processed text.
-    func flush() async -> String
+    /// - Parameter onPostProcessing: Called when transcription is complete and
+    ///   post-processing (LLM/T5) is about to begin. Nil when no post-processing applies.
+    func flush(onPostProcessing: (@Sendable () -> Void)?) async -> String
 
     /// Reset state for a new recording session.
     func resetVAD() async
+}
+
+extension TranscriptionPipeline {
+    func flush() async -> String { await flush(onPostProcessing: nil) }
 }
 
 // MARK: - Offline Pipeline
@@ -102,7 +108,7 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
         return TextPostProcessor.process(raw)
     }
 
-    func flush() async -> String {
+    func flush(onPostProcessing: (@Sendable () -> Void)? = nil) async -> String {
         let raw = await transcriber.flush()
         let remaining = TextPostProcessor.process(raw)
 
@@ -111,6 +117,7 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
             let fullText = accumulatedText.joined(separator: " ")
             accumulatedText.removeAll()
             guard !fullText.isEmpty else { return "" }
+            onPostProcessing?()
             // Run LLM post-processing on full text with retry, fallback to regex-cleaned text
             let processor = postProcessor
             do {
@@ -186,7 +193,7 @@ actor CloudTranscriptionPipeline: TranscriptionPipeline {
         return combined.isEmpty ? nil : combined
     }
 
-    func flush() async -> String {
+    func flush(onPostProcessing: (@Sendable () -> Void)? = nil) async -> String {
         // Flush local transcriber (discard result — it was only for preview)
         _ = await localTranscriber.flush()
 
@@ -217,6 +224,7 @@ actor CloudTranscriptionPipeline: TranscriptionPipeline {
             let raw = try await RetryHelper.withRetry {
                 try await client.transcribe(samples: samples, sampleRate: rate)
             }
+            onPostProcessing?()
             // Try full post-processing with retry, fall back to regex on LLM error
             do {
                 return try await RetryHelper.withRetry {

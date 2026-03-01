@@ -49,7 +49,14 @@ public final class AppState {
         case error(String)
     }
 
+    public enum ProcessingPhase {
+        case none
+        case transcribing
+        case fixing
+    }
+
     public var status: Status = .loadingModel
+    public var processingPhase: ProcessingPhase = .none
     public var transcribedText: String = ""
     public var speculativeText: String = ""
     public var audioLevel: Float = 0
@@ -574,9 +581,12 @@ public final class AppState {
             guard !Task.isCancelled else { return }
             guard let self, self.recordingSession == session else { return }
 
-            let remaining = await pipeline.flush()
+            let remaining = await pipeline.flush { [weak self] in
+                Task { @MainActor in self?.processingPhase = .fixing }
+            }
             guard !Task.isCancelled else { return }
             guard self.recordingSession == session else { return }
+            self.processingPhase = .none
             self.speculativeText = ""
             if !remaining.isEmpty {
                 if typesIncrementally {
@@ -646,6 +656,7 @@ public final class AppState {
         audioContinuation = nil
 
         status = .transcribing
+        processingPhase = .transcribing
         // Keep speculativeText visible until flush result replaces it,
         // so the user doesn't see a blank overlay while waiting.
     }
@@ -668,6 +679,7 @@ public final class AppState {
         transcribedText = ""
         speculativeText = ""
         audioLevel = 0
+        processingPhase = .none
         hotkeyManager?.sessionActive = false
         status = .ready
         overlayPanel?.hideOverlay()

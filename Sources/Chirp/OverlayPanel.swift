@@ -198,10 +198,13 @@ struct IslandView: View {
         return false
     }
 
-    /// Label shown during the transcribing state.
-    /// "Processing..." for cloud/LLM modes, "Finalizing..." for offline+regex.
+    /// Label shown during the transcribing state, reflecting the current processing phase.
     private var transcribingLabel: String {
-        appState.pipelineTypesIncrementally ? "Finalizing..." : "Processing..."
+        switch appState.processingPhase {
+        case .fixing: return "Fixing\u{2026}"
+        case .transcribing: return "Transcribing\u{2026}"
+        case .none: return appState.pipelineTypesIncrementally ? "Finalizing\u{2026}" : "Processing\u{2026}"
+        }
     }
 
     /// Show the text area once any text has appeared during an active session,
@@ -223,6 +226,14 @@ struct IslandView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if isActive {
+                Text(appState.aiSettings.activeMode?.name ?? "Offline")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(.primary.opacity(0.25))
+                    .padding(.top, 10)
+                    .transition(.opacity)
+            }
+
             if isDownloading && downloadProgress >= 0.9 {
                 // Extraction phase — full pulsing bar
                 Capsule()
