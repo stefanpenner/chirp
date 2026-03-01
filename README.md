@@ -61,14 +61,6 @@ Chirp checks for updates automatically. You can also check manually from the men
 brew upgrade chirp
 ```
 
-## Troubleshooting
-
-**Text doesn't appear** — Accessibility permission isn't enabled. Check **System Settings → Privacy & Security → Accessibility**. You may need to remove and re-add Chirp if you moved the app.
-
-**No audio detected** — Check **System Settings → Privacy & Security → Microphone** and ensure Chirp is allowed. Verify your input device in the Chirp menu bar → Microphone.
-
-**Model download fails** — Check your network connection and restart the app. The download resumes where it left off.
-
 ## Requirements
 
 - macOS 15+
