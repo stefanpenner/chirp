@@ -26,8 +26,8 @@ bazel run //:Chirp       # build and launch
 ```
 
 ## Features
-<img width="310" height="257" alt="chirp-0 3 11-main" src="https://github.com/user-attachments/assets/de9c3483-3615-4f36-8415-998dc37e94cc" />
 
+<img width="310" alt="menu bar" src="docs/screenshots/menu-bar.jpg" />
 
 - **Hold-to-talk** — Press `fn` (configurable) to record, release to transcribe
 - **Works everywhere** — Text is typed at your cursor in any app
@@ -35,8 +35,13 @@ bazel run //:Chirp       # build and launch
 - **Fast** — Parakeet TDT 0.6b v2 with Silero VAD, all on-device
 - **AI Modes** — Named pipeline presets you can switch from the menu bar. Ships with "Offline" and "Offline + Fixup"; create your own with cloud STT, LLM post-processing, or any combination
 - **Cloud providers** — Optional support for OpenAI, Anthropic, and Google APIs (plus any OpenAI-compatible gateway like OpenRouter)
+- **Speaker verification** — Enroll your voice so Chirp only transcribes you, ignoring other speakers
 - **Menu bar app** — No dock icon, no clutter
 - **Auto-updates** — Check for updates from the menu bar
+
+<img width="480" alt="settings - AI modes" src="docs/screenshots/settings-ai.jpg" />
+
+<img width="480" alt="settings - speaker verification" src="docs/screenshots/speaker-verification.jpg" />
 
 ## Setup
 
