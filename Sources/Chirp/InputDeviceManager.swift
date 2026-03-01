@@ -37,7 +37,7 @@ public final class InputDeviceManager {
         return devices.first(where: { $0.uid == uid })?.id
     }
 
-    // nonisolated(unsafe): written once on MainActor at init, read in deinit.
+    @ObservationIgnored
     private nonisolated(unsafe) var listenerBlock: AudioObjectPropertyListenerBlock?
 
     init() {
@@ -148,12 +148,13 @@ public final class InputDeviceManager {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        var name: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &name) == noErr else {
+        var name: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &name) == noErr,
+              let cfName = name?.takeRetainedValue() else {
             return nil
         }
-        return name as String
+        return cfName as String
     }
 
     private static func deviceUID(deviceID: AudioDeviceID) -> String? {
@@ -162,12 +163,13 @@ public final class InputDeviceManager {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        var uid: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &uid) == noErr else {
+        var uid: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &uid) == noErr,
+              let cfUID = uid?.takeRetainedValue() else {
             return nil
         }
-        return uid as String
+        return cfUID as String
     }
 
     // MARK: - Device change listener

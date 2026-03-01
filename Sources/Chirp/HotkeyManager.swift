@@ -197,12 +197,13 @@ final class HotkeyManager {
     nonisolated(unsafe) private var runLoopSource: CFRunLoopSource?
     nonisolated(unsafe) private var config: HotkeyConfig
     nonisolated(unsafe) private var accessibilityPoller: Task<Void, Never>?
-    // nonisolated(unsafe) because these are read from the CGEvent tap C callback
-    // which has no Swift Task context. The closures themselves use
-    // MainActor.assumeIsolated to safely hop into the main actor.
-    nonisolated(unsafe) private let onPress: @Sendable () -> Void
-    nonisolated(unsafe) private let onRelease: @Sendable () -> Void
-    nonisolated(unsafe) private let onCancel: @Sendable () -> Void
+    // These are read from the CGEvent tap C callback which has no Swift Task
+    // context. The closures themselves use MainActor.assumeIsolated to safely
+    // hop into the main actor. Since the type is @Sendable () -> Void (already
+    // Sendable), nonisolated(unsafe) is not required.
+    private let onPress: @Sendable () -> Void
+    private let onRelease: @Sendable () -> Void
+    private let onCancel: @Sendable () -> Void
 
     /// Tracks hotkey state. Accessed from the event tap callback thread
     /// and read from @MainActor context, so marked nonisolated(unsafe).
