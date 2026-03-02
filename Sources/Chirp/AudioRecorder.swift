@@ -145,14 +145,9 @@ final class AudioRecorder: AudioRecording {
                     return
                 }
                 self.tearDown()
-                // Bluetooth: don't eagerly re-prepare. Accessing inputNode
-                // opens the BT device, which can trigger profile negotiation
-                // (A2DP → HFP) and fire another config change, creating a
-                // loop that causes output volume to jump. The engine will be
-                // lazily prepared in startRecording() instead.
-                if !self.isBluetoothInput() {
-                    self.prepare()
-                }
+                // Don't eagerly re-prepare — VP's aggregate device dims
+                // system audio. The engine will be lazily prepared in
+                // startRecording() instead.
             }
         }
 
@@ -304,7 +299,6 @@ final class AudioRecorder: AudioRecording {
         if configChangeDeferred {
             configChangeDeferred = false
             tearDown()
-            prepare()
         }
         schedulePark()
     }
@@ -325,14 +319,10 @@ final class AudioRecorder: AudioRecording {
 
     private func parkEngine() {
         parkTimer = nil
-        if isBluetoothInput() {
-            // Full teardown for Bluetooth — re-preparing the engine would
-            // reopen the BT device and risk profile-switch oscillation.
-            tearDown()
-        } else {
-            audioEngine?.stop()
-            audioEngine?.prepare()
-        }
+        // Full teardown so VP's aggregate device is destroyed and system
+        // audio output returns to normal volume. The engine is lazily
+        // re-prepared in startRecording().
+        tearDown()
     }
 
     /// Re-reads the input format and rebuilds the converter without tearing down the engine.
@@ -395,7 +385,7 @@ final class AudioRecorder: AudioRecording {
     func selectInputDevice(_ deviceID: AudioDeviceID?) {
         selectedDeviceID = deviceID
         tearDown()
-        prepare()
+        // Engine is lazily prepared in startRecording().
     }
 
     private func tearDown() {

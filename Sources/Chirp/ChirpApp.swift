@@ -220,7 +220,9 @@ public final class AppState {
                 if micGranted {
                     self.status = .ready
                     self.overlayPanel?.hideOverlay()
-                    self.audioRecorder.prepare()
+                    // Engine is lazily prepared in startRecording().
+                    // Preparing eagerly would enable VP's aggregate device,
+                    // dimming system audio output before the user records.
                 } else {
                     self.status = .error("Microphone access denied — enable in System Settings → Privacy & Security → Microphone")
                     self.overlayPanel?.hideOverlay()

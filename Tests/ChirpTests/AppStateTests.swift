@@ -698,7 +698,8 @@ struct AppStateTests {
             Issue.record("Expected .ready, got \(state.status)")
             return
         }
-        #expect(recorder.prepareCalled)
+        // Engine is lazily prepared in startRecording(), not at load time.
+        #expect(!recorder.prepareCalled)
     }
 
     @Test("Failed transcriber init transitions to error status")
