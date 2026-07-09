@@ -106,4 +106,12 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("Hello??") == "Hello?")
         #expect(TextPostProcessor.process("Wait..") == "Wait.")
     }
+
+    @Test("Fixes high-confidence dictation confusions")
+    func phraseFixes() {
+        #expect(TextPostProcessor.process("Create a new node.") == "Create a new note.")
+        #expect(TextPostProcessor.process("I need new nodes") == "I need new notes")
+        // Unrelated "node" must stay
+        #expect(TextPostProcessor.process("graph node") == "graph node")
+    }
 }

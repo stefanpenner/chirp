@@ -124,16 +124,17 @@ end-of-recording flush needs complete audio (pendingAudio).
 
 | | Audio source | When | Why |
 |---|---|---|---|
-| **feedAudio** | VAD segment | silence detected mid-recording | tight speech boundaries |
+| **feedAudio** | pendingAudio (all) | VAD silence end mid-recording | VAD only endpoints; raw buffer avoids onset lag |
 | **peek** | pendingAudio (last 5s) | every 400ms | show user everything since last commit |
-| **flush** | pendingAudio (all) | recording ends | match what peek showed; VAD onset lag clips beginnings |
+| **flush** | pendingAudio (all) | recording ends | match what peek showed; same source as commit |
 
 **pendingAudio** — all samples since last commit. Cleared on commit.
-Shared source for peek and flush, so preview matches final output.
+Shared source for peek, mid-recording commit, and flush — so preview,
+incremental typing, and final text share one decode path.
 
-**VAD** — emits segments on ≥0.5s silence (or 15s max). feedAudio
-transcribes segment audio. flush pops but *discards* segments,
-transcribing pendingAudio instead (avoids onset-lag clipping).
+**VAD** — emits segments on ≥0.5s silence (or 15s max). Segment audio is
+*not* decoded; VAD is the endpointing signal only. Formal model:
+`specs/TranscriberBuffer.tla` (TLC-checked).
 
 
 ### Peek Safeguards

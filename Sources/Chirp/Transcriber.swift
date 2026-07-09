@@ -142,6 +142,12 @@ actor Transcriber: TranscriberProtocol {
 
     /// Feeds raw audio into the VAD. Returns transcriptions for any
     /// complete speech segments the VAD has detected.
+    ///
+    /// When the VAD ends a segment, we transcribe `pendingAudio` (full raw
+    /// buffer since last commit) rather than the VAD-trimmed segment.
+    /// Silero's speech-onset lag otherwise clips leading words ("what time"
+    /// → "time", "open the document" → "the document"). Same source as
+    /// peek/flush so mid-recording commits match what the user previewed.
     func feedAudio(samples: [Float]) -> [String] {
         guard let vad = vad, recognizer != nil else { return [] }
 
@@ -151,29 +157,32 @@ actor Transcriber: TranscriberProtocol {
             SherpaOnnxVoiceActivityDetectorAcceptWaveform(vad, ptr.baseAddress, Int32(samples.count))
         }
 
-        var results: [String] = []
+        // Drain VAD segment queue — segments are the endpointing signal only.
+        var hadSegment = false
         while SherpaOnnxVoiceActivityDetectorEmpty(vad) == 0 {
-            guard let segmentPtr = SherpaOnnxVoiceActivityDetectorFront(vad) else { break }
-            let segment = segmentPtr.pointee
-
-            if segment.n > 0, let samplesPtr = segment.samples {
-                let segmentSamples = Array(UnsafeBufferPointer(start: samplesPtr, count: Int(segment.n)))
-                let text = transcribeSamples(segmentSamples)
-                if !text.isEmpty {
-                    results.append(text)
-                }
+            hadSegment = true
+            if let segmentPtr = SherpaOnnxVoiceActivityDetectorFront(vad) {
+                SherpaOnnxDestroySpeechSegment(segmentPtr)
             }
-
-            SherpaOnnxDestroySpeechSegment(segmentPtr)
             SherpaOnnxVoiceActivityDetectorPop(vad)
         }
 
-        if !results.isEmpty {
-            pendingAudio.removeAll()
+        guard hadSegment else {
+            Log.transcription.debug("feedAudio: pendingAudio=\(self.pendingAudio.count) committedSegments=0")
+            return []
         }
 
-        Log.transcription.debug("feedAudio: pendingAudio=\(self.pendingAudio.count) committedSegments=\(results.count)")
-        return results
+        // Min length guard: too-short buffers are unreliable and may hallucinate.
+        guard pendingAudio.count >= 1600 else {
+            Log.transcription.debug("feedAudio: pendingAudio=\(self.pendingAudio.count) too short — skipped commit")
+            pendingAudio.removeAll()
+            return []
+        }
+
+        let text = transcribeSamples(pendingAudio)
+        pendingAudio.removeAll()
+        Log.transcription.debug("feedAudio: committed pendingAudio text=\(text)")
+        return text.isEmpty ? [] : [text]
     }
 
     /// Returns a speculative transcription of pending (uncommitted) audio,

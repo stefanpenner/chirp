@@ -85,7 +85,7 @@ apple_dynamic_framework_import(
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
         ],
         downloaded_file_path = "silero_vad.onnx",
-        # TODO: pin sha256
+        integrity = "sha256-niRJ4Qh0ltjUyrqQfyPgvT942R+lUkebucI6wJy7H9Y=",
     )
 
     return module_ctx.extension_metadata(

@@ -1,7 +1,8 @@
 // TextPostProcessor.swift — Light cleanup of raw transcription output.
 // Removes filler words (um, uh, er…), deduplicates stuttered words,
-// collapses whitespace, capitalizes standalone "I", and drops common
-// silence-hallucination-only utterances.
+// collapses whitespace, capitalizes standalone "I", applies high-confidence
+// dictation phrase fixes, and drops common silence-hallucination-only
+// utterances.
 // Pure String→String transform, no state, sub-millisecond.
 // Applied by AppState at all three text insertion points.
 //
@@ -15,6 +16,7 @@ enum TextPostProcessor {
     static func process(_ text: String) -> String {
         var result = text
         result = removeFillersAndRepetitions(result)
+        result = applyPhraseFixes(result)
         result = cleanWhitespace(result)
         result = capitalizeI(result)
         result = result.trimmingCharacters(in: .whitespaces)
@@ -59,6 +61,17 @@ enum TextPostProcessor {
         try! NSRegularExpression(pattern: #"(?<=\s|^)i(?=\s|'|$)"#)
     }()
 
+    /// High-confidence ASR confusions in dictation context only.
+    /// Keep the list tiny — false fixes are worse than leaving ASR output.
+    private static let phraseFixes: [(NSRegularExpression, String)] = {
+        let pairs: [(String, String)] = [
+            // "create a new node" is almost always "new note" in desktop dictation
+            (#"\bnew node\b"#, "new note"),
+            (#"\bnew nodes\b"#, "new notes"),
+        ]
+        return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
+    }()
+
     /// Utterances Parakeet/Whisper-class models often emit from silence/noise alone.
     /// Only dropped when the *entire* cleaned segment matches — never mid-sentence.
     /// Keep this list tight: single-word dictation of "yes"/"okay"/"goodbye" is valid.
@@ -79,6 +92,15 @@ enum TextPostProcessor {
         var result = fillerPattern.stringByReplacingMatches(in: text, range: range, withTemplate: "")
         let range2 = NSRange(result.startIndex..., in: result)
         result = repetitionPattern.stringByReplacingMatches(in: result, range: range2, withTemplate: "$1")
+        return result
+    }
+
+    private static func applyPhraseFixes(_ text: String) -> String {
+        var result = text
+        for (pattern, replacement) in phraseFixes {
+            let range = NSRange(result.startIndex..., in: result)
+            result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
+        }
         return result
     }
 
