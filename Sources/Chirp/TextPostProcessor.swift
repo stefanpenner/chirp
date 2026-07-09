@@ -1,8 +1,13 @@
 // TextPostProcessor.swift — Light cleanup of raw transcription output.
 // Removes filler words (um, uh, er…), deduplicates stuttered words,
-// collapses whitespace, and capitalizes standalone "I".
+// collapses whitespace, capitalizes standalone "I", and drops common
+// silence-hallucination-only utterances.
 // Pure String→String transform, no state, sub-millisecond.
 // Applied by AppState at all three text insertion points.
+//
+// Does NOT force sentence-start capitalization: process() runs per VAD
+// segment, so capitalizing each chunk would mangle mid-sentence joins
+// ("hello" + " world" → "Hello World"). Parakeet already emits casing.
 
 import Foundation
 
@@ -12,14 +17,19 @@ enum TextPostProcessor {
         result = removeFillersAndRepetitions(result)
         result = cleanWhitespace(result)
         result = capitalizeI(result)
-        return result.trimmingCharacters(in: .whitespaces)
+        result = result.trimmingCharacters(in: .whitespaces)
+        if isSilenceHallucination(result) {
+            return ""
+        }
+        return result
     }
 
     // MARK: - Patterns (compiled once at static-init time)
 
     private static let fillerPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(?:um|uh|uh huh|mm hmm|hmm|er|ah)\b[,.]?\s*"#,
+            // Common spoken fillers. Avoid bare "like" / "so" — high false-positive rate.
+            pattern: #"\b(?:um|uh|uh huh|mm hmm|mm-hmm|mmm|hmm|hm|er|ah|eh)\b[,.]?\s*"#,
             options: .caseInsensitive
         )
     }()
@@ -40,9 +50,27 @@ enum TextPostProcessor {
         try! NSRegularExpression(pattern: #" {2,}"#)
     }()
 
+    private static let multiPunctPattern: NSRegularExpression = {
+        // "??" / ".." / ",," → single mark
+        try! NSRegularExpression(pattern: #"([.?!,;:])\1+"#)
+    }()
+
     private static let lowercaseIPattern: NSRegularExpression = {
         try! NSRegularExpression(pattern: #"(?<=\s|^)i(?=\s|'|$)"#)
     }()
+
+    /// Utterances Parakeet/Whisper-class models often emit from silence/noise alone.
+    /// Only dropped when the *entire* cleaned segment matches — never mid-sentence.
+    /// Keep this list tight: single-word dictation of "yes"/"okay"/"goodbye" is valid.
+    private static let silenceHallucinations: Set<String> = [
+        // Function words that almost never appear as intentional one-word dictation
+        "you", "the", "a", "to", "and", "of", "in", "it", "is",
+        // Classic Whisper/Parakeet silence artifacts (usually with trailing punct)
+        "thank you.", "thanks.", "thank you for watching.",
+        "subscribe.", "please subscribe.",
+        // Pure vocalizations already partially handled as fillers; keep as whole-utterance drop
+        "hmm", "hm", "mm", "mhm", "uh", "um", "ah", "er",
+    ]
 
     // MARK: - Transforms
 
@@ -58,12 +86,22 @@ enum TextPostProcessor {
         let range = NSRange(text.startIndex..., in: text)
         var result = spaceBeforePunctPattern.stringByReplacingMatches(in: text, range: range, withTemplate: "$1")
         let range2 = NSRange(result.startIndex..., in: result)
-        result = multiSpacePattern.stringByReplacingMatches(in: result, range: range2, withTemplate: " ")
+        result = multiPunctPattern.stringByReplacingMatches(in: result, range: range2, withTemplate: "$1")
+        let range3 = NSRange(result.startIndex..., in: result)
+        result = multiSpacePattern.stringByReplacingMatches(in: result, range: range3, withTemplate: " ")
         return result
     }
 
     private static func capitalizeI(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         return lowercaseIPattern.stringByReplacingMatches(in: text, range: range, withTemplate: "I")
+    }
+
+    /// True when cleaned text is only a known silence-hallucination token.
+    private static func isSilenceHallucination(_ text: String) -> Bool {
+        let normalized = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return silenceHallucinations.contains(normalized)
     }
 }

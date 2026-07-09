@@ -1,6 +1,6 @@
 # Architecture
 
-Chirp is a macOS 26+ menu bar app that performs offline speech-to-text. Hold the fn key, speak, release — transcribed text is typed into the focused app. All inference runs on-device via sherpa-onnx by default; audio never leaves the machine unless the user opts into cloud AI features.
+Chirp is a macOS 15+ menu bar app that performs offline speech-to-text. Hold the fn key, speak, release — transcribed text is typed into the focused app. All inference runs on-device via sherpa-onnx by default; audio never leaves the machine unless the user opts into cloud AI features.
 
 ## Component Overview
 

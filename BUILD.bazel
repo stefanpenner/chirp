@@ -109,6 +109,7 @@ swift_test(
     name = "AppStateTests",
     srcs = [
         "Tests/ChirpTests/AppStateTests.swift",
+        "Tests/ChirpTests/SessionMachinePropertyTests.swift",
         "Tests/ChirpTests/Mocks.swift",
     ],
     deps = [":ChirpLib"],

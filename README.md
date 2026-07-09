@@ -76,7 +76,7 @@ When you use a cloud AI mode, audio or text is sent to the provider you configur
 
 - [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) — speech recognition engine (Apache 2.0)
 - [ONNX Runtime](https://github.com/microsoft/onnxruntime) — model inference runtime (MIT)
-- [NVIDIA Parakeet TDT 0.6b v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) — speech-to-text model ([CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/))
+- [NVIDIA Parakeet TDT 0.6b v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) — speech-to-text model ([CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/))
 - [Silero VAD](https://github.com/snakers4/silero-vad) — voice activity detection (MIT)
 - [Sparkle](https://github.com/sparkle-project/Sparkle) — auto-update framework (MIT)
 

@@ -82,4 +82,28 @@ struct TextPostProcessorTests {
     func trimming() {
         #expect(TextPostProcessor.process("  hello  ") == "hello")
     }
+
+    @Test("Drops silence-hallucination-only utterances")
+    func silenceHallucinations() {
+        #expect(TextPostProcessor.process("you") == "")
+        #expect(TextPostProcessor.process("the") == "")
+        #expect(TextPostProcessor.process("thank you.") == "")
+        #expect(TextPostProcessor.process("Thank you for watching.") == "")
+        #expect(TextPostProcessor.process("hmm") == "")
+        // Legitimate single-word dictation must pass through
+        #expect(TextPostProcessor.process("Yeah") == "Yeah")
+        #expect(TextPostProcessor.process("Okay") == "Okay")
+        #expect(TextPostProcessor.process("goodbye") == "goodbye")
+        #expect(TextPostProcessor.process("yes") == "yes")
+        // Multi-word speech must pass through
+        #expect(TextPostProcessor.process("yeah I agree") == "yeah I agree")
+        #expect(TextPostProcessor.process("thank you so much") == "thank you so much")
+        #expect(TextPostProcessor.process("okay let's go") == "okay let's go")
+    }
+
+    @Test("Collapses repeated punctuation")
+    func multiPunct() {
+        #expect(TextPostProcessor.process("Hello??") == "Hello?")
+        #expect(TextPostProcessor.process("Wait..") == "Wait.")
+    }
 }

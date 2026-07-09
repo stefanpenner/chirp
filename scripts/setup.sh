@@ -11,7 +11,7 @@ fi
 
 SHERPA_VERSION="v1.12.24"
 ONNXRUNTIME_VERSION="1.23.2"
-TDT_MODEL_NAME="sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
+TDT_MODEL_NAME="sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
 
 echo "=== Chirp Setup ==="
 echo ""
@@ -46,7 +46,7 @@ ls -lh "$ROOT/Frameworks/lib/"
 # --- Download Parakeet TDT model ---
 if [ ! -d "$ROOT/models/${TDT_MODEL_NAME}" ]; then
     echo ""
-    echo "Downloading Parakeet TDT 0.6b v2 (int8) model (~240MB compressed, ~630MB extracted)..."
+    echo "Downloading Parakeet TDT 0.6b v3 (int8) model (~465MB compressed)..."
     mkdir -p "$ROOT/models"
     MODEL_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/${TDT_MODEL_NAME}.tar.bz2"
     curl -L "$MODEL_URL" -o /tmp/parakeet-tdt-model.tar.bz2

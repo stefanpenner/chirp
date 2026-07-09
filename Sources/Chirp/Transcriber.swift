@@ -1,5 +1,5 @@
 // Transcriber.swift — Offline speech recognition via sherpa-onnx C API.
-// Actor wrapping an offline recognizer (Parakeet TDT 0.6b v2) and Silero VAD.
+// Actor wrapping an offline recognizer (Parakeet TDT 0.6b v3) and Silero VAD.
 // Conforms to TranscriberProtocol; used by AppState to process audio:
 //   feedAudio()  → returns committed segments when VAD detects speech end
 //   peekTranscription() → speculative preview of current pending audio
