@@ -12,6 +12,24 @@ segments to detected speech boundaries, which can clip the start — so
 peek and flush transcribe the raw buffer instead.
 
 
+## Quality tests (generated audio → ranked WER)
+
+Corpus pipeline tests synthesize speech with macOS `say`, convert to
+16 kHz mono Float32, feed the real offline pipeline in ~85 ms chunks,
+score each phrase with word/character error rate, and rank the corpus.
+
+```
+bazel test //:AudioCorpusPipelineTests --test_output=all
+# or the broader suite (same harness + older integration cases):
+bazel test //:TranscriberIntegrationTests --test_output=all
+```
+
+Scoring helpers live in `Tests/ChirpTests/TranscriptionScoring.swift`
+(always-on unit tests via `//:TextTests`). Generation is
+`SpeechAudioGenerator` (`say` + `afconvert`). Budgets: mean WER ≤ 35%
+on clean TTS; silence must not hallucinate.
+
+
 ## Components
 
 ```

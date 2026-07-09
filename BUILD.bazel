@@ -138,6 +138,8 @@ swift_test(
     srcs = [
         "Tests/ChirpTests/TextPostProcessorTests.swift",
         "Tests/ChirpTests/TextInserterTests.swift",
+        "Tests/ChirpTests/TranscriptionScoring.swift",
+        "Tests/ChirpTests/TranscriptionScoringTests.swift",
         "Tests/ChirpTests/Mocks.swift",
     ],
     deps = [":ChirpLib"],
@@ -179,6 +181,9 @@ swift_test(
     name = "TranscriberIntegrationTests",
     srcs = [
         "Tests/ChirpTests/TranscriberIntegrationTests.swift",
+        "Tests/ChirpTests/AudioCorpusPipelineTests.swift",
+        "Tests/ChirpTests/SpeechAudioGenerator.swift",
+        "Tests/ChirpTests/TranscriptionScoring.swift",
         "Tests/ChirpTests/Mocks.swift",
     ],
     data = [
@@ -189,5 +194,27 @@ swift_test(
     copts = ["-swift-version", "6"],
     env_inherit = ["HOME"],
     local = True,
-    tags = ["manual"],  # requires local model; run explicitly
+    # Requires local Parakeet model + macOS `say`/`afconvert` for corpus generation.
+    tags = ["manual"],
+)
+
+# Alias for the ranked audio corpus suite (same binary; clearer name).
+# bazel test //:AudioCorpusPipelineTests --test_output=all
+swift_test(
+    name = "AudioCorpusPipelineTests",
+    srcs = [
+        "Tests/ChirpTests/AudioCorpusPipelineTests.swift",
+        "Tests/ChirpTests/SpeechAudioGenerator.swift",
+        "Tests/ChirpTests/TranscriptionScoring.swift",
+        "Tests/ChirpTests/Mocks.swift",
+    ],
+    data = [
+        "Tests/ChirpTests/hello_world.wav",
+        "@silero_vad//file",
+    ],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+    env_inherit = ["HOME"],
+    local = True,
+    tags = ["manual"],
 )
