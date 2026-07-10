@@ -106,12 +106,20 @@ Next ==
 Spec == Init /\ [][Next]_vars
 
 ----
+\* Incremental mode: app typed length always mirrors session text
+TypedMatchesText == typedToApp = textLen
+
+\* Cannot await when nothing was typed
+AwaitNeedsLastTyped == awaiting => lastTyped > 0
+
 Inv ==
   /\ TypeOK
-  /\ typedToApp = textLen
+  /\ TypedMatchesText
   /\ lastTyped <= textLen
-  \* Cannot await when nothing was typed
-  /\ awaiting => lastTyped > 0
+  /\ AwaitNeedsLastTyped
+
+\* Bait: negation of a real safety property (must FAIL under TLC)
+BaitInv == ~AwaitNeedsLastTyped
 
 StateConstraint == textLen <= MaxLen
 

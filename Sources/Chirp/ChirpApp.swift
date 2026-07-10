@@ -672,6 +672,12 @@ public final class AppState {
                         )
                     case .noSpaceThat:
                         self.performNoSpaceThat(typesIncrementally: false)
+                    case .selectThat:
+                        self.performSelectThat(typesIncrementally: false)
+                    case .selectLastWord:
+                        self.performSelectLastWord(typesIncrementally: false)
+                    case .selectAll:
+                        self.performSelectAll(typesIncrementally: false)
                     case .none:
                         // One-shot type: replace buffer + stack so scratch undoes the
                         // whole batch (mid-session segments were not typed/pushed).
@@ -740,6 +746,12 @@ public final class AppState {
             performTransformLastPhrase(CapsTransform.sentenceCase, typesIncrementally: typesIncrementally)
         case .noSpaceThat:
             performNoSpaceThat(typesIncrementally: typesIncrementally)
+        case .selectThat:
+            performSelectThat(typesIncrementally: typesIncrementally)
+        case .selectLastWord:
+            performSelectLastWord(typesIncrementally: typesIncrementally)
+        case .selectAll:
+            performSelectAll(typesIncrementally: typesIncrementally)
         case .none:
             // Multi-step replace: undo last phrase, then insert replacement.
             if ReplaceDecision.shouldUndoBeforeCommit(awaitingReplace: awaitingReplace) {
@@ -1000,6 +1012,53 @@ public final class AppState {
         }
         editStack.clear()
         lastCommittedNormalized = ""
+    }
+
+    /// Select the last typed phrase (EditStack top delta). Buffer unchanged.
+    /// Requires focus in target app (same as deleteBackward).
+    private func performSelectThat(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        guard let delta = editStack.lastDelta, !delta.isEmpty else { return }
+        textInserter.selectBackward(count: delta.count)
+    }
+
+    /// Select the last whitespace-delimited word. Buffer unchanged.
+    private func performSelectLastWord(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        var buffer = transcribedText
+        while buffer.last?.isWhitespace == true {
+            buffer.removeLast()
+        }
+        guard let lastSpace = buffer.lastIndex(where: { $0.isWhitespace }) else {
+            // Single word — select entire buffer content
+            let count = transcribedText.count
+            if count > 0 {
+                textInserter.selectBackward(count: count)
+            }
+            return
+        }
+        let wordStart = buffer.index(after: lastSpace)
+        var start = wordStart
+        if start > transcribedText.startIndex {
+            let before = transcribedText.index(before: start)
+            if transcribedText[before].isWhitespace {
+                start = before
+            }
+        }
+        let selected = String(transcribedText[start...])
+        if !selected.isEmpty {
+            textInserter.selectBackward(count: selected.count)
+        }
+    }
+
+    /// Select all in the focused app (⌘A). Buffer unchanged.
+    private func performSelectAll(typesIncrementally: Bool) {
+        // ⌘A is useful after non-incremental type as well (text is in the app).
+        _ = typesIncrementally
+        textInserter.selectAll()
     }
 
     /// Polls the pipeline for a speculative preview of uncommitted audio.

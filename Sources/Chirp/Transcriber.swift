@@ -195,7 +195,8 @@ actor Transcriber: TranscriberProtocol {
             return []
         }
 
-        let text = transcribeSamples(Self.withSpeechWindow(pendingAudio))
+        let window = Self.withSpeechWindow(pendingAudio)
+        let text = transcribeSamples(window.samples, speechFrameCount: window.speechFrameCount)
         // Empty ASR on a VAD endpoint is usually a false end (noise / mid-pause).
         // Keep pendingAudio so the next commit/flush still sees the full utterance.
         guard !text.isEmpty else {
@@ -222,11 +223,12 @@ actor Transcriber: TranscriberProtocol {
         guard DecodePolicy.canPeek(pendingSampleCount: pendingAudio.count, speechDetected: true) else {
             return nil
         }
-        let window = DecodePolicy.peekWindowCount(pendingSampleCount: pendingAudio.count)
-        let samples = pendingAudio.count > window
-            ? Array(pendingAudio.suffix(window))
+        let windowCount = DecodePolicy.peekWindowCount(pendingSampleCount: pendingAudio.count)
+        let samples = pendingAudio.count > windowCount
+            ? Array(pendingAudio.suffix(windowCount))
             : pendingAudio
-        let text = transcribeSamples(Self.withSpeechWindow(samples))
+        let window = Self.withSpeechWindow(samples)
+        let text = transcribeSamples(window.samples, speechFrameCount: window.speechFrameCount)
         Log.transcription.debug("peek: pendingAudio=\(self.pendingAudio.count) speechDetected=true text=\(text)")
         return text.isEmpty ? nil : text
     }
@@ -255,7 +257,8 @@ actor Transcriber: TranscriberProtocol {
             return ""
         }
 
-        let text = transcribeSamples(Self.withSpeechWindow(pendingAudio))
+        let window = Self.withSpeechWindow(pendingAudio)
+        let text = transcribeSamples(window.samples, speechFrameCount: window.speechFrameCount)
         Log.transcription.debug("flush: pendingAudio=\(self.pendingAudio.count) hasPendingSpeech=true text=\(text)")
         pendingAudio.removeAll()
         return text
@@ -270,6 +273,13 @@ actor Transcriber: TranscriberProtocol {
 
     // MARK: - Decode window
 
+    /// Energy-trimmed window plus count of frames above the energy threshold.
+    /// `speechFrameCount` feeds `DecodeReject` (silence / low-energy garbage).
+    struct SpeechWindow: Equatable, Sendable {
+        let samples: [Float]
+        let speechFrameCount: Int
+    }
+
     /// Drop long leading *and* trailing near-silence before ASR, but keep
     /// ~200ms pre-roll / post-roll so true speech edges are not clipped.
     /// Reduces decode on pure silence padding while preserving onset/offset.
@@ -280,11 +290,8 @@ actor Transcriber: TranscriberProtocol {
         postRollSamples: Int = DecodePolicy.postRollSamples,
         frameSamples: Int = DecodePolicy.energyFrameSamples,
         energyThreshold: Float = DecodePolicy.energyThreshold
-    ) -> [Float] {
-        guard samples.count > preRollSamples + postRollSamples + frameSamples else {
-            return samples
-        }
-
+    ) -> SpeechWindow {
+        var speechFrameCount = 0
         var firstSpeech: Int?
         var lastSpeech: Int?
         var i = 0
@@ -297,20 +304,32 @@ actor Transcriber: TranscriberProtocol {
             }
             let rms = sqrtf(sum / Float(frameSamples))
             if rms >= energyThreshold {
+                speechFrameCount += 1
                 if firstSpeech == nil { firstSpeech = i }
                 lastSpeech = end
             }
             i += frameSamples
         }
 
+        // Too short to trim usefully — still report energy frame count.
+        guard samples.count > preRollSamples + postRollSamples + frameSamples else {
+            return SpeechWindow(samples: samples, speechFrameCount: speechFrameCount)
+        }
+
         guard let first = firstSpeech, let last = lastSpeech else {
-            return samples // all near-silent — leave unchanged for caller guards
+            // All near-silent — leave unchanged for caller guards.
+            return SpeechWindow(samples: samples, speechFrameCount: 0)
         }
 
         let start = max(0, first - preRollSamples)
         let end = min(samples.count, last + postRollSamples)
-        if start == 0 && end == samples.count { return samples }
-        return Array(samples[start..<end])
+        if start == 0 && end == samples.count {
+            return SpeechWindow(samples: samples, speechFrameCount: speechFrameCount)
+        }
+        return SpeechWindow(
+            samples: Array(samples[start..<end]),
+            speechFrameCount: speechFrameCount
+        )
     }
 
     /// Back-compat alias used by older tests/call sites.
@@ -326,14 +345,15 @@ actor Transcriber: TranscriberProtocol {
             postRollSamples: 0,
             frameSamples: frameSamples,
             energyThreshold: energyThreshold
-        )
+        ).samples
     }
 
     // MARK: - Inference
 
     /// Runs offline recognition on a buffer of samples. Thread-safe via actor isolation.
-    /// Rejects extremely low-confidence hypotheses when token log-probs are present.
-    private func transcribeSamples(_ samples: [Float]) -> String {
+    /// Rejects extremely low-confidence hypotheses when token log-probs are present,
+    /// and silence/low-energy garbage via `DecodeReject` when scores are nil.
+    private func transcribeSamples(_ samples: [Float], speechFrameCount: Int) -> String {
         guard let recognizer = recognizer, !samples.isEmpty else { return "" }
 
         guard let stream = SherpaOnnxCreateOfflineStream(recognizer) else { return "" }
@@ -367,9 +387,24 @@ actor Transcriber: TranscriberProtocol {
         if count > 0, let ptr = resultPtr.pointee.ys_log_probs {
             logProbs = Array(UnsafeBufferPointer(start: ptr, count: count))
         }
+        let mean = ConfidenceGate.meanLogProb(tokenLogProbs: logProbs)
         if !ConfidenceGate.accept(tokenLogProbs: logProbs) {
-            let mean = ConfidenceGate.meanLogProb(tokenLogProbs: logProbs).map { String(format: "%.2f", $0) } ?? "?"
-            Log.transcription.info("Rejected low-confidence ASR (mean logp=\(mean)): \"\(text)\"")
+            let meanStr = mean.map { String(format: "%.2f", $0) } ?? "?"
+            Log.transcription.info("Rejected low-confidence ASR (mean logp=\(meanStr)): \"\(text)\"")
+            SherpaOnnxDestroyOfflineRecognizerResult(resultPtr)
+            SherpaOnnxDestroyOfflineStream(stream)
+            return ""
+        }
+
+        // Energy/silence gate: catch Parakeet silence hallucinations when log-probs are nil.
+        if DecodeReject.shouldReject(
+            hyp: text,
+            meanLogProb: mean,
+            speechFrameCount: speechFrameCount
+        ) {
+            Log.transcription.info(
+                "Rejected silence/low-energy ASR (frames=\(speechFrameCount)): \"\(text)\""
+            )
             SherpaOnnxDestroyOfflineRecognizerResult(resultPtr)
             SherpaOnnxDestroyOfflineStream(stream)
             return ""

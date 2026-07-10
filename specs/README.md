@@ -24,6 +24,7 @@ tlc specs/PipelineRebuild.tla
 | `ScratchUndo` | **legacy** single-level scratch (superseded by `EditStack`) | — |
 | `EditCommands` | coarse length model of edit commands (see `EditStack` for stack) | `DictationCommand` |
 | `ConfidenceGate` | accept/reject ASR when token log-probs exist | `ConfidenceGate` |
+| `DecodeReject` | energy/silence + log-prob composite reject (Parakeet nil scores) | `DecodeReject` |
 | `ClipboardCommands` | copy that / paste that vs session buffer | `DictationCommand` |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 
@@ -34,13 +35,21 @@ Config path is relative to the **spec directory** (TLC’s cwd), not the repo ro
 ```bash
 # real Inv must pass
 tlc specs/CancelVoid.tla
+tlc specs/CapsMode.tla
 tlc specs/ConfidenceGate.tla
+tlc specs/DecodeReject.tla
+tlc specs/EditStack.tla
+tlc specs/ReplaceThat.tla
 tlc specs/SessionMachine.tla
 tlc specs/TranscriberBuffer.tla
 
 # bait Inv must fail (error expected)
 tlc -c CancelVoid_bait.cfg specs/CancelVoid.tla
+tlc -c CapsMode_bait.cfg specs/CapsMode.tla
 tlc -c ConfidenceGate_bait.cfg specs/ConfidenceGate.tla
+tlc -c DecodeReject_bait.cfg specs/DecodeReject.tla
+tlc -c EditStack_bait.cfg specs/EditStack.tla
+tlc -c ReplaceThat_bait.cfg specs/ReplaceThat.tla
 tlc -c SessionMachine_bait.cfg specs/SessionMachine.tla
 tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 ```
@@ -48,7 +57,11 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | Bait config | Weakened claim | Real property negated |
 |-------------|----------------|------------------------|
 | `CancelVoid_bait` | ready may keep session text | `ReadyIsVoided` |
+| `CapsMode_bait` | reset may leave non-normal mode | `ResetYieldsNormal` |
 | `ConfidenceGate_bait` | no-scores may reject | `NoScoresAccept` |
+| `DecodeReject_bait` | silence may accept non-empty hyp | `SilenceNonEmptyRejects` |
+| `EditStack_bait` | typed length may diverge from text | `TypedMatchesText` |
+| `ReplaceThat_bait` | may await with no last phrase | `AwaitNeedsLastTyped` |
 | `SessionMachine_bait` | ready may not be idle | `ReadyIsIdle` |
 | `TranscriberBuffer_bait` | commits never use pending | `lastCommitSrc = "none"` |
 

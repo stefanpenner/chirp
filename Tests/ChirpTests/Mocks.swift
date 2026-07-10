@@ -137,6 +137,8 @@ final class MockTextInserter: TextInserting {
     var accessibilityChecked = false
     var typedTexts: [String] = []
     var deletedCounts: [Int] = []
+    var selectBackwardCounts: [Int] = []
+    var selectAllCalled = false
     var clipboard: String = ""
     var pasteCallCount = 0
     var copyCallCount = 0
@@ -169,6 +171,15 @@ final class MockTextInserter: TextInserting {
     func deleteBackward(count: Int) {
         guard count > 0 else { return }
         deletedCounts.append(count)
+    }
+
+    func selectBackward(count: Int) {
+        guard count > 0 else { return }
+        selectBackwardCounts.append(count)
+    }
+
+    func selectAll() {
+        selectAllCalled = true
     }
 }
 

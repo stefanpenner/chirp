@@ -15,7 +15,8 @@ struct TranscriberTests {
     func speechWindowShortUnchanged() {
         let samples = [Float](repeating: 0.1, count: 1000)
         let out = Transcriber.withSpeechWindow(samples)
-        #expect(out.count == samples.count)
+        #expect(out.samples.count == samples.count)
+        #expect(out.speechFrameCount > 0)
     }
 
     @Test("withSpeechWindow trims leading and trailing silence with rolls")
@@ -31,18 +32,22 @@ struct TranscriberTests {
             frameSamples: 320,
             energyThreshold: 0.01
         )
-        #expect(out.count < samples.count)
+        #expect(out.samples.count < samples.count)
         // speech + pre + post - frame slack
-        #expect(out.count >= 8000 + 3200 + 3200 - 640)
-        #expect(out.count <= 8000 + 3200 + 3200 + 640)
-        #expect((out.map { abs($0) }.max() ?? 0) >= 0.2)
+        #expect(out.samples.count >= 8000 + 3200 + 3200 - 640)
+        #expect(out.samples.count <= 8000 + 3200 + 3200 + 640)
+        #expect((out.samples.map { abs($0) }.max() ?? 0) >= 0.2)
+        // 0.5s speech / 320-sample frames ≈ 25
+        #expect(out.speechFrameCount >= 20)
+        #expect(out.speechFrameCount <= 30)
     }
 
-    @Test("withSpeechWindow keeps full buffer when all silent")
+    @Test("withSpeechWindow keeps full buffer when all silent and reports zero frames")
     func speechWindowAllSilentKeepsAll() {
         let samples = [Float](repeating: 0, count: 16000)
         let out = Transcriber.withSpeechWindow(samples)
-        #expect(out.count == samples.count)
+        #expect(out.samples.count == samples.count)
+        #expect(out.speechFrameCount == 0)
     }
 
     @Test("withLeadingPreRoll alias still trims leading silence")

@@ -6,6 +6,7 @@
 // - Needs compound (twenty five), teen, magnitude (hundred/thousand), or "point"
 // - Digit runs: ≥3 consecutive single-digit units → concatenate ("five five five" → "555")
 //   Short pure runs ("one two") stay words; "oh" → 0 (leading zeros kept)
+// - Negatives: "minus"/"negative" + number phrase → "-N" (not bare "minus" / "minus sign")
 // - Ordinals: "first" blocked before of/all/class; "twenty first" → 21st always
 // Dual-tested via SpokenNumberITNTests (no TLA — pure String→String).
 
@@ -84,6 +85,16 @@ enum SpokenNumberITN {
                 continue
             }
 
+            // Negative: "minus twenty" / "negative five" → "-20" / "-5"
+            // Only when followed by a convertible number phrase (not bare "minus" / "minus sign").
+            if core == "minus" || core == "negative" {
+                if let rewritten = tryConsumeSignedNumber(parts: parts, start: i + 1) {
+                    out.append(rewritten.text)
+                    i = rewritten.nextIndex
+                    continue
+                }
+            }
+
             // Compound ordinal: twenty first → 21st
             if let t = tens[core], i + 1 < parts.count {
                 let nextCore = normalizeToken(parts[i + 1])
@@ -109,35 +120,9 @@ enum SpokenNumberITN {
 
             // Cardinal multi-token / teen / decade / digit-run
             if numberWords.contains(core) {
-                var j = i
-                var words: [String] = []
-                while j < parts.count {
-                    let c = normalizeToken(parts[j])
-                    if c.isEmpty { break }
-                    if numberWords.contains(c) {
-                        words.append(c)
-                        j += 1
-                    } else {
-                        break
-                    }
-                }
-                // Phone-style: consecutive single-digit units (≥3) → concatenate
-                // "five five five one two one two" → "5551212", "oh five five five" → "0555"
-                // Short runs ("one two") stay conversational words.
-                if isDigitRun(words) {
-                    if words.count >= 3, let digits = formatDigitRun(words) {
-                        let lastRaw = parts[j - 1]
-                        let trailing = trailingPunctuation(lastRaw)
-                        out.append(digits + trailing)
-                        i = j
-                        continue
-                    }
-                    // length < 3 pure digit run: leave tokens as words
-                } else if let value = parsePhrase(words), shouldConvert(words) {
-                    let lastRaw = parts[j - 1]
-                    let trailing = trailingPunctuation(lastRaw)
-                    out.append(formatValue(value) + trailing)
-                    i = j
+                if let rewritten = tryConsumeCardinal(parts: parts, start: i, forceConvert: false) {
+                    out.append(rewritten.text)
+                    i = rewritten.nextIndex
                     continue
                 }
             }
@@ -146,6 +131,54 @@ enum SpokenNumberITN {
             i += 1
         }
         return out.joined(separator: " ")
+    }
+
+    /// Consume a number phrase after "minus"/"negative"; bare units convert when signed.
+    private static func tryConsumeSignedNumber(
+        parts: [String], start: Int
+    ) -> (text: String, nextIndex: Int)? {
+        guard start < parts.count else { return nil }
+        guard let rewritten = tryConsumeCardinal(parts: parts, start: start, forceConvert: true)
+        else { return nil }
+        return ("-" + rewritten.text, rewritten.nextIndex)
+    }
+
+    /// Scan a run of number words from `start` and convert when allowed.
+    /// `forceConvert` allows bare units (used after minus/negative).
+    private static func tryConsumeCardinal(
+        parts: [String], start: Int, forceConvert: Bool
+    ) -> (text: String, nextIndex: Int)? {
+        var j = start
+        var words: [String] = []
+        while j < parts.count {
+            let c = normalizeToken(parts[j])
+            if c.isEmpty { break }
+            if numberWords.contains(c) {
+                words.append(c)
+                j += 1
+            } else {
+                break
+            }
+        }
+        guard !words.isEmpty else { return nil }
+
+        // Phone-style: consecutive single-digit units (≥3) → concatenate
+        // "five five five one two one two" → "5551212", "oh five five five" → "0555"
+        // Short runs ("one two") stay conversational words (unless signed).
+        if isDigitRun(words) {
+            let minLen = forceConvert ? 1 : 3
+            if words.count >= minLen, let digits = formatDigitRun(words) {
+                let lastRaw = parts[j - 1]
+                let trailing = trailingPunctuation(lastRaw)
+                return (digits + trailing, j)
+            }
+            return nil
+        } else if let value = parsePhrase(words), forceConvert || shouldConvert(words) {
+            let lastRaw = parts[j - 1]
+            let trailing = trailingPunctuation(lastRaw)
+            return (formatValue(value) + trailing, j)
+        }
+        return nil
     }
 
     /// Parse a phrase of number words into a numeric value, or nil if invalid.

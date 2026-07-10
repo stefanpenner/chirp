@@ -66,11 +66,18 @@ Next ==
 Spec == Init /\ [][Next]_vars
 
 ----
+\* After reset, mode is normal (enforced by Reset action)
+ResetYieldsNormal == lastOp = "reset" => mode = "normal"
+
+\* CapThat never fires without prior commits (enforced by guard)
+CapThatNeedsContent == lastOp = "capThat" => commits > 0
+
 Inv ==
   /\ TypeOK
-  \* After reset, mode is normal (enforced by Reset action)
-  /\ lastOp = "reset" => mode = "normal"
-  \* CapThat never fires without prior commits (enforced by guard)
-  /\ lastOp = "capThat" => commits > 0
+  /\ ResetYieldsNormal
+  /\ CapThatNeedsContent
+
+\* Bait: negation of a real safety property (must FAIL under TLC)
+BaitInv == ~ResetYieldsNormal
 
 ====

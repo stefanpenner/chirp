@@ -71,10 +71,13 @@ weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
 `50 cents`→`50¢`, `20 dollars and 50 cents`→`$20.50`).
 Bare `one`/`two` stay words. Digit runs (≥3 single digits) concatenate for
 phones (`five five five one two one two`→`555-1212`; 10-digit `XXX-XXX-XXXX`;
-11-digit leading-1 `1-XXX-XXX-XXXX`; `oh`→`0`). Spoken email:
+11-digit leading-1 `1-XXX-XXX-XXXX`; `oh`→`0`). Negatives: `minus twenty` /
+`negative five`→`-20`/`-5` (not bare `minus` or `minus the …`). Spoken email:
 `john at example dot com`→`john@example.com`, multi-dot
 `john at mail dot google dot com`→`john@mail.google.com` (requires `dot`; bare
-`meet at noon` stays). Spoken symbols: `slash`→`/`, `asterisk`→`*`,
+`meet at noon` stays); local connectors `underscore`/`dot`/`plus`→`_`/`.`/`+`
+(`john underscore smith at example dot com`→`john_smith@example.com`).
+Spoken symbols: `slash`→`/`, `asterisk`→`*`,
 `underscore`→`_`, fractions `one half`→`½`. Lists: `bullet point` /
 `next bullet` → `•`; `number one` / `next number` → `1.` / `2.`;
 `end list` resets numbering. Session list counter resets each recording.
@@ -96,13 +99,18 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **title case that** — title-case last phrase (stack delta)
 - **sentence case that** — sentence-case last phrase
 - **no space that** — join last word without leading space
+- **select that** / **highlight that** — select last phrase (shift+left)
+- **select last word** — select trailing word only
+- **select all** — select all (⌘A)
 - Overlay badge shows sticky caps mode when not normal
 - **clear all** — wipe session transcript
 - **press enter** / **press tab** — key inserts
 - **copy that** / **paste that** — clipboard
 First segment auto-capitalizes. Consecutive duplicate segments skipped.
 When sherpa provides token log-probs, `ConfidenceGate` rejects extreme
-low-confidence dumps (`ConfidenceGate.tla`). Spoken `dot com` / `at sign`.
+low-confidence dumps (`ConfidenceGate.tla`). When scores are nil (Parakeet),
+`DecodeReject` still drops non-empty hyps on pure silence / low-energy
+filler frames (`DecodeReject.tla`). Spoken `dot com` / `at sign`.
 Edit custom phrases in Settings → Audio. Speculative preview peeks every
 ~250ms while speaking, ~500ms when idle (`AdaptivePeek.tla`). Full command
 list: Settings → Audio → Voice Commands.

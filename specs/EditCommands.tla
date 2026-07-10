@@ -8,6 +8,10 @@
     DeleteLastWord  — remove last word (abstract: min(lastTyped, 1) for grain)
     ClearAll        — wipe transcript
 
+  Pure selection commands (SelectThat / SelectLastWord / SelectAll) are
+  keyboard-only in the focused app: they do not change textLen/lastTyped,
+  so they are omitted from this length model (see DictationCommandTests).
+
   Grain: lengths only (not word strings). DeleteLastWord modeled as removing
   one unit when text non-empty (abstract word).
 *)

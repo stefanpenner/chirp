@@ -41,6 +41,10 @@ extension AudioRecording {
     func checkAccessibilityPermission()
     func typeText(_ text: String)
     func deleteBackward(count: Int)
+    /// Select `count` characters backward (shift+left). Spoken "select that".
+    func selectBackward(count: Int)
+    /// Select all in the focused app (⌘A). Spoken "select all".
+    func selectAll()
     /// Copy `text` to the system pasteboard (spoken "copy that").
     func copyToClipboard(_ text: String)
     /// Paste from the system pasteboard into the focused app (spoken "paste that").
@@ -50,6 +54,8 @@ extension AudioRecording {
 }
 
 extension TextInserting {
+    func selectBackward(count: Int) {}
+    func selectAll() {}
     func copyToClipboard(_ text: String) {}
     func pasteFromClipboard() {}
     func clipboardString() -> String? { nil }

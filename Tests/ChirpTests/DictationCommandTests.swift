@@ -99,6 +99,20 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("press the enter key") == .pressEnter)
     }
 
+    @Test("recognizes select that / select last word / select all")
+    func selectCommands() {
+        #expect(DictationCommand.parse("select that") == .selectThat)
+        #expect(DictationCommand.parse("Select that.") == .selectThat)
+        #expect(DictationCommand.parse("select it") == .selectThat)
+        #expect(DictationCommand.parse("select last") == .selectThat)
+        #expect(DictationCommand.parse("highlight that") == .selectThat)
+        #expect(DictationCommand.parse("please select that") == .selectThat)
+        #expect(DictationCommand.parse("select last word") == .selectLastWord)
+        #expect(DictationCommand.parse("highlight last word") == .selectLastWord)
+        #expect(DictationCommand.parse("select all") == .selectAll)
+        #expect(DictationCommand.parse("highlight all") == .selectAll)
+    }
+
     @Test("normal text is not a command")
     func normalText() {
         #expect(DictationCommand.parse("hello world") == .none)
@@ -112,5 +126,6 @@ struct DictationCommandTests {
         #expect(DictationCommand.helpCatalog.count >= 8)
         let says = DictationCommand.helpCatalog.map(\.say)
         #expect(Set(says).count == says.count)
+        #expect(says.contains(where: { $0.lowercased().contains("select that") }))
     }
 }

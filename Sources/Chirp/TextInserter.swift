@@ -93,6 +93,37 @@ final class TextInserter: TextInserting {
         }
     }
 
+    /// Select characters backward by holding shift and pressing left arrow (0x7B).
+    func selectBackward(count: Int) {
+        guard count > 0 else { return }
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let leftArrow: CGKeyCode = 0x7B // kVK_LeftArrow
+        for _ in 0..<count {
+            if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: leftArrow, keyDown: true) {
+                keyDown.flags = .maskShift
+                keyDown.post(tap: .cgAnnotatedSessionEventTap)
+            }
+            if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: leftArrow, keyDown: false) {
+                keyUp.flags = .maskShift
+                keyUp.post(tap: .cgAnnotatedSessionEventTap)
+            }
+        }
+    }
+
+    /// Select all via ⌘A.
+    func selectAll() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let aKey: CGKeyCode = 0x00 // kVK_ANSI_A
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: aKey, keyDown: true) {
+            keyDown.flags = .maskCommand
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: aKey, keyDown: false) {
+            keyUp.flags = .maskCommand
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
     func copyToClipboard(_ text: String) {
         guard !text.isEmpty else { return }
         let pb = NSPasteboard.general

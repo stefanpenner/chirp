@@ -139,12 +139,18 @@ Next ==
 Spec == Init /\ [][Next]_vars
 
 ----
+\* Incremental mode: app typed length always mirrors session text
+TypedMatchesText == typedToApp = textLen
+
 Inv ==
   /\ TypeOK
-  /\ typedToApp = textLen
+  /\ TypedMatchesText
   \* After MaxDepth overflow, oldest deltas leave the stack but stay in text.
   /\ SumSeq(undo) <= textLen
   /\ Len(undo) <= MaxDepth
+
+\* Bait: negation of a real safety property (must FAIL under TLC)
+BaitInv == ~TypedMatchesText
 
 StateConstraint ==
   /\ textLen <= MaxLen

@@ -96,6 +96,23 @@ struct SpokenNumberITNTests {
         // Years / short codes stay plain
         #expect(SpokenNumberITN.apply("two zero two four") == "2024")
     }
+
+    @Test("negative numbers via minus/negative prefix")
+    func negativeNumbers() {
+        #expect(SpokenNumberITN.apply("minus twenty") == "-20")
+        #expect(SpokenNumberITN.apply("negative twenty") == "-20")
+        #expect(SpokenNumberITN.apply("minus five") == "-5")
+        #expect(SpokenNumberITN.apply("negative five") == "-5")
+        #expect(SpokenNumberITN.apply("minus one hundred") == "-100")
+        #expect(SpokenNumberITN.apply("minus five five five") == "-555")
+        #expect(SpokenNumberITN.apply("temperature is minus twenty") == "temperature is -20")
+        // Bare "minus" / non-numeric follow-ons stay words (not signed)
+        #expect(SpokenNumberITN.apply("minus") == "minus")
+        #expect(SpokenNumberITN.apply("minus sign") == "minus sign")
+        // "minus" not followed by a number phrase → leave "minus"; ordinal may still ITN
+        #expect(SpokenNumberITN.apply("minus the first one") == "minus the 1st one")
+        #expect(SpokenNumberITN.apply("negative") == "negative")
+    }
 }
 
 @Suite("TextPostProcessor number ITN")

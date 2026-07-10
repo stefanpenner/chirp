@@ -1,7 +1,7 @@
 // TextPostProcessor.swift — Light cleanup of raw transcription output.
 // Removes filler words (um, uh, er…), deduplicates stuttered words,
 // collapses whitespace, capitalizes standalone "I", applies high-confidence
-// dictation phrase fixes, light inverse text normalization (times/%/$),
+// dictation phrase fixes, light inverse text normalization (times/%/$/units),
 // capitalizes after terminal punct / newlines, and drops silence hallucinations.
 // Pure String→String transform, no state, sub-millisecond.
 // Applied by AppState at all three text insertion points.
@@ -156,11 +156,12 @@ enum TextPostProcessor {
         return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
     }()
 
-    /// "john at example dot com" / "john at mail dot google dot com" → email.
-    /// Requires ≥1 spoken "dot" so "meet at noon" stays conversational.
+    /// "john at example dot com" / "john underscore smith at …" → email.
+    /// Local may include spoken connectors (dot / underscore / plus).
+    /// Requires ≥1 spoken "dot" in host so "meet at noon" stays conversational.
     private static let spokenEmailPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(\w+)\s+at\s+((?:\w+\s+dot\s+)+\w+)\b"#,
+            pattern: #"\b(\w+(?:\s+(?:dot|underscore|plus)\s+\w+)*)\s+at\s+((?:\w+\s+dot\s+)+\w+)\b"#,
             options: .caseInsensitive
         )
     }()
@@ -238,6 +239,7 @@ enum TextPostProcessor {
     }
 
     /// "local at label [dot label]+" → local@label.label… (multi-dot domains + co.uk).
+    /// Local connectors: underscore→_, dot→., plus→+.
     private static func applySpokenEmail(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         let matches = spokenEmailPattern.matches(in: text, range: range)
@@ -248,7 +250,8 @@ enum TextPostProcessor {
                   let localRange = Range(match.range(at: 1), in: result),
                   let hostRange = Range(match.range(at: 2), in: result),
                   let fullRange = Range(match.range, in: result) else { continue }
-            let local = String(result[localRange])
+            let localSpoken = String(result[localRange])
+            let local = joinSpokenLocalPart(localSpoken)
             let hostSpoken = String(result[hostRange])
             let host = hostSpoken.replacingOccurrences(
                 of: #"\s+dot\s+"#,
@@ -258,6 +261,24 @@ enum TextPostProcessor {
             result.replaceSubrange(fullRange, with: "\(local)@\(host)")
         }
         return result
+    }
+
+    /// Join spoken local-part tokens: "john underscore smith" → "john_smith".
+    private static func joinSpokenLocalPart(_ spoken: String) -> String {
+        var s = spoken
+        let connectors: [(String, String)] = [
+            (#"\s+underscore\s+"#, "_"),
+            (#"\s+dot\s+"#, "."),
+            (#"\s+plus\s+"#, "+"),
+        ]
+        for (pattern, replacement) in connectors {
+            s = s.replacingOccurrences(
+                of: pattern,
+                with: replacement,
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+        return s
     }
 
     // MARK: - Mid-segment spoken terminal punctuation
@@ -442,9 +463,96 @@ enum TextPostProcessor {
         result = SpokenDateITN.apply(result)
         // Digit clock form after numbers: "3 30 pm" → "3:30 p.m."
         result = applyTimeITN(result)
+        // Units before currency so "5 pounds" → "5 lb" (weight) not "£5".
+        // Spoken bare units ("ten feet") need number+unit here — SpokenNumberITN
+        // leaves bare one…twelve alone ("one more thing").
+        result = applyUnitsITN(result)
         // %/$ after numbers so "one hundred dollars" → "100 dollars" → "$100"
         result = applyPercentITN(result)
         result = applyCurrencyITN(result)
+        return result
+    }
+
+    /// Digit or spoken unit number (bare one…twelve + decades; compounds already digits).
+    private static let unitsNumberToken =
+        #"(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"#
+
+    /// Compact unit abbreviations only when preceded by a number.
+    private static let unitsITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + unitsNumberToken + #"\s+(miles?|kilometers?|kilometres?|feet|foot|inches|inch|pounds?|kilograms?)\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Temperature scale after degree symbol: "72° fahrenheit" → "72°F".
+    private static let temperatureScalePattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(\d+(?:\.\d+)?)°\s*(fahrenheit|celsius)\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static func unitAbbreviation(for raw: String) -> String? {
+        switch raw.lowercased() {
+        case "mile", "miles": return "mi"
+        case "kilometer", "kilometers", "kilometre", "kilometres": return "km"
+        case "feet", "foot": return "ft"
+        case "inch", "inches": return "in"
+        case "pound", "pounds": return "lb"
+        case "kilogram", "kilograms": return "kg"
+        default: return nil
+        }
+    }
+
+    private static func unitDigits(from raw: String) -> String {
+        let key = raw.lowercased()
+        return extendedSpokenNumbers[key] ?? raw
+    }
+
+    private static func applyUnitsITN(_ text: String) -> String {
+        var result = applyUnitAbbreviations(text)
+        result = applyTemperatureScale(result)
+        return result
+    }
+
+    private static func applyUnitAbbreviations(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = unitsITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let unitRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let num = unitDigits(from: String(result[numRange]))
+            guard let abbr = unitAbbreviation(for: String(result[unitRange])) else { continue }
+            result.replaceSubrange(fullRange, with: "\(num) \(abbr)")
+        }
+        return result
+    }
+
+    private static func applyTemperatureScale(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = temperatureScalePattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let scaleRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let num = String(result[numRange])
+            let scale = String(result[scaleRange]).lowercased()
+            let letter: String
+            switch scale {
+            case "fahrenheit": letter = "F"
+            case "celsius": letter = "C"
+            default: continue
+            }
+            result.replaceSubrange(fullRange, with: "\(num)°\(letter)")
+        }
         return result
     }
 

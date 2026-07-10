@@ -33,6 +33,23 @@ struct TextInserterTests {
         #expect(inserter.deletedCounts == [3])
     }
 
+    @Test("selectBackward records positive count; zero is no-op")
+    func selectBackward() {
+        let inserter = MockTextInserter()
+        inserter.selectBackward(count: 0)
+        #expect(inserter.selectBackwardCounts.isEmpty)
+        inserter.selectBackward(count: 5)
+        #expect(inserter.selectBackwardCounts == [5])
+    }
+
+    @Test("selectAll records call")
+    func selectAll() {
+        let inserter = MockTextInserter()
+        #expect(!inserter.selectAllCalled)
+        inserter.selectAll()
+        #expect(inserter.selectAllCalled)
+    }
+
     @Test("steps maps newlines to return keys")
     func newlineSteps() {
         #expect(TextInserter.steps(for: "") == [])

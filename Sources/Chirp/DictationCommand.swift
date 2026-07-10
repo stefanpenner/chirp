@@ -38,6 +38,12 @@ enum DictationCommand: Equatable, Sendable {
     case sentenceCaseThat
     /// Remove the space before the last word / phrase (one-shot).
     case noSpaceThat
+    /// Select the last typed phrase (shift+left over last stack delta).
+    case selectThat
+    /// Select the last whitespace-delimited word.
+    case selectLastWord
+    /// Select all in the focused app (⌘A).
+    case selectAll
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -149,6 +155,14 @@ enum DictationCommand: Equatable, Sendable {
         case "no space that", "nospace that", "no spaces that",
              "delete the space", "remove the space":
             return .noSpaceThat
+        case "select that", "select it", "select last", "highlight that",
+             "highlight it", "highlight last":
+            return .selectThat
+        case "select last word", "highlight last word",
+             "select the last word", "highlight the last word":
+            return .selectLastWord
+        case "select all", "highlight all", "select everything":
+            return .selectAll
         default:
             return nil
         }
@@ -173,6 +187,9 @@ enum DictationCommand: Equatable, Sendable {
         ("title case that", "Title-case last phrase"),
         ("sentence case that", "Sentence-case last phrase"),
         ("no space that", "Join last word without space"),
+        ("select that", "Select last phrase"),
+        ("select last word", "Select last word"),
+        ("select all", "Select all (⌘A)"),
         ("period / comma / …", "Spoken punctuation"),
         ("new line / new paragraph", "Line breaks"),
         ("bullet point / next bullet", "Bulleted list item"),
