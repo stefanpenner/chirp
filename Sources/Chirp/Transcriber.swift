@@ -332,13 +332,19 @@ actor Transcriber: TranscriberProtocol {
     // MARK: - Inference
 
     /// Runs offline recognition on a buffer of samples. Thread-safe via actor isolation.
+    /// Rejects extremely low-confidence hypotheses when token log-probs are present.
     private func transcribeSamples(_ samples: [Float]) -> String {
         guard let recognizer = recognizer, !samples.isEmpty else { return "" }
 
         guard let stream = SherpaOnnxCreateOfflineStream(recognizer) else { return "" }
 
         samples.withUnsafeBufferPointer { ptr in
-            SherpaOnnxAcceptWaveformOffline(stream, 16000, ptr.baseAddress, Int32(samples.count))
+            SherpaOnnxAcceptWaveformOffline(
+                stream,
+                Int32(DecodePolicy.sampleRate),
+                ptr.baseAddress,
+                Int32(samples.count)
+            )
         }
 
         SherpaOnnxDecodeOfflineStream(recognizer, stream)
@@ -353,6 +359,20 @@ actor Transcriber: TranscriberProtocol {
             text = String(cString: cText).trimmingCharacters(in: .whitespacesAndNewlines)
         } else {
             text = ""
+        }
+
+        // Confidence gate (SOTA): drop only extreme low-confidence dumps.
+        let count = Int(resultPtr.pointee.count)
+        var logProbs: [Float]?
+        if count > 0, let ptr = resultPtr.pointee.ys_log_probs {
+            logProbs = Array(UnsafeBufferPointer(start: ptr, count: count))
+        }
+        if !ConfidenceGate.accept(tokenLogProbs: logProbs) {
+            let mean = ConfidenceGate.meanLogProb(tokenLogProbs: logProbs).map { String(format: "%.2f", $0) } ?? "?"
+            Log.transcription.info("Rejected low-confidence ASR (mean logp=\(mean)): \"\(text)\"")
+            SherpaOnnxDestroyOfflineRecognizerResult(resultPtr)
+            SherpaOnnxDestroyOfflineStream(stream)
+            return ""
         }
 
         SherpaOnnxDestroyOfflineRecognizerResult(resultPtr)

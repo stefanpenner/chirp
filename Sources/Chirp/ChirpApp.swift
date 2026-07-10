@@ -130,6 +130,9 @@ public final class AppState {
     /// Includes any join separator SegmentJoiner prepended.
     private var lastTypedCount = 0
 
+    /// Normalized form of the last committed non-command segment (dedup echoes).
+    private var lastCommittedNormalized = ""
+
     public convenience init() {
         let transcriber = Transcriber()
         self.init(audioRecorder: AudioRecorder(), transcriber: transcriber, textInserter: TextInserter(), startListening: false)
@@ -513,6 +516,7 @@ public final class AppState {
         speculativeText = ""
         commitGen = 0
         lastTypedCount = 0
+        lastCommittedNormalized = ""
         recordingSession &+= 1
         let session = recordingSession
         status = .recording
@@ -604,10 +608,15 @@ public final class AppState {
                         self.performDeleteLastWord(typesIncrementally: true)
                     case .clearAll:
                         self.performClearAll(typesIncrementally: true)
+                    case .pressEnter:
+                        self.performKeyInsert("\n", typesIncrementally: true)
+                    case .pressTab:
+                        self.performKeyInsert("\t", typesIncrementally: true)
                     case .none:
                         self.transcribedText = remaining
                         self.textInserter.typeText(remaining)
                         self.lastTypedCount = remaining.count
+                        self.lastCommittedNormalized = TranscriptNormalize.key(remaining)
                     }
                 }
             }
@@ -635,14 +644,34 @@ public final class AppState {
             performDeleteLastWord(typesIncrementally: typesIncrementally)
         case .clearAll:
             performClearAll(typesIncrementally: typesIncrementally)
+        case .pressEnter:
+            performKeyInsert("\n", typesIncrementally: typesIncrementally)
+        case .pressTab:
+            performKeyInsert("\t", typesIncrementally: typesIncrementally)
         case .none:
+            // Skip consecutive identical segments (VAD/ASR echo under noise)
+            let norm = TranscriptNormalize.key(text)
+            if !norm.isEmpty, norm == lastCommittedNormalized {
+                Log.transcription.debug("Skipping duplicate segment: \"\(text)\"")
+                return
+            }
             let joined = SegmentJoiner.append(existing: transcribedText, next: text)
             transcribedText = joined.full
             if typesIncrementally {
                 textInserter.typeText(joined.delta)
             }
             lastTypedCount = joined.delta.count
+            lastCommittedNormalized = norm
         }
+    }
+
+    private func performKeyInsert(_ s: String, typesIncrementally: Bool) {
+        transcribedText += s
+        if typesIncrementally {
+            textInserter.typeText(s)
+        }
+        lastTypedCount = s.count
+        lastCommittedNormalized = ""
     }
 
     /// Undo the last typed segment (Dragon-style "scratch that").
@@ -706,6 +735,7 @@ public final class AppState {
             textInserter.deleteBackward(count: remove)
         }
         lastTypedCount = 0
+        lastCommittedNormalized = ""
     }
 
     /// Polls the pipeline every 400 ms for a speculative preview of
@@ -773,6 +803,7 @@ public final class AppState {
         transcribedText = ""
         speculativeText = ""
         lastTypedCount = 0
+        lastCommittedNormalized = ""
         audioLevel = 0
         processingPhase = .none
         hotkeyManager?.sessionActive = false

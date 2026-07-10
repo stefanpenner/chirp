@@ -11,6 +11,10 @@ enum DictationCommand: Equatable, Sendable {
     case deleteLastWord
     /// Clear the entire session transcript and typed text.
     case clearAll
+    /// Insert a newline (Return key).
+    case pressEnter
+    /// Insert a tab.
+    case pressTab
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -33,6 +37,11 @@ enum DictationCommand: Equatable, Sendable {
         case "clear all", "delete all", "scratch all", "clear everything",
              "start over", "delete everything":
             return .clearAll
+        case "press enter", "press return", "hit enter", "hit return",
+             "press return key":
+            return .pressEnter
+        case "press tab", "hit tab", "press tab key":
+            return .pressTab
         default:
             return .none
         }

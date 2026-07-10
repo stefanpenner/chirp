@@ -30,6 +30,13 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("delete everything!") == .clearAll)
     }
 
+    @Test("recognizes press enter and tab")
+    func pressKeys() {
+        #expect(DictationCommand.parse("press enter") == .pressEnter)
+        #expect(DictationCommand.parse("hit return") == .pressEnter)
+        #expect(DictationCommand.parse("press tab") == .pressTab)
+    }
+
     @Test("normal text is not a command")
     func normalText() {
         #expect(DictationCommand.parse("hello world") == .none)

@@ -18,6 +18,7 @@ tlc specs/PipelineRebuild.tla
 | `SegmentJoin` | multi-utterance separators (space vs ". ") | `SegmentJoiner` |
 | `ScratchUndo` | spoken "scratch that" undoes last segment | `DictationCommand` |
 | `EditCommands` | scratch / delete-word / clear-all over transcript | `DictationCommand` |
+| `ConfidenceGate` | accept/reject ASR when token log-probs exist | `ConfidenceGate` |
 
 Bait configs (`*_bait.cfg`) must **fail** — they prove the real invariants are checked.
 

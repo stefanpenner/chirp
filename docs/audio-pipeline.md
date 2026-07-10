@@ -43,7 +43,10 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** — undo last segment
 - **delete last word** — drop trailing word
 - **clear all** — wipe session transcript
-First segment auto-capitalizes. Spoken `dot com` / `at sign` rewrites.
+- **press enter** / **press tab** — key inserts
+First segment auto-capitalizes. Consecutive duplicate segments skipped.
+When sherpa provides token log-probs, `ConfidenceGate` rejects extreme
+low-confidence dumps (`ConfidenceGate.tla`). Spoken `dot com` / `at sign`.
 Edit custom phrases in Settings → Audio.
 
 
