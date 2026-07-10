@@ -56,6 +56,8 @@ enum DictationCommand: Equatable, Sendable {
     case selectLastSentence
     /// Select the last paragraph (after \n\n or \n).
     case selectLastParagraph
+    /// Select the last line (after final \n).
+    case selectLastLine
     /// Select all in the focused app (⌘A).
     case selectAll
     /// Collapse the current selection (right-arrow without shift).
@@ -72,6 +74,10 @@ enum DictationCommand: Equatable, Sendable {
     case moveLeftWord
     /// Move cursor one word right (⌥→). Buffer unchanged.
     case moveRightWord
+    /// Move cursor one line up (↑). Buffer unchanged.
+    case moveUpLine
+    /// Move cursor one line down (↓). Buffer unchanged.
+    case moveDownLine
     /// Move cursor to line start (⌘←). Buffer unchanged.
     case moveToStart
     /// Move cursor to line end (⌘→). Buffer unchanged.
@@ -227,6 +233,12 @@ enum DictationCommand: Equatable, Sendable {
              "select paragraph", "highlight last paragraph",
              "highlight previous paragraph", "highlight paragraph":
             return .selectLastParagraph
+        // Select line — listed before move "previous line" so select wins on
+        // full phrases; bare "previous line" is moveUpLine only.
+        case "select last line", "select previous line", "select line",
+             "select this line", "highlight last line", "highlight previous line",
+             "highlight line", "highlight this line":
+            return .selectLastLine
         case "select all", "highlight all", "select everything":
             return .selectAll
         case "unselect that", "unselect", "deselect that", "clear selection",
@@ -247,6 +259,11 @@ enum DictationCommand: Equatable, Sendable {
         case "move right", "right word", "next word", "go right",
              "forward one word":
             return .moveRightWord
+        // Navigation — do not match "select previous line" (selectLastLine).
+        case "move up", "up a line", "previous line", "go up", "line up":
+            return .moveUpLine
+        case "move down", "down a line", "next line", "go down", "line down":
+            return .moveDownLine
         case "go to start", "go to beginning", "beginning of line":
             return .moveToStart
         case "go to end", "end of line":
@@ -293,6 +310,7 @@ enum DictationCommand: Equatable, Sendable {
         ("select last word", "Select last word"),
         ("select last sentence / previous sentence", "Select last sentence"),
         ("select last paragraph / previous paragraph", "Select last paragraph"),
+        ("select last line / select line", "Select last line"),
         ("select all", "Select all (⌘A)"),
         ("unselect that / deselect", "Collapse selection (caret to end)"),
         ("bold that", "Select last phrase + bold (⌘B), then unselect"),
@@ -301,6 +319,8 @@ enum DictationCommand: Equatable, Sendable {
         ("cut that", "Select last phrase + cut (⌘X)"),
         ("move left / previous word", "Cursor left one word (⌥←)"),
         ("move right / next word", "Cursor right one word (⌥→)"),
+        ("move up / previous line / line up", "Cursor up one line (↑)"),
+        ("move down / next line / line down", "Cursor down one line (↓)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),
         ("go to end / end of line", "Cursor to line end (⌘→)"),
         ("previous sentence / go to previous sentence", "Cursor to start of last sentence (← × n)"),
@@ -341,6 +361,16 @@ enum TranscriptSelection {
         if let r = text.range(of: "\n\n", options: .backwards) {
             return String(text[r.upperBound...])
         }
+        if let r = text.range(of: "\n", options: .backwards) {
+            return String(text[r.upperBound...])
+        }
+        return text
+    }
+
+    /// Last line: segment after final `\n` (content only, no leading separator).
+    /// Whole buffer if no newline. Trailing `\n` → empty string.
+    static func lastLine(_ text: String) -> String {
+        guard !text.isEmpty else { return "" }
         if let r = text.range(of: "\n", options: .backwards) {
             return String(text[r.upperBound...])
         }

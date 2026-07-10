@@ -140,6 +140,7 @@ final class MockTextInserter: TextInserting {
     var selectBackwardCounts: [Int] = []
     var selectAllCalled = false
     var moveWordDirections: [MoveDirection] = []
+    var moveLineDirections: [MoveDirection] = []
     var moveToLineStartCalled = false
     var moveToLineEndCalled = false
     var moveBackwardCounts: [Int] = []
@@ -192,6 +193,10 @@ final class MockTextInserter: TextInserting {
 
     func moveWord(direction: MoveDirection) {
         moveWordDirections.append(direction)
+    }
+
+    func moveLine(direction: MoveDirection) {
+        moveLineDirections.append(direction)
     }
 
     func moveToLineStart() {

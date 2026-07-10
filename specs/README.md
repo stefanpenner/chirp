@@ -27,8 +27,9 @@ tlc specs/PipelineRebuild.tla
 | `ConfidenceGate` | length-aware accept/reject when token log-probs exist | `ConfidenceGate` |
 | `DecodeReject` | energy/silence + log-prob composite reject (Parakeet nil scores) | `DecodeReject` |
 | `ClipboardCommands` | copy that / paste that vs session buffer | `DictationCommand` |
+| `DuplicateCommand` | duplicate that: clipboard = lastDelta; buffer grows by lastDelta | `DictationCommand.duplicateThat` + `EditStack.lastDelta` |
 | `FormatCommands` | format path collapses selection so next type does not replace | `AppState.performFormatThat` + clearSelection |
-| `TranscriptSelection` | last-sentence / last-paragraph lengths ≤ total buffer | `TranscriptSelection` + select last sentence/para |
+| `TranscriptSelection` | last-sentence / last-paragraph / last-line lengths ≤ total buffer | `TranscriptSelection` + select last sentence/para + line nav |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |
 
@@ -43,6 +44,7 @@ tlc specs/PeekCache.tla
 tlc specs/CancelVoid.tla
 tlc specs/CapsMode.tla
 tlc specs/ClipboardCommands.tla
+tlc specs/DuplicateCommand.tla
 tlc specs/SpellMode.tla
 tlc specs/ConfidenceGate.tla
 tlc specs/DecodeReject.tla
@@ -64,6 +66,7 @@ tlc -c PeekCache_bait.cfg specs/PeekCache.tla
 tlc -c CancelVoid_bait.cfg specs/CancelVoid.tla
 tlc -c CapsMode_bait.cfg specs/CapsMode.tla
 tlc -c ClipboardCommands_bait.cfg specs/ClipboardCommands.tla
+tlc -c DuplicateCommand_bait.cfg specs/DuplicateCommand.tla
 tlc -c SpellMode_bait.cfg specs/SpellMode.tla
 tlc -c ConfidenceGate_bait.cfg specs/ConfidenceGate.tla
 tlc -c DecodeReject_bait.cfg specs/DecodeReject.tla
@@ -87,6 +90,7 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | `CancelVoid_bait` | ready may keep session text | `ReadyIsVoided` |
 | `CapsMode_bait` | reset may leave non-normal mode | `ResetYieldsNormal` |
 | `ClipboardCommands_bait` | copy may leave clip ≠ transcript | `CopyMirrors` |
+| `DuplicateCommand_bait` | after duplicate, clip may ≠ lastDelta | `DuplicateHoldsDelta` |
 | `SpellMode_bait` | reset may leave spell on | `ResetYieldsOff` |
 | `ConfidenceGate_bait` | no-scores may reject | `NoScoresAccept` |
 | `DecodeReject_bait` | silence may accept non-empty hyp | `SilenceNonEmptyRejects` |

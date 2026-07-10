@@ -138,6 +138,18 @@ final class TextInserter: TextInserting {
         }
     }
 
+    /// Move cursor one line via plain ↑ / ↓ (0x7E / 0x7D — kVK_UpArrow / kVK_DownArrow).
+    func moveLine(direction: MoveDirection) {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let arrow: CGKeyCode = direction == .up ? 0x7E : 0x7D // kVK_UpArrow / kVK_DownArrow
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: arrow, keyDown: true) {
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: arrow, keyDown: false) {
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
     /// Move cursor to line start via ⌘←.
     func moveToLineStart() {
         let source = CGEventSource(stateID: .combinedSessionState)

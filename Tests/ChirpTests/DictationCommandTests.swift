@@ -203,6 +203,30 @@ struct DictationCommandTests {
         #expect(TranscriptSelection.lastParagraph("Only\n\n") == "")
     }
 
+    @Test("last line selection boundaries (content after last \\n, no leading separator)")
+    func lastLineSelection() {
+        #expect(TranscriptSelection.lastLine("") == "")
+        #expect(TranscriptSelection.lastLine("Hello world") == "Hello world")
+        #expect(TranscriptSelection.lastLine("Line one\nLine two") == "Line two")
+        #expect(TranscriptSelection.lastLine("A\nB\nC") == "C")
+        #expect(TranscriptSelection.lastLine("Para one\n\nPara two") == "Para two")
+        // Trailing newline → empty last line
+        #expect(TranscriptSelection.lastLine("Only\n") == "")
+        #expect(TranscriptSelection.lastLine("Only\n\n") == "")
+    }
+
+    @Test("recognizes select last line (not move previous line)")
+    func selectLastLineCommands() {
+        #expect(DictationCommand.parse("select last line") == .selectLastLine)
+        #expect(DictationCommand.parse("select previous line") == .selectLastLine)
+        #expect(DictationCommand.parse("select line") == .selectLastLine)
+        #expect(DictationCommand.parse("select this line") == .selectLastLine)
+        #expect(DictationCommand.parse("Select last line.") == .selectLastLine)
+        #expect(DictationCommand.parse("please select previous line") == .selectLastLine)
+        #expect(DictationCommand.parse("highlight last line") == .selectLastLine)
+        #expect(DictationCommand.parse("highlight line") == .selectLastLine)
+    }
+
     @Test("recognizes bold / italic / underline that")
     func formatThatCommands() {
         #expect(DictationCommand.parse("bold that") == .boldThat)
@@ -249,7 +273,7 @@ struct DictationCommandTests {
     }
 
     @Test("recognizes move to line start/end")
-    func moveLineCommands() {
+    func moveLineEdgeCommands() {
         #expect(DictationCommand.parse("go to start") == .moveToStart)
         #expect(DictationCommand.parse("go to beginning") == .moveToStart)
         #expect(DictationCommand.parse("beginning of line") == .moveToStart)
@@ -258,6 +282,30 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("go to end") == .moveToEnd)
         #expect(DictationCommand.parse("end of line") == .moveToEnd)
         #expect(DictationCommand.parse("please go to end") == .moveToEnd)
+    }
+
+    @Test("recognizes move up/down line (not select previous line)")
+    func moveUpDownLineCommands() {
+        #expect(DictationCommand.parse("move up") == .moveUpLine)
+        #expect(DictationCommand.parse("up a line") == .moveUpLine)
+        #expect(DictationCommand.parse("previous line") == .moveUpLine)
+        #expect(DictationCommand.parse("go up") == .moveUpLine)
+        #expect(DictationCommand.parse("line up") == .moveUpLine)
+        #expect(DictationCommand.parse("Move up.") == .moveUpLine)
+        #expect(DictationCommand.parse("please move up") == .moveUpLine)
+
+        #expect(DictationCommand.parse("move down") == .moveDownLine)
+        #expect(DictationCommand.parse("down a line") == .moveDownLine)
+        #expect(DictationCommand.parse("next line") == .moveDownLine)
+        #expect(DictationCommand.parse("go down") == .moveDownLine)
+        #expect(DictationCommand.parse("line down") == .moveDownLine)
+        #expect(DictationCommand.parse("please go down") == .moveDownLine)
+
+        // Select phrases must not be stolen by move
+        #expect(DictationCommand.parse("select previous line") == .selectLastLine)
+        #expect(DictationCommand.parse("select last line") == .selectLastLine)
+        #expect(DictationCommand.parse("select line") == .selectLastLine)
+        #expect(DictationCommand.parse("highlight previous line") == .selectLastLine)
     }
 
     @Test("recognizes duplicate that")
@@ -307,6 +355,9 @@ struct DictationCommandTests {
         #expect(says.contains(where: { $0.lowercased().contains("select that") }))
         #expect(says.contains(where: { $0.lowercased().contains("sentence") }))
         #expect(says.contains(where: { $0.lowercased().contains("paragraph") }))
+        #expect(says.contains(where: { $0.lowercased().contains("select last line") || $0.lowercased().contains("select line") }))
+        #expect(says.contains(where: { $0.lowercased().contains("move up") || $0.lowercased().contains("line up") }))
+        #expect(says.contains(where: { $0.lowercased().contains("move down") || $0.lowercased().contains("line down") }))
         #expect(says.contains(where: { $0.lowercased().contains("spell that") }))
         #expect(says.contains(where: { $0.lowercased().contains("spell as") }))
         #expect(says.contains(where: { $0.lowercased().contains("backspace") }))

@@ -37,10 +37,12 @@ extension AudioRecording {
     }
 }
 
-/// Cursor move direction for word-level navigation (option+arrow).
+/// Cursor move direction for word/line navigation (arrow keys).
 enum MoveDirection: Equatable, Sendable {
     case left
     case right
+    case up
+    case down
 }
 
 /// Rich-text format styles applied via ⌘B / ⌘I / ⌘U on the current selection.
@@ -60,6 +62,8 @@ enum TextFormatStyle: Equatable, Sendable {
     func selectAll()
     /// Move cursor one word (option+left/right). Spoken "move left" / "move right".
     func moveWord(direction: MoveDirection)
+    /// Move cursor one line (plain up/down arrow). Spoken "move up" / "move down".
+    func moveLine(direction: MoveDirection)
     /// Move cursor to line start (⌘+left). Spoken "go to start".
     func moveToLineStart()
     /// Move cursor to line end (⌘+right). Spoken "go to end".
@@ -86,6 +90,7 @@ extension TextInserting {
     func selectBackward(count: Int) {}
     func selectAll() {}
     func moveWord(direction: MoveDirection) {}
+    func moveLine(direction: MoveDirection) {}
     func moveToLineStart() {}
     func moveToLineEnd() {}
     func moveBackward(count: Int) {}

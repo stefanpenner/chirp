@@ -695,6 +695,8 @@ public final class AppState {
                         self.performSelectLastSentence(typesIncrementally: false)
                     case .selectLastParagraph:
                         self.performSelectLastParagraph(typesIncrementally: false)
+                    case .selectLastLine:
+                        self.performSelectLastLine(typesIncrementally: false)
                     case .selectAll:
                         self.performSelectAll(typesIncrementally: false)
                     case .unselectThat:
@@ -711,6 +713,10 @@ public final class AppState {
                         self.performMoveWord(direction: .left)
                     case .moveRightWord:
                         self.performMoveWord(direction: .right)
+                    case .moveUpLine:
+                        self.performMoveLine(direction: .up)
+                    case .moveDownLine:
+                        self.performMoveLine(direction: .down)
                     case .moveToStart:
                         self.performMoveToLineStart()
                     case .moveToEnd:
@@ -805,6 +811,8 @@ public final class AppState {
             performSelectLastSentence(typesIncrementally: typesIncrementally)
         case .selectLastParagraph:
             performSelectLastParagraph(typesIncrementally: typesIncrementally)
+        case .selectLastLine:
+            performSelectLastLine(typesIncrementally: typesIncrementally)
         case .selectAll:
             performSelectAll(typesIncrementally: typesIncrementally)
         case .unselectThat:
@@ -821,6 +829,10 @@ public final class AppState {
             performMoveWord(direction: .left)
         case .moveRightWord:
             performMoveWord(direction: .right)
+        case .moveUpLine:
+            performMoveLine(direction: .up)
+        case .moveDownLine:
+            performMoveLine(direction: .down)
         case .moveToStart:
             performMoveToLineStart()
         case .moveToEnd:
@@ -1238,6 +1250,15 @@ public final class AppState {
         }
     }
 
+    /// Select the last line. Buffer unchanged.
+    private func performSelectLastLine(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let selected = TranscriptSelection.lastLine(transcribedText)
+        if !selected.isEmpty {
+            textInserter.selectBackward(count: selected.count)
+        }
+    }
+
     /// Select all in the focused app (⌘A). Buffer unchanged.
     private func performSelectAll(typesIncrementally: Bool) {
         // ⌘A is useful after non-incremental type as well (text is in the app).
@@ -1248,6 +1269,11 @@ public final class AppState {
     /// Move cursor one word (⌥← / ⌥→). Buffer unchanged — cursor only.
     private func performMoveWord(direction: MoveDirection) {
         textInserter.moveWord(direction: direction)
+    }
+
+    /// Move cursor one line (↑ / ↓). Buffer unchanged — cursor only.
+    private func performMoveLine(direction: MoveDirection) {
+        textInserter.moveLine(direction: direction)
     }
 
     /// Move cursor to line start (⌘←). Buffer unchanged.

@@ -513,6 +513,10 @@ enum TextPostProcessor {
         result = applyCurrencyITN(result)
         // Street suffixes after numbers: "35 Lexington avenue" → "35 Lexington Ave."
         result = applyStreetSuffixITN(result)
+        // Suite / room / apt / unit / extension labels after numbers
+        // ("suite 12" → "Suite 12", "extension 55" → "ext. 55").
+        // Spoken short digit runs after these cues are forced in SpokenNumberITN.
+        result = applySuiteRoomExtITN(result)
         // US states + ZIP after street suffixes so "… avenue california" → "… Ave. CA"
         // and "zip code 90210" → "90210". Multi-word states always rewrite; single-word
         // only with address cue left of match (street abbrev, ZIP, or "state of").
@@ -855,6 +859,49 @@ enum TextPostProcessor {
             let rawSuffix = String(result[suffixRange]).lowercased()
             guard let abbr = streetSuffixAbbreviations[rawSuffix] else { continue }
             result.replaceSubrange(fullRange, with: "\(num) \(name) \(abbr)")
+        }
+        return result
+    }
+
+    // MARK: - Suite / room / extension ITN
+
+    /// "suite 12" / "room 101" / "ext 55" / "apartment 4" after SpokenNumberITN.
+    /// Digit-only body for v1 (spoken runs are forced to digits in SpokenNumberITN).
+    private static let suiteRoomExtPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(suite|apartment|apt\.?|unit|room|extension|ext\.?)\s+(\d{1,6})\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Canonical labels: suite→Suite, apt/apartment→Apt., unit→Unit, room→Room, ext→ext.
+    private static func suiteRoomExtLabel(for raw: String) -> String? {
+        let key = raw
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            .lowercased()
+        switch key {
+        case "suite": return "Suite"
+        case "apartment", "apt": return "Apt."
+        case "unit": return "Unit"
+        case "room": return "Room"
+        case "extension", "ext": return "ext."
+        default: return nil
+        }
+    }
+
+    private static func applySuiteRoomExtITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = suiteRoomExtPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let cueRange = Range(match.range(at: 1), in: result),
+                  let numRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            guard let label = suiteRoomExtLabel(for: String(result[cueRange])) else { continue }
+            let digits = String(result[numRange])
+            result.replaceSubrange(fullRange, with: "\(label) \(digits)")
         }
         return result
     }

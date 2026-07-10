@@ -103,6 +103,22 @@ struct SpellModeTests {
         #expect(SpellTransform.packAcronyms("u r l") == "URL")
         #expect(SpellTransform.packAcronyms("i d") == "ID")
         #expect(SpellTransform.packAcronyms("A P I") == "API")
+        #expect(SpellTransform.packAcronyms("u i") == "UI")
+        #expect(SpellTransform.packAcronyms("a i") == "AI")
+    }
+
+    @Test("packAcronyms requires 3 letters unless allowlisted pair")
+    func packAcronymsMinLength() {
+        // Auto-pack only ≥3; "a b" is not an allowlisted pair
+        #expect(SpellTransform.packAcronyms("a b") == "a b")
+        #expect(SpellTransform.packAcronyms("x y") == "x y")
+        // Common 2-letter allowlist
+        #expect(SpellTransform.packAcronyms("i d") == "ID")
+        #expect(SpellTransform.packAcronyms("o k") == "OK")
+        #expect(SpellTransform.packAcronyms("d b") == "DB")
+        #expect(SpellTransform.packAcronyms("t v") == "TV")
+        // 3+ still packs
+        #expect(SpellTransform.packAcronyms("a p i") == "API")
     }
 
     @Test("packAcronyms preserves surrounding words and trailing punct")
@@ -111,6 +127,8 @@ struct SpellModeTests {
         #expect(SpellTransform.packAcronyms("open the u r l now") == "open the URL now")
         #expect(SpellTransform.packAcronyms("a p i.") == "API.")
         #expect(SpellTransform.packAcronyms("use the a p i.") == "use the API.")
+        #expect(SpellTransform.packAcronyms("my i d card") == "my ID card")
+        #expect(SpellTransform.packAcronyms("see a b later") == "see a b later")
     }
 
     @Test("packAcronyms leaves bare I/a, multi-letter, and NATO alone")

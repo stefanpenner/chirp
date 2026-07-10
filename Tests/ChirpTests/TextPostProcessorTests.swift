@@ -456,6 +456,45 @@ struct TextPostProcessorTests {
         )
     }
 
+    @Test("Light ITN suite / room / extension labels with digits")
+    func lightITNSuiteRoomExtensionDigits() {
+        #expect(TextPostProcessor.process("suite 12") == "Suite 12")
+        #expect(TextPostProcessor.process("Suite 12") == "Suite 12")
+        #expect(TextPostProcessor.process("room 101") == "Room 101")
+        #expect(TextPostProcessor.process("extension 55") == "ext. 55")
+        #expect(TextPostProcessor.process("ext 55") == "ext. 55")
+        #expect(TextPostProcessor.process("ext. 55") == "ext. 55")
+        #expect(TextPostProcessor.process("apt 4") == "Apt. 4")
+        #expect(TextPostProcessor.process("apartment 12") == "Apt. 12")
+        #expect(TextPostProcessor.process("unit 3") == "Unit 3")
+        // Cue without a number stays put
+        #expect(TextPostProcessor.process("hit the room") == "hit the room")
+        #expect(TextPostProcessor.process("nice suite") == "nice suite")
+    }
+
+    @Test("Light ITN suite / room with spoken digit runs after cue")
+    func lightITNSuiteRoomSpokenDigits() {
+        // Short digit runs (≥2) force-convert after address cues only
+        #expect(TextPostProcessor.process("suite five five") == "Suite 55")
+        #expect(TextPostProcessor.process("room one zero one") == "Room 101")
+        #expect(TextPostProcessor.process("extension five five") == "ext. 55")
+        #expect(TextPostProcessor.process("unit two five") == "Unit 25")
+        // Compounds already digits via SpokenNumberITN, then label
+        #expect(TextPostProcessor.process("suite twenty five") == "Suite 25")
+        // Uncued short runs stay words (phone min length still 3)
+        #expect(TextPostProcessor.process("five five") == "five five")
+        // Phone / ZIP still work
+        #expect(TextPostProcessor.process("five five five one two one two") == "555-1212")
+        #expect(TextPostProcessor.process("zip code 90210") == "90210")
+    }
+
+    @Test("PackAcronyms min length via full process")
+    func packAcronymsMinLengthInProcess() {
+        #expect(TextPostProcessor.process("a b") == "a b")
+        #expect(TextPostProcessor.process("i d") == "ID")
+        #expect(TextPostProcessor.process("a p i") == "API")
+    }
+
     @Test("Light ITN compact unit abbreviations after numbers")
     func lightITNUnits() {
         #expect(TextPostProcessor.process("5 miles") == "5 mi")

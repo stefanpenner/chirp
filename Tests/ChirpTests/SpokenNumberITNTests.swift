@@ -76,6 +76,20 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("five five") == "five five")
     }
 
+    @Test("digit runs of ≥2 force-convert after suite/room/ext cues")
+    func digitRunsAfterAddressCues() {
+        #expect(SpokenNumberITN.apply("suite five five") == "suite 55")
+        #expect(SpokenNumberITN.apply("room one zero one") == "room 101")
+        #expect(SpokenNumberITN.apply("extension five five") == "extension 55")
+        #expect(SpokenNumberITN.apply("ext five five") == "ext 55")
+        #expect(SpokenNumberITN.apply("apt two five") == "apt 25")
+        #expect(SpokenNumberITN.apply("unit two zero") == "unit 20")
+        #expect(SpokenNumberITN.apply("apartment one two") == "apartment 12")
+        // Uncued short runs still stay words
+        #expect(SpokenNumberITN.apply("five five") == "five five")
+        #expect(SpokenNumberITN.apply("one two") == "one two")
+    }
+
     @Test("formats phone-length digit runs with dashes")
     func phoneDashFormatting() {
         // 7 digits: XXX-XXXX

@@ -58,6 +58,14 @@ struct TextInserterTests {
         #expect(inserter.moveWordDirections == [.left, .right])
     }
 
+    @Test("moveLine records up/down direction")
+    func moveLine() {
+        let inserter = MockTextInserter()
+        inserter.moveLine(direction: .up)
+        inserter.moveLine(direction: .down)
+        #expect(inserter.moveLineDirections == [.up, .down])
+    }
+
     @Test("moveToLineStart / moveToLineEnd record calls")
     func moveToLineEdges() {
         let inserter = MockTextInserter()

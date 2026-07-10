@@ -50,13 +50,15 @@ enum SpellTransform {
 
     /// Pack consecutive single English-letter tokens into an uppercase acronym.
     /// `"a p i"` → `"API"`, `"call the a p i please"` → `"call the API please"`.
-    /// Min run length 2. Does not pack bare `"I"`/`"a"`, multi-letter words, or NATO.
+    /// Min run length 3 for auto-pack; common 2-letter pairs (`i d` → `ID`) allowlisted.
+    /// Does not pack bare `"I"`/`"a"`, multi-letter words, NATO, or unlisted pairs (`a b`).
     /// Trailing punct on the last letter is kept: `"a p i."` → `"API."`.
     /// Preserves newlines and other non-token text (no full re-join).
     static func packAcronyms(_ text: String) -> String {
         guard !text.isEmpty else { return text }
-        // Runs of ≥2 single letters separated by spaces/tabs only (not newlines).
+        // Candidate runs of ≥2 single letters (spaces/tabs only; not newlines).
         // Optional trailing sentence punct on the last letter is kept on the acronym.
+        // Final gate: length ≥3, or length 2 on the allowlist.
         let pattern = try! NSRegularExpression(
             pattern: #"(?<![A-Za-z])([A-Za-z][.!?,]*)(?:[ \t]+[A-Za-z][.!?,]*)+(?![A-Za-z])"#
         )
@@ -81,10 +83,24 @@ enum SpellTransform {
                     trailing = p.trailing
                 }
             }
-            guard letters.count >= 2 else { continue }
+            guard shouldPackAcronym(letters) else { continue }
             result.replaceSubrange(range, with: String(letters).uppercased() + trailing)
         }
         return result
+    }
+
+    /// Common spoken 2-letter tech/product acronyms (packed when spelled letter-by-letter).
+    private static let twoLetterAcronymAllowlist: Set<String> = [
+        "id", "ui", "ux", "ok", "ai", "ml", "db", "pr", "ci", "cd", "os", "ip", "tv",
+    ]
+
+    /// Auto-pack ≥3 letters; 2-letter only when allowlisted (`i d` → ID, not `a b`).
+    private static func shouldPackAcronym(_ letters: [Character]) -> Bool {
+        if letters.count >= 3 { return true }
+        if letters.count == 2 {
+            return twoLetterAcronymAllowlist.contains(String(letters).lowercased())
+        }
+        return false
     }
 
     private static let oneShotPattern: NSRegularExpression = {

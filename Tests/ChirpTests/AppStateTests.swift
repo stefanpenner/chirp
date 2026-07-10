@@ -1105,6 +1105,79 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("end of line"))
     }
 
+    @Test("move up / down line moves cursor without changing buffer")
+    func moveUpDownLineCommands() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["move up"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveLineDirections.isEmpty { break }
+        }
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveLineDirections == [.up])
+        #expect(!inserter.typedTexts.contains("move up"))
+
+        await mock.setFeedAudioResult(["next line"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveLineDirections.count >= 2 { break }
+        }
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveLineDirections == [.up, .down])
+        #expect(!inserter.typedTexts.contains("next line"))
+    }
+
+    @Test("select last line selects trailing line only")
+    func selectLastLineCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Line one\nLine two"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("Line two") { break }
+        }
+
+        await mock.setFeedAudioResult(["select last line"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+
+        #expect(state.transcribedText.hasSuffix("Line two") || state.transcribedText.contains("Line two"))
+        #expect(inserter.selectBackwardCounts.last == "Line two".count)
+        #expect(!inserter.typedTexts.contains("select last line"))
+    }
+
     @Test("delete last word keeps multi-level undo; redo restores word")
     func deleteLastWordPreservesStack() async throws {
         let mock = MockTranscriber()

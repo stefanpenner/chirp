@@ -75,7 +75,10 @@ weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
 (`20 dollars`→`$20`, `20 euros`→`€20`, `20 yen`→`¥20`, `50 cents`→`50¢`,
 `20 dollars and 50 cents`→`$20.50`; bare `20 pounds`→`20 lb` weight;
 `20 pounds sterling` / `20 quid`→`£20`), street suffixes after a house number
-(`35 Lexington avenue`→`35 Lexington Ave.`; `hit the road` stays), US states →
+(`35 Lexington avenue`→`35 Lexington Ave.`; `hit the road` stays), suite/room/
+apt/unit/extension (`suite 12`→`Suite 12`, `room 101`→`Room 101`,
+`extension 55` / `ext 55`→`ext. 55`, `apt 4`→`Apt. 4`; spoken short digit runs
+after these cues: `suite five five`→`Suite 55`; `hit the room` stays), US states →
 USPS codes (multi-word always: `new york`→`NY`; single-word only with address
 cue left of match — street abbrev, ZIP, or `state of` — so `I love california`
 stays, `35 Lexington avenue california`→`35 Lexington Ave. CA`,
@@ -83,7 +86,8 @@ stays, `35 Lexington avenue california`→`35 Lexington Ave. CA`,
 `90210 1234`→`90210-1234`).
 Bare `one`/`two` stay words. Digit runs (≥3 single digits) concatenate for
 phones (`five five five one two one two`→`555-1212`; 10-digit `XXX-XXX-XXXX`;
-11-digit leading-1 `1-XXX-XXX-XXXX`; `oh`→`0`). Negatives: `minus twenty` /
+11-digit leading-1 `1-XXX-XXX-XXXX`; `oh`→`0`; short uncued `five five` stays).
+Negatives: `minus twenty` /
 `negative five`→`-20`/`-5` (not bare `minus` or `minus the …`). Spoken email:
 `john at example dot com`→`john@example.com`, multi-dot
 `john at mail dot google dot com`→`john@mail.google.com` (requires `dot`; bare
@@ -115,7 +119,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **spell that** / **spell it** / **spell last** — select last phrase + enter spell mode (does not delete)
 - **spell as a b c** — one-shot pack (`SpellTransform.oneShot`); does not enable sticky spell mode
   (e.g. `spell as capital j o h n` → `John`)
-- Spoken single-letter runs pack to uppercase acronyms without sticky spell (`a p i` → `API` via `SpellTransform.packAcronyms`)
+- Spoken single-letter runs pack to uppercase acronyms without sticky spell (`a p i` → `API` via `SpellTransform.packAcronyms`; min run 3, plus common 2-letter allowlist `i d`→`ID` / `u i`→`UI`; unlisted pairs like `a b` stay)
 - **cap that / all caps that / no caps that** — transform last word
 - **title case that** — title-case last phrase (stack delta)
 - **sentence case that** — sentence-case last phrase
@@ -124,6 +128,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select last word** — select trailing word only
 - **select last sentence** / **select previous sentence** / **select sentence** — select trailing sentence
 - **select last paragraph** / **select previous paragraph** / **select paragraph** — select trailing paragraph
+- **select last line** / **select previous line** / **select line** / **select this line** — select trailing line (content after last `\n`)
 - **select all** — select all (⌘A)
 - **unselect that** / **deselect** / **clear selection** — collapse selection to end (→)
 - **bold that** / **make that bold** — select last phrase + bold (⌘B), then unselect
@@ -132,6 +137,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **cut that** / **cut it** — select last phrase + cut (⌘X); drop buffer delta
 - **move left** / **previous word** — cursor left one word (⌥←)
 - **move right** / **next word** — cursor right one word (⌥→)
+- **move up** / **previous line** / **line up** / **up a line** / **go up** — cursor up one line (↑). Does **not** steal **select previous line**
+- **move down** / **next line** / **line down** / **down a line** / **go down** — cursor down one line (↓)
 - **go to start** / **beginning of line** — cursor to line start (⌘←)
 - **go to end** / **end of line** — cursor to line end (⌘→)
 - **previous sentence** / **go to previous sentence** / **back a sentence** — cursor to start of last sentence (plain ← × n; assumes caret at end)
