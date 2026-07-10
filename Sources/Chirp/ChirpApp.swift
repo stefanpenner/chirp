@@ -129,6 +129,9 @@ public final class AppState {
     /// Multi-level undo/redo stack of typed deltas (spoken scratch/redo that).
     private var editStack = EditStack()
 
+    /// Sticky capitalization mode for new commits (Dragon-style caps on / all caps / no caps).
+    private var capsMode: CapsMode = .normal
+
     /// Normalized form of the last committed non-command segment (dedup echoes).
     private var lastCommittedNormalized = ""
 
@@ -525,6 +528,7 @@ public final class AppState {
         speculativeText = ""
         commitGen = 0
         editStack.clear()
+        capsMode = .normal
         lastCommittedNormalized = ""
         recordingSession &+= 1
         let session = recordingSession
@@ -628,16 +632,34 @@ public final class AppState {
                         self.performPasteThat(typesIncrementally: false)
                     case .redoThat:
                         self.performRedoThat(typesIncrementally: false)
+                    case .setCapsMode(let mode):
+                        self.capsMode = mode
+                    case .capThat:
+                        self.performTransformLastWord(
+                            CapsTransform.capitalizeWord,
+                            typesIncrementally: false
+                        )
+                    case .allCapsThat:
+                        self.performTransformLastWord(
+                            CapsTransform.upperWord,
+                            typesIncrementally: false
+                        )
+                    case .noCapsThat:
+                        self.performTransformLastWord(
+                            CapsTransform.lowerWord,
+                            typesIncrementally: false
+                        )
                     case .none:
                         // One-shot type: replace buffer + stack so scratch undoes the
                         // whole batch (mid-session segments were not typed/pushed).
+                        let text = CapsTransform.apply(remaining, mode: self.capsMode)
                         self.editStack.clear()
-                        self.transcribedText = remaining
-                        if !remaining.isEmpty {
-                            self.textInserter.typeText(remaining)
-                            self.editStack.push(remaining)
+                        self.transcribedText = text
+                        if !text.isEmpty {
+                            self.textInserter.typeText(text)
+                            self.editStack.push(text)
                         }
-                        self.lastCommittedNormalized = TranscriptNormalize.key(remaining)
+                        self.lastCommittedNormalized = TranscriptNormalize.key(text)
                     }
                 }
             }
@@ -675,14 +697,23 @@ public final class AppState {
             performPasteThat(typesIncrementally: typesIncrementally)
         case .redoThat:
             performRedoThat(typesIncrementally: typesIncrementally)
+        case .setCapsMode(let mode):
+            capsMode = mode
+        case .capThat:
+            performTransformLastWord(CapsTransform.capitalizeWord, typesIncrementally: typesIncrementally)
+        case .allCapsThat:
+            performTransformLastWord(CapsTransform.upperWord, typesIncrementally: typesIncrementally)
+        case .noCapsThat:
+            performTransformLastWord(CapsTransform.lowerWord, typesIncrementally: typesIncrementally)
         case .none:
             // Skip consecutive identical segments (VAD/ASR echo under noise)
-            let norm = TranscriptNormalize.key(text)
+            let shaped = CapsTransform.apply(text, mode: capsMode)
+            let norm = TranscriptNormalize.key(shaped)
             if !norm.isEmpty, norm == lastCommittedNormalized {
-                Log.transcription.debug("Skipping duplicate segment: \"\(text)\"")
+                Log.transcription.debug("Skipping duplicate segment: \"\(shaped)\"")
                 return
             }
-            let joined = SegmentJoiner.append(existing: transcribedText, next: text)
+            let joined = SegmentJoiner.append(existing: transcribedText, next: shaped)
             transcribedText = joined.full
             if typesIncrementally {
                 textInserter.typeText(joined.delta)
@@ -690,6 +721,57 @@ public final class AppState {
             editStack.push(joined.delta)
             lastCommittedNormalized = norm
         }
+    }
+
+    /// One-shot transform of the last whitespace-delimited word (cap that / all caps that).
+    private func performTransformLastWord(
+        _ transform: (String) -> String,
+        typesIncrementally: Bool
+    ) {
+        let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        var buffer = transcribedText
+        while buffer.last?.isWhitespace == true {
+            buffer.removeLast()
+        }
+        let wordStart: String.Index
+        let includeLeadingSpace: Bool
+        if let lastSpace = buffer.lastIndex(where: { $0.isWhitespace }) {
+            wordStart = buffer.index(after: lastSpace)
+            includeLeadingSpace = true
+        } else {
+            wordStart = transcribedText.startIndex
+            includeLeadingSpace = false
+        }
+        var start = wordStart
+        if includeLeadingSpace, start > transcribedText.startIndex {
+            let before = transcribedText.index(before: start)
+            if transcribedText[before].isWhitespace {
+                start = before
+            }
+        }
+        let oldSuffix = String(transcribedText[start...])
+        let spacePrefix = oldSuffix.prefix(while: { $0.isWhitespace })
+        let core = String(oldSuffix.dropFirst(spacePrefix.count))
+        guard !core.isEmpty else { return }
+        let newCore = transform(core)
+        guard newCore != core else { return }
+        let newSuffix = String(spacePrefix) + newCore
+
+        transcribedText = String(transcribedText[..<start]) + newSuffix
+        if typesIncrementally {
+            textInserter.deleteBackward(count: oldSuffix.count)
+            textInserter.typeText(newSuffix)
+        }
+        if editStack.dropTrailingSuffix(oldSuffix) {
+            editStack.push(newSuffix)
+        } else {
+            // Stack can't explain suffix — wipe and record new suffix only
+            editStack.clear()
+            editStack.push(newSuffix)
+        }
+        lastCommittedNormalized = ""
     }
 
     private func performKeyInsert(_ s: String, typesIncrementally: Bool) {

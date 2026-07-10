@@ -66,6 +66,9 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** — multi-level undo of typed segments (`EditStack`)
 - **redo that** — restore last scratched / word-deleted segment
 - **delete last word** — drop trailing word (stack-aware; redo restores)
+- **caps on / all caps on / no caps on** — sticky casing (`CapsMode`)
+- **caps off** — back to normal casing
+- **cap that / all caps that / no caps that** — transform last word
 - **clear all** — wipe session transcript
 - **press enter** / **press tab** — key inserts
 - **copy that** / **paste that** — clipboard

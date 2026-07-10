@@ -22,6 +22,14 @@ enum DictationCommand: Equatable, Sendable {
     case pasteThat
     /// Redo the last scratched segment.
     case redoThat
+    /// Set sticky capitalization mode for following commits.
+    case setCapsMode(CapsMode)
+    /// Capitalize the last word (one-shot).
+    case capThat
+    /// UPPERCASE the last word (one-shot).
+    case allCapsThat
+    /// lowercase the last word (one-shot).
+    case noCapsThat
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -101,6 +109,23 @@ enum DictationCommand: Equatable, Sendable {
         case "redo that", "redo it", "restore that", "undo undo",
              "redo last", "put it back":
             return .redoThat
+        // Sticky caps modes (Dragon-style)
+        case "no caps on", "no caps mode":
+            return .setCapsMode(.noCaps)
+        case "all caps on", "all caps mode", "all caps":
+            return .setCapsMode(.allCaps)
+        case "caps on", "cap on", "title case on":
+            return .setCapsMode(.capsOn)
+        case "caps off", "cap off", "no caps off", "all caps off",
+             "normal caps", "normal case", "default caps":
+            return .setCapsMode(.normal)
+        // One-shot last-word transforms
+        case "cap that", "capitalize that", "caps that", "capital that":
+            return .capThat
+        case "all caps that", "uppercase that", "upper case that":
+            return .allCapsThat
+        case "no caps that", "lowercase that", "lower case that":
+            return .noCapsThat
         default:
             return nil
         }
@@ -118,6 +143,9 @@ enum DictationCommand: Equatable, Sendable {
         ("press tab", "Insert Tab"),
         ("copy that", "Copy session to clipboard"),
         ("paste that", "Paste clipboard (⌘V)"),
+        ("caps on / all caps on / no caps on", "Sticky capitalization mode"),
+        ("caps off", "Back to normal casing"),
+        ("cap that / all caps that", "Transform last word"),
         ("period / comma / …", "Spoken punctuation"),
         ("new line / new paragraph", "Line breaks"),
         ("dot com / at sign", "Domain & email bits"),

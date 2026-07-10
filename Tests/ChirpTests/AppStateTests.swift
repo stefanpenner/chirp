@@ -230,6 +230,67 @@ struct AppStateTests {
         #expect(inserter.typedTexts == ["Hello", " world"])
     }
 
+    @Test("all caps on forces uppercase on following segment")
+    func allCapsModeSticky() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["all caps on"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        recorder.lastOnSamples?([0.1])
+        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(inserter.typedTexts.isEmpty, "mode switch must not type")
+
+        await mock.setFeedAudioResult(["hello world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "HELLO WORLD" { break }
+        }
+        #expect(state.transcribedText == "HELLO WORLD")
+        #expect(inserter.typedTexts.contains("HELLO WORLD"))
+    }
+
+    @Test("cap that capitalizes last word")
+    func capThatLastWord() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" || state.transcribedText == "hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["cap that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.hasSuffix("World") { break }
+        }
+        #expect(
+            state.transcribedText.hasSuffix("World"),
+            "cap that should title-case last word, got \"\(state.transcribedText)\""
+        )
+    }
+
     @Test("non-incremental batch flush types once with joined content")
     func nonIncrementalBatchFlushTypesOnce() async throws {
         let mock = MockTranscriber()

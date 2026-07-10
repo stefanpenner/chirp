@@ -54,6 +54,21 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("put it back") == .redoThat)
     }
 
+    @Test("recognizes caps mode and one-shot transforms")
+    func capsCommands() {
+        #expect(DictationCommand.parse("all caps on") == .setCapsMode(.allCaps))
+        #expect(DictationCommand.parse("all caps") == .setCapsMode(.allCaps))
+        #expect(DictationCommand.parse("no caps on") == .setCapsMode(.noCaps))
+        #expect(DictationCommand.parse("caps on") == .setCapsMode(.capsOn))
+        #expect(DictationCommand.parse("caps off") == .setCapsMode(.normal))
+        #expect(DictationCommand.parse("normal caps") == .setCapsMode(.normal))
+        #expect(DictationCommand.parse("cap that") == .capThat)
+        #expect(DictationCommand.parse("capitalize that") == .capThat)
+        #expect(DictationCommand.parse("all caps that") == .allCapsThat)
+        #expect(DictationCommand.parse("no caps that") == .noCapsThat)
+        #expect(DictationCommand.parse("please all caps on") == .setCapsMode(.allCaps))
+    }
+
     @Test("tolerates please / now around commands")
     func politenessTolerance() {
         #expect(DictationCommand.parse("scratch that please") == .scratchThat)
