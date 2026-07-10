@@ -20,6 +20,7 @@ tlc specs/PipelineRebuild.tla
 | `EditStack` | multi-level undo/redo + DropSuffix (delete-last-word) | `EditStack` |
 | `CapsMode` | sticky caps mode + one-shot cap that | `CapsMode` / `CapsTransform` |
 | `SpellMode` | sticky spell mode (letter packing) | `SpellMode` / `SpellTransform` |
+| `PackAcronyms` | safer auto-pack of single-letter runs (≥3 or allowlisted pairs) | `SpellTransform.packAcronyms` |
 | `ReplaceThat` | multi-step replace: arm then next content swaps last | `ReplaceDecision` |
 | `ListCounter` | session numbered-list index for next number | `SpokenListITN` |
 | `ScratchUndo` | **legacy / no bait** single-level scratch (superseded by `EditStack`) | — |
@@ -46,6 +47,7 @@ tlc specs/CapsMode.tla
 tlc specs/ClipboardCommands.tla
 tlc specs/DuplicateCommand.tla
 tlc specs/SpellMode.tla
+tlc specs/PackAcronyms.tla
 tlc specs/ConfidenceGate.tla
 tlc specs/DecodeReject.tla
 tlc specs/EditCommands.tla
@@ -68,6 +70,7 @@ tlc -c CapsMode_bait.cfg specs/CapsMode.tla
 tlc -c ClipboardCommands_bait.cfg specs/ClipboardCommands.tla
 tlc -c DuplicateCommand_bait.cfg specs/DuplicateCommand.tla
 tlc -c SpellMode_bait.cfg specs/SpellMode.tla
+tlc -c PackAcronyms_bait.cfg specs/PackAcronyms.tla
 tlc -c ConfidenceGate_bait.cfg specs/ConfidenceGate.tla
 tlc -c DecodeReject_bait.cfg specs/DecodeReject.tla
 tlc -c EditCommands_bait.cfg specs/EditCommands.tla
@@ -92,6 +95,7 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | `ClipboardCommands_bait` | copy may leave clip ≠ transcript | `CopyMirrors` |
 | `DuplicateCommand_bait` | after duplicate, clip may ≠ lastDelta | `DuplicateHoldsDelta` |
 | `SpellMode_bait` | reset may leave spell on | `ResetYieldsOff` |
+| `PackAcronyms_bait` | packs may diverge from ≥3 / allowlisted-pair rule | `PacksIffRule` |
 | `ConfidenceGate_bait` | no-scores may reject | `NoScoresAccept` |
 | `DecodeReject_bait` | silence may accept non-empty hyp | `SilenceNonEmptyRejects` |
 | `EditCommands_bait` | lastTyped may exceed textLen | `LastTypedWithinText` |

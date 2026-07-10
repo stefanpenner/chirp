@@ -178,6 +178,47 @@ final class TextInserter: TextInserting {
         }
     }
 
+    /// Move cursor to document start via ⌘↑ (0x7E — kVK_UpArrow).
+    func moveToDocumentStart() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let upArrow: CGKeyCode = 0x7E // kVK_UpArrow
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: upArrow, keyDown: true) {
+            keyDown.flags = .maskCommand
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: upArrow, keyDown: false) {
+            keyUp.flags = .maskCommand
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
+    /// Move cursor to document end via ⌘↓ (0x7D — kVK_DownArrow).
+    func moveToDocumentEnd() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let downArrow: CGKeyCode = 0x7D // kVK_DownArrow
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: downArrow, keyDown: true) {
+            keyDown.flags = .maskCommand
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: downArrow, keyDown: false) {
+            keyUp.flags = .maskCommand
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
+    /// Scroll one page via Page Up / Page Down (0x74 / 0x79 — kVK_PageUp / kVK_PageDown).
+    /// Uses `.up` → Page Up, `.down` → Page Down (left/right ignored as up/down only).
+    func scrollPage(direction: MoveDirection) {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let key: CGKeyCode = direction == .up ? 0x74 : 0x79 // kVK_PageUp / kVK_PageDown
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true) {
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) {
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
     /// Move cursor left `count` times via plain ← (no shift, no option).
     func moveBackward(count: Int) {
         guard count > 0 else { return }

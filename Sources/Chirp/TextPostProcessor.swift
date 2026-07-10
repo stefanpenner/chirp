@@ -479,6 +479,15 @@ enum TextPostProcessor {
         )
     }()
 
+    /// Time range with shared meridiem: "from three to five pm" → "from 3-5 p.m."
+    /// Optional leading "from"; connector to|through|until; spoken or digit hours.
+    private static let timeRangePattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(from\s+)?(\#(hourToken))\s+(?:to|through|until)\s+(\#(hourToken))\s*([ap])\.?\s*m\.?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     private static let spokenNumbers: [String: String] = [
         "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
         "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
@@ -513,9 +522,9 @@ enum TextPostProcessor {
         result = applyCurrencyITN(result)
         // Street suffixes after numbers: "35 Lexington avenue" → "35 Lexington Ave."
         result = applyStreetSuffixITN(result)
-        // Suite / room / apt / unit / extension labels after numbers
-        // ("suite 12" → "Suite 12", "extension 55" → "ext. 55").
-        // Spoken short digit runs after these cues are forced in SpokenNumberITN.
+        // Suite / room / floor / apt / unit / extension labels after numbers
+        // ("suite 12" → "Suite 12", "floor 5" → "Floor 5", "extension 55" → "ext. 55").
+        // Spoken digit runs (min 1) after these cues are forced in SpokenNumberITN.
         result = applySuiteRoomExtITN(result)
         // US states + ZIP after street suffixes so "… avenue california" → "… Ave. CA"
         // and "zip code 90210" → "90210". Multi-word states always rewrite; single-word
@@ -607,10 +616,12 @@ enum TextPostProcessor {
         return result
     }
 
-    /// Clock ITN: minutes+am/pm, o'clock, bare hour+am/pm. Idempotent.
+    /// Clock ITN: minutes+am/pm, o'clock, ranges, bare hour+am/pm. Idempotent.
     private static func applyTimeITN(_ text: String) -> String {
         var result = applyTimeWithMinutesITN(text)
         result = applyOClockITN(result)
+        // Ranges before bare hour so "three to five pm" is not partially rewritten.
+        result = applyTimeRangeITN(result)
         result = applyBareHourITN(result)
         return result
     }
@@ -681,6 +692,32 @@ enum TextPostProcessor {
         return result
     }
 
+    private static func applyTimeRangeITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = timeRangePattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 5,
+                  let hour1Range = Range(match.range(at: 2), in: result),
+                  let hour2Range = Range(match.range(at: 3), in: result),
+                  let apRange = Range(match.range(at: 4), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let fromPrefix: String
+            if match.range(at: 1).location != NSNotFound {
+                fromPrefix = "from "
+            } else {
+                fromPrefix = ""
+            }
+            let h1 = formatHour(String(result[hour1Range]))
+            let h2 = formatHour(String(result[hour2Range]))
+            let mer = formatMeridiem(result[apRange])
+            result.replaceSubrange(fullRange, with: "\(fromPrefix)\(h1)-\(h2) \(mer)")
+        }
+        return result
+    }
+
     private static func applyBareHourITN(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         let matches = timeITNPattern.matches(in: text, range: range)
@@ -698,6 +735,11 @@ enum TextPostProcessor {
             if fullRange.lowerBound > result.startIndex {
                 let prev = result[result.index(before: fullRange.lowerBound)]
                 if prev == ":" { continue }
+            }
+            // Skip range tails already rewritten: "3-5 p.m." must not rematch "5 p.m."
+            if fullRange.lowerBound > result.startIndex {
+                let prev = result[result.index(before: fullRange.lowerBound)]
+                if prev == "-" { continue }
             }
             let hour = formatHour(String(result[hourRange]))
             let mer = formatMeridiem(result[apRange])
@@ -865,16 +907,18 @@ enum TextPostProcessor {
 
     // MARK: - Suite / room / extension ITN
 
-    /// "suite 12" / "room 101" / "ext 55" / "apartment 4" after SpokenNumberITN.
+    /// "suite 12" / "room 101" / "floor 5" / "ext 55" / "apartment 4" after SpokenNumberITN.
     /// Digit-only body for v1 (spoken runs are forced to digits in SpokenNumberITN).
+    /// v1: still rewrites when more content words follow ("room 5 people" → "Room 5 people");
+    /// address-style is common; no end-of-phrase guard yet.
     private static let suiteRoomExtPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(suite|apartment|apt\.?|unit|room|extension|ext\.?)\s+(\d{1,6})\b"#,
+            pattern: #"\b(suite|apartment|apt\.?|unit|room|floor|extension|ext\.?)\s+(\d{1,6})\b"#,
             options: .caseInsensitive
         )
     }()
 
-    /// Canonical labels: suite→Suite, apt/apartment→Apt., unit→Unit, room→Room, ext→ext.
+    /// Canonical labels: suite→Suite, apt→Apt., unit→Unit, room→Room, floor→Floor, ext→ext.
     private static func suiteRoomExtLabel(for raw: String) -> String? {
         let key = raw
             .trimmingCharacters(in: CharacterSet(charactersIn: "."))
@@ -884,6 +928,7 @@ enum TextPostProcessor {
         case "apartment", "apt": return "Apt."
         case "unit": return "Unit"
         case "room": return "Room"
+        case "floor": return "Floor"
         case "extension", "ext": return "ext."
         default: return nil
         }

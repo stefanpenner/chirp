@@ -1146,6 +1146,92 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("next line"))
     }
 
+    @Test("beginning / end of document moves document cursor without changing buffer")
+    func moveToDocumentEdgeCommands() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["beginning of document"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveToDocumentStartCalled { break }
+        }
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveToDocumentStartCalled)
+        #expect(!inserter.moveToLineStartCalled)
+        #expect(!inserter.typedTexts.contains("beginning of document"))
+
+        await mock.setFeedAudioResult(["end of document"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveToDocumentEndCalled { break }
+        }
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveToDocumentEndCalled)
+        #expect(!inserter.moveToLineEndCalled)
+        #expect(!inserter.typedTexts.contains("end of document"))
+    }
+
+    @Test("page up / down scrolls without changing buffer")
+    func pageScrollCommands() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["page up"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.scrollPageDirections.isEmpty { break }
+        }
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.scrollPageDirections == [.up])
+        #expect(inserter.moveLineDirections.isEmpty)
+        #expect(!inserter.typedTexts.contains("page up"))
+
+        await mock.setFeedAudioResult(["scroll down"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.scrollPageDirections.count >= 2 { break }
+        }
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.scrollPageDirections == [.up, .down])
+        #expect(inserter.moveLineDirections.isEmpty)
+        #expect(!inserter.typedTexts.contains("scroll down"))
+    }
+
     @Test("select last line selects trailing line only")
     func selectLastLineCommand() async throws {
         let mock = MockTranscriber()

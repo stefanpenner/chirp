@@ -721,6 +721,14 @@ public final class AppState {
                         self.performMoveToLineStart()
                     case .moveToEnd:
                         self.performMoveToLineEnd()
+                    case .moveToDocumentStart:
+                        self.performMoveToDocumentStart()
+                    case .moveToDocumentEnd:
+                        self.performMoveToDocumentEnd()
+                    case .pageUp:
+                        self.performScrollPage(direction: .up)
+                    case .pageDown:
+                        self.performScrollPage(direction: .down)
                     case .moveToPreviousSentence:
                         self.performMoveToPreviousSentence()
                     case .moveToNextSentence:
@@ -837,6 +845,14 @@ public final class AppState {
             performMoveToLineStart()
         case .moveToEnd:
             performMoveToLineEnd()
+        case .moveToDocumentStart:
+            performMoveToDocumentStart()
+        case .moveToDocumentEnd:
+            performMoveToDocumentEnd()
+        case .pageUp:
+            performScrollPage(direction: .up)
+        case .pageDown:
+            performScrollPage(direction: .down)
         case .moveToPreviousSentence:
             performMoveToPreviousSentence()
         case .moveToNextSentence:
@@ -1284,6 +1300,21 @@ public final class AppState {
     /// Move cursor to line end (⌘→). Buffer unchanged.
     private func performMoveToLineEnd() {
         textInserter.moveToLineEnd()
+    }
+
+    /// Move cursor to document start (⌘↑). Buffer unchanged.
+    private func performMoveToDocumentStart() {
+        textInserter.moveToDocumentStart()
+    }
+
+    /// Move cursor to document end (⌘↓). Buffer unchanged.
+    private func performMoveToDocumentEnd() {
+        textInserter.moveToDocumentEnd()
+    }
+
+    /// Scroll one page (Page Up / Page Down). Buffer unchanged.
+    private func performScrollPage(direction: MoveDirection) {
+        textInserter.scrollPage(direction: direction)
     }
 
     /// Move cursor to start of last sentence (plain ← × n). Assumes caret at end.

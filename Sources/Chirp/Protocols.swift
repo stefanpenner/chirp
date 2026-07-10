@@ -68,6 +68,12 @@ enum TextFormatStyle: Equatable, Sendable {
     func moveToLineStart()
     /// Move cursor to line end (⌘+right). Spoken "go to end".
     func moveToLineEnd()
+    /// Move cursor to document start (⌘↑). Spoken "beginning of document".
+    func moveToDocumentStart()
+    /// Move cursor to document end (⌘↓). Spoken "end of document".
+    func moveToDocumentEnd()
+    /// Page scroll via Page Up / Page Down (0x74 / 0x79). Spoken "page up" / "page down".
+    func scrollPage(direction: MoveDirection)
     /// Move cursor left `count` times (plain left arrow, no modifiers).
     func moveBackward(count: Int)
     /// Move cursor right `count` times (plain right arrow, no modifiers).
@@ -93,6 +99,9 @@ extension TextInserting {
     func moveLine(direction: MoveDirection) {}
     func moveToLineStart() {}
     func moveToLineEnd() {}
+    func moveToDocumentStart() {}
+    func moveToDocumentEnd() {}
+    func scrollPage(direction: MoveDirection) {}
     func moveBackward(count: Int) {}
     func moveForward(count: Int) {}
     func applyFormat(_ style: TextFormatStyle) {}

@@ -77,6 +77,25 @@ struct TextInserterTests {
         #expect(inserter.moveToLineEndCalled)
     }
 
+    @Test("moveToDocumentStart / moveToDocumentEnd record calls")
+    func moveToDocumentEdges() {
+        let inserter = MockTextInserter()
+        #expect(!inserter.moveToDocumentStartCalled)
+        #expect(!inserter.moveToDocumentEndCalled)
+        inserter.moveToDocumentStart()
+        inserter.moveToDocumentEnd()
+        #expect(inserter.moveToDocumentStartCalled)
+        #expect(inserter.moveToDocumentEndCalled)
+    }
+
+    @Test("scrollPage records up/down direction")
+    func scrollPage() {
+        let inserter = MockTextInserter()
+        inserter.scrollPage(direction: .up)
+        inserter.scrollPage(direction: .down)
+        #expect(inserter.scrollPageDirections == [.up, .down])
+    }
+
     @Test("moveBackward / moveForward record positive counts; zero is no-op")
     func moveByCount() {
         let inserter = MockTextInserter()

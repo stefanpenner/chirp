@@ -76,9 +76,15 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("five five") == "five five")
     }
 
-    @Test("digit runs of ≥2 force-convert after suite/room/ext cues")
+    @Test("digit runs of ≥1 force-convert after suite/room/floor/ext cues")
     func digitRunsAfterAddressCues() {
+        // Single digit after cue
+        #expect(SpokenNumberITN.apply("suite five") == "suite 5")
+        #expect(SpokenNumberITN.apply("floor five") == "floor 5")
+        #expect(SpokenNumberITN.apply("room one") == "room 1")
+        // Multi-digit runs after cue
         #expect(SpokenNumberITN.apply("suite five five") == "suite 55")
+        #expect(SpokenNumberITN.apply("floor five five") == "floor 55")
         #expect(SpokenNumberITN.apply("room one zero one") == "room 101")
         #expect(SpokenNumberITN.apply("extension five five") == "extension 55")
         #expect(SpokenNumberITN.apply("ext five five") == "ext 55")

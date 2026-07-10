@@ -82,6 +82,14 @@ enum DictationCommand: Equatable, Sendable {
     case moveToStart
     /// Move cursor to line end (⌘→). Buffer unchanged.
     case moveToEnd
+    /// Move cursor to document start (⌘↑). Buffer unchanged.
+    case moveToDocumentStart
+    /// Move cursor to document end (⌘↓). Buffer unchanged.
+    case moveToDocumentEnd
+    /// Scroll one page up (Page Up). Buffer unchanged.
+    case pageUp
+    /// Scroll one page down (Page Down). Buffer unchanged.
+    case pageDown
     /// Move cursor to start of last sentence (plain ← × n). Buffer unchanged.
     case moveToPreviousSentence
     /// Move cursor toward next sentence. Without caret tracking, lands at line end (⌘→).
@@ -264,10 +272,23 @@ enum DictationCommand: Equatable, Sendable {
             return .moveUpLine
         case "move down", "down a line", "next line", "go down", "line down":
             return .moveDownLine
+        // Document edges before line edges so "… of document" phrases win as full matches
+        // (exact match; line phrases stay separate strings).
+        case "beginning of document", "top of document", "go to top of document",
+             "start of document", "go to beginning of document":
+            return .moveToDocumentStart
+        case "end of document", "bottom of document",
+             "go to end of document", "go to bottom of document":
+            return .moveToDocumentEnd
         case "go to start", "go to beginning", "beginning of line":
             return .moveToStart
         case "go to end", "end of line":
             return .moveToEnd
+        // Page scroll — exact phrases; "move up" / "go up" remain moveUpLine.
+        case "page up", "scroll up", "scroll page up":
+            return .pageUp
+        case "page down", "scroll down", "scroll page down":
+            return .pageDown
         // Navigation — do not match "select previous sentence" (selectLastSentence).
         case "go to previous sentence", "previous sentence",
              "move to previous sentence", "back a sentence":
@@ -323,6 +344,10 @@ enum DictationCommand: Equatable, Sendable {
         ("move down / next line / line down", "Cursor down one line (↓)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),
         ("go to end / end of line", "Cursor to line end (⌘→)"),
+        ("beginning of document / top of document", "Cursor to document start (⌘↑)"),
+        ("end of document / bottom of document", "Cursor to document end (⌘↓)"),
+        ("page up / scroll up", "Page up (Page Up key)"),
+        ("page down / scroll down", "Page down (Page Down key)"),
         ("previous sentence / go to previous sentence", "Cursor to start of last sentence (← × n)"),
         ("next sentence / go to next sentence", "Cursor to line end (no caret track; best-effort)"),
         ("period / comma / …", "Spoken punctuation"),

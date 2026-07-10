@@ -143,6 +143,9 @@ final class MockTextInserter: TextInserting {
     var moveLineDirections: [MoveDirection] = []
     var moveToLineStartCalled = false
     var moveToLineEndCalled = false
+    var moveToDocumentStartCalled = false
+    var moveToDocumentEndCalled = false
+    var scrollPageDirections: [MoveDirection] = []
     var moveBackwardCounts: [Int] = []
     var moveForwardCounts: [Int] = []
     var appliedFormats: [TextFormatStyle] = []
@@ -205,6 +208,18 @@ final class MockTextInserter: TextInserting {
 
     func moveToLineEnd() {
         moveToLineEndCalled = true
+    }
+
+    func moveToDocumentStart() {
+        moveToDocumentStartCalled = true
+    }
+
+    func moveToDocumentEnd() {
+        moveToDocumentEndCalled = true
+    }
+
+    func scrollPage(direction: MoveDirection) {
+        scrollPageDirections.append(direction)
     }
 
     func moveBackward(count: Int) {

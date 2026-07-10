@@ -324,6 +324,25 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("Meeting at twelve o'clock") == "Meeting at 12:00")
     }
 
+    @Test("Light ITN formats time ranges with shared meridiem")
+    func lightITNTimeRanges() {
+        // Optional "from" kept; range compact with ASCII hyphen; shared pm/am
+        #expect(TextPostProcessor.process("from three to five pm") == "from 3-5 p.m.")
+        #expect(TextPostProcessor.process("three to five p.m.") == "3-5 p.m.")
+        #expect(TextPostProcessor.process("from nine to eleven am") == "from 9-11 a.m.")
+        #expect(TextPostProcessor.process("two through four pm") == "2-4 p.m.")
+        #expect(TextPostProcessor.process("one until three a.m.") == "1-3 a.m.")
+        // Digit hours (after number ITN or already digits)
+        #expect(TextPostProcessor.process("from 3 to 5 pm") == "from 3-5 p.m.")
+        #expect(TextPostProcessor.process("3 to 5 p.m.") == "3-5 p.m.")
+        // Bare hour regression (must not break)
+        #expect(TextPostProcessor.process("meeting at three pm") == "meeting at 3 p.m.")
+        #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")
+        // Minutes / o'clock still work alongside ranges
+        #expect(TextPostProcessor.process("three thirty pm") == "3:30 p.m.")
+        #expect(TextPostProcessor.process("three o'clock") == "3:00")
+    }
+
     @Test("Light ITN formats percent and dollars")
     func lightITNPercentCurrency() {
         #expect(TextPostProcessor.process("about 50 percent done") == "about 50% done")
@@ -467,18 +486,28 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("apt 4") == "Apt. 4")
         #expect(TextPostProcessor.process("apartment 12") == "Apt. 12")
         #expect(TextPostProcessor.process("unit 3") == "Unit 3")
+        #expect(TextPostProcessor.process("floor 5") == "Floor 5")
         // Cue without a number stays put
         #expect(TextPostProcessor.process("hit the room") == "hit the room")
         #expect(TextPostProcessor.process("nice suite") == "nice suite")
+        // v1: label rewrite still applies when more content words follow
+        // (address-style common: "Room 5 people" acceptable for now)
+        #expect(TextPostProcessor.process("room 5 people") == "Room 5 people")
     }
 
     @Test("Light ITN suite / room with spoken digit runs after cue")
     func lightITNSuiteRoomSpokenDigits() {
+        // Single digit after cue force-converts (suite five → Suite 5)
+        #expect(TextPostProcessor.process("suite five") == "Suite 5")
+        #expect(TextPostProcessor.process("room one") == "Room 1")
         // Short digit runs (≥2) force-convert after address cues only
         #expect(TextPostProcessor.process("suite five five") == "Suite 55")
         #expect(TextPostProcessor.process("room one zero one") == "Room 101")
         #expect(TextPostProcessor.process("extension five five") == "ext. 55")
         #expect(TextPostProcessor.process("unit two five") == "Unit 25")
+        // Floor cue (same as suite/room)
+        #expect(TextPostProcessor.process("floor five") == "Floor 5")
+        #expect(TextPostProcessor.process("floor five five") == "Floor 55")
         // Compounds already digits via SpokenNumberITN, then label
         #expect(TextPostProcessor.process("suite twenty five") == "Suite 25")
         // Uncued short runs stay words (phone min length still 3)
@@ -492,7 +521,10 @@ struct TextPostProcessorTests {
     func packAcronymsMinLengthInProcess() {
         #expect(TextPostProcessor.process("a b") == "a b")
         #expect(TextPostProcessor.process("i d") == "ID")
+        #expect(TextPostProcessor.process("a i") == "AI")
         #expect(TextPostProcessor.process("a p i") == "API")
+        // "I a" is not an allowlisted pair (and capital I is multi-meaning)
+        #expect(TextPostProcessor.process("I a") == "I a")
     }
 
     @Test("Light ITN compact unit abbreviations after numbers")

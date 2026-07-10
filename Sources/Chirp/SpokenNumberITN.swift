@@ -6,7 +6,7 @@
 // - Needs compound (twenty five), teen, magnitude (hundred/thousand), or "point"
 // - Digit runs: ≥3 consecutive single-digit units → concatenate ("five five five" → "555")
 //   Short pure runs ("one two") stay words; "oh" → 0 (leading zeros kept)
-//   Exception: after suite/room/apt/unit/extension cues, digit runs of ≥2 convert
+//   Exception: after suite/room/floor/apt/unit/extension cues, digit runs of ≥1 convert
 // - Negatives: "minus"/"negative" + number phrase → "-N" (not bare "minus" / "minus sign")
 // - Ordinals: "first" blocked before of/all/class; "twenty first" → 21st always
 // Dual-tested via SpokenNumberITNTests (no TLA — pure String→String).
@@ -16,7 +16,7 @@ import Foundation
 enum SpokenNumberITN {
     /// Address / phone-extension cues that force short digit-run conversion.
     private static let addressNumberCues: Set<String> = [
-        "suite", "apartment", "apt", "unit", "room", "extension", "ext",
+        "suite", "apartment", "apt", "unit", "room", "floor", "extension", "ext",
     ]
     private static let units: [String: Int] = [
         "zero": 0, "oh": 0,
@@ -131,7 +131,8 @@ enum SpokenNumberITN {
                     parts: parts,
                     start: i,
                     forceConvert: afterCue,
-                    digitRunMinLength: afterCue ? 2 : 3
+                    // After suite/room/floor/ext: bare "five" → "5"; runs "five five" → "55"
+                    digitRunMinLength: afterCue ? 1 : 3
                 ) {
                     out.append(rewritten.text)
                     i = rewritten.nextIndex
@@ -160,7 +161,7 @@ enum SpokenNumberITN {
 
     /// Scan a run of number words from `start` and convert when allowed.
     /// `forceConvert` allows bare units (signed / after address cues).
-    /// `digitRunMinLength` is 3 by default (phone), 2 after suite/room/ext, 1 when signed.
+    /// `digitRunMinLength` is 3 by default (phone), 1 after suite/room/floor/ext, 1 when signed.
     private static func tryConsumeCardinal(
         parts: [String],
         start: Int,

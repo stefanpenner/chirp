@@ -67,7 +67,9 @@ AppState types a single delta (`EditStack.FlushReplace`).
 Multi-utterance joins use `SegmentJoiner` (insert ". " when a new
 capitalized clause follows bare text; suppress before proper nouns /
 dict products like GitHub). Light ITN: times (`three pm`→`3 p.m.`,
-`three thirty pm`→`3:30 p.m.`, `three o'clock`→`3:00`), spoken cardinals
+`three thirty pm`→`3:30 p.m.`, `three o'clock`→`3:00`, time ranges with shared
+meridiem: `from three to five pm`→`from 3-5 p.m.`, `three to five p.m.`→`3-5 p.m.`,
+`two through four pm` / `one until three a.m.` same form), spoken cardinals
 (`one hundred`→`100`, `twenty five`→`25`, `three point five`→`3.5`), ordinals
 (`twenty first`→`21st`, `first of all` stays), dates (`march fifth twenty
 twenty four`→`March 5, 2024`, `tomorrow`/`next monday` → absolute dates,
@@ -76,9 +78,11 @@ weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
 `20 dollars and 50 cents`→`$20.50`; bare `20 pounds`→`20 lb` weight;
 `20 pounds sterling` / `20 quid`→`£20`), street suffixes after a house number
 (`35 Lexington avenue`→`35 Lexington Ave.`; `hit the road` stays), suite/room/
-apt/unit/extension (`suite 12`→`Suite 12`, `room 101`→`Room 101`,
-`extension 55` / `ext 55`→`ext. 55`, `apt 4`→`Apt. 4`; spoken short digit runs
-after these cues: `suite five five`→`Suite 55`; `hit the room` stays), US states →
+floor/apt/unit/extension (`suite 12`→`Suite 12`, `room 101`→`Room 101`,
+`floor 5`→`Floor 5`, `extension 55` / `ext 55`→`ext. 55`, `apt 4`→`Apt. 4`;
+spoken digit runs after these cues (min length 1): `suite five`→`Suite 5`,
+`suite five five`→`Suite 55`, `floor five five`→`Floor 55`; `hit the room` stays;
+v1 still rewrites when more words follow — `room 5 people`→`Room 5 people`), US states →
 USPS codes (multi-word always: `new york`→`NY`; single-word only with address
 cue left of match — street abbrev, ZIP, or `state of` — so `I love california`
 stays, `35 Lexington avenue california`→`35 Lexington Ave. CA`,
@@ -119,7 +123,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **spell that** / **spell it** / **spell last** — select last phrase + enter spell mode (does not delete)
 - **spell as a b c** — one-shot pack (`SpellTransform.oneShot`); does not enable sticky spell mode
   (e.g. `spell as capital j o h n` → `John`)
-- Spoken single-letter runs pack to uppercase acronyms without sticky spell (`a p i` → `API` via `SpellTransform.packAcronyms`; min run 3, plus common 2-letter allowlist `i d`→`ID` / `u i`→`UI`; unlisted pairs like `a b` stay)
+- Spoken single-letter runs pack to uppercase acronyms without sticky spell (`a p i` → `API` via `SpellTransform.packAcronyms`; min run 3, plus common 2-letter allowlist `i d`→`ID` / `u i`→`UI` / `a i`→`AI`; unlisted pairs like `a b` stay; `I a` stays)
 - **cap that / all caps that / no caps that** — transform last word
 - **title case that** — title-case last phrase (stack delta)
 - **sentence case that** — sentence-case last phrase
@@ -141,6 +145,10 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **move down** / **next line** / **line down** / **down a line** / **go down** — cursor down one line (↓)
 - **go to start** / **beginning of line** — cursor to line start (⌘←)
 - **go to end** / **end of line** — cursor to line end (⌘→)
+- **beginning of document** / **top of document** / **start of document** / **go to top of document** / **go to beginning of document** — cursor to document start (⌘↑). Does **not** change line-edge **go to beginning** / **go to start**
+- **end of document** / **bottom of document** / **go to end of document** / **go to bottom of document** — cursor to document end (⌘↓)
+- **page up** / **scroll up** / **scroll page up** — Page Up key. Does **not** steal **move up**
+- **page down** / **scroll down** / **scroll page down** — Page Down key. Does **not** steal **move down**
 - **previous sentence** / **go to previous sentence** / **back a sentence** — cursor to start of last sentence (plain ← × n; assumes caret at end)
 - **next sentence** / **go to next sentence** / **forward a sentence** — best-effort without caret tracking: line end (⌘→). Does **not** steal **select previous sentence**
 - Overlay badge shows sticky caps / spell mode when active

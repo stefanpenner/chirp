@@ -284,6 +284,48 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("please go to end") == .moveToEnd)
     }
 
+    @Test("recognizes move to document start/end (not line start)")
+    func moveDocumentEdgeCommands() {
+        #expect(DictationCommand.parse("beginning of document") == .moveToDocumentStart)
+        #expect(DictationCommand.parse("top of document") == .moveToDocumentStart)
+        #expect(DictationCommand.parse("go to top of document") == .moveToDocumentStart)
+        #expect(DictationCommand.parse("start of document") == .moveToDocumentStart)
+        #expect(DictationCommand.parse("go to beginning of document") == .moveToDocumentStart)
+        #expect(DictationCommand.parse("Beginning of document.") == .moveToDocumentStart)
+        #expect(DictationCommand.parse("please go to top of document") == .moveToDocumentStart)
+
+        #expect(DictationCommand.parse("end of document") == .moveToDocumentEnd)
+        #expect(DictationCommand.parse("bottom of document") == .moveToDocumentEnd)
+        #expect(DictationCommand.parse("go to end of document") == .moveToDocumentEnd)
+        #expect(DictationCommand.parse("go to bottom of document") == .moveToDocumentEnd)
+        #expect(DictationCommand.parse("please end of document") == .moveToDocumentEnd)
+
+        // Line-edge phrases stay line-edge
+        #expect(DictationCommand.parse("go to beginning") == .moveToStart)
+        #expect(DictationCommand.parse("go to start") == .moveToStart)
+        #expect(DictationCommand.parse("go to end") == .moveToEnd)
+    }
+
+    @Test("recognizes page up/down scroll (not move up/down line)")
+    func pageScrollCommands() {
+        #expect(DictationCommand.parse("page up") == .pageUp)
+        #expect(DictationCommand.parse("scroll up") == .pageUp)
+        #expect(DictationCommand.parse("scroll page up") == .pageUp)
+        #expect(DictationCommand.parse("Page up.") == .pageUp)
+        #expect(DictationCommand.parse("please page up") == .pageUp)
+
+        #expect(DictationCommand.parse("page down") == .pageDown)
+        #expect(DictationCommand.parse("scroll down") == .pageDown)
+        #expect(DictationCommand.parse("scroll page down") == .pageDown)
+        #expect(DictationCommand.parse("please scroll down") == .pageDown)
+
+        // Line moves stay separate
+        #expect(DictationCommand.parse("move up") == .moveUpLine)
+        #expect(DictationCommand.parse("move down") == .moveDownLine)
+        #expect(DictationCommand.parse("go up") == .moveUpLine)
+        #expect(DictationCommand.parse("go down") == .moveDownLine)
+    }
+
     @Test("recognizes move up/down line (not select previous line)")
     func moveUpDownLineCommands() {
         #expect(DictationCommand.parse("move up") == .moveUpLine)
@@ -370,6 +412,9 @@ struct DictationCommandTests {
         #expect(says.contains(where: { $0.lowercased().contains("duplicate") }))
         #expect(says.contains(where: { $0.lowercased().contains("previous sentence") }))
         #expect(says.contains(where: { $0.lowercased().contains("next sentence") }))
+        #expect(says.contains(where: { $0.lowercased().contains("document") }))
+        #expect(says.contains(where: { $0.lowercased().contains("page up") || $0.lowercased().contains("scroll up") }))
+        #expect(says.contains(where: { $0.lowercased().contains("page down") || $0.lowercased().contains("scroll down") }))
     }
 
     @Test("spell as is content not a sticky command")
