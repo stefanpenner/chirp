@@ -466,6 +466,51 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains(" c"), "must not type leading space under spell glue")
     }
 
+    @Test("no space mode glues multi-segment commits without packing letters")
+    func noSpaceModeStickyGlue() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["no space on"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.noSpaceMode == .on { break }
+        }
+        #expect(state.noSpaceMode == .on)
+        #expect(inserter.typedTexts.isEmpty, "mode switch must not type")
+
+        // Within a segment, words keep spaces (no letter packing)
+        await mock.setFeedAudioResult(["hello world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+        #expect(state.transcribedText == "Hello world",
+                "no-space must not pack letters: got \"\(state.transcribedText)\"")
+
+        // Next segment glues with no separator
+        await mock.setFeedAudioResult(["wide"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello worldwide" { break }
+        }
+        #expect(state.transcribedText == "Hello worldwide",
+                "no-space segments must glue: got \"\(state.transcribedText)\"")
+        #expect(inserter.typedTexts.contains("wide"))
+        #expect(!inserter.typedTexts.contains(" wide"), "must not type leading space under no-space glue")
+    }
+
     @Test("press backspace deletes one char without changing session buffer")
     func pressBackspaceCommand() async throws {
         let mock = MockTranscriber()
@@ -536,6 +581,135 @@ struct AppStateTests {
             return
         }
         #expect(!inserter.typedTexts.contains("press escape"))
+    }
+
+    @Test("system undo sends ⌘Z without changing buffer or stack")
+    func pressUndoCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["system undo"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.pressUndoCallCount >= 1 { break }
+        }
+
+        #expect(inserter.pressUndoCallCount >= 1)
+        #expect(state.transcribedText == "Hello world", "keyboard-only; buffer unchanged")
+        #expect(!inserter.typedTexts.contains("system undo"))
+        #expect(inserter.deletedCounts.isEmpty, "⌘Z must not backspace session text")
+    }
+
+    @Test("select next word uses keyboard select without changing buffer")
+    func selectNextWordCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["select next word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectWordDirections.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.selectWordDirections == [.right])
+        #expect(!inserter.typedTexts.contains("select next word"))
+    }
+
+    @Test("select previous word uses keyboard select without changing buffer")
+    func selectPreviousWordCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["select previous word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectWordDirections.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.selectWordDirections == [.left])
+        #expect(!inserter.typedTexts.contains("select previous word"))
+    }
+
+    @Test("delete next word uses keyboard without changing session buffer")
+    func deleteNextWordCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["delete next word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.deleteWordDirections.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello world", "v1: keyboard-only; caret-relative")
+        #expect(inserter.deleteWordDirections == [.right])
+        #expect(!inserter.typedTexts.contains("delete next word"))
     }
 
     @Test("insert date types formatted date into buffer and stack")
@@ -3032,6 +3206,7 @@ struct AppStateTests {
         #expect(state.capsMode == .normal)
         #expect(!state.capitalizeNextWord)
         #expect(state.spellMode == .off)
+        #expect(state.noSpaceMode == .off)
         #expect(!state.awaitingReplace)
     }
 
@@ -3066,6 +3241,70 @@ struct AppStateTests {
         #expect(state.spellMode == .off)
         #expect(state.capsMode == .normal)
         #expect(!state.awaitingReplace)
+    }
+
+    @Test("cancelSession resets sticky noSpaceMode to off")
+    func cancelSessionResetsNoSpaceMode() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["no space on"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.noSpaceMode == .on { break }
+        }
+        #expect(state.noSpaceMode == .on)
+
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after cancel, got \(state.status)")
+            return
+        }
+        #expect(state.noSpaceMode == .off)
+        #expect(state.spellMode == .off)
+        #expect(state.capsMode == .normal)
+    }
+
+    @Test("startRecording resets sticky noSpaceMode to off")
+    func startRecordingResetsNoSpaceMode() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["no space on"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.noSpaceMode == .on { break }
+        }
+        #expect(state.noSpaceMode == .on)
+
+        // Cancel ends session and clears sticky modes; next startRecording
+        // also resets (dual of NoSpaceMode.tla Reset).
+        state.cancelSession()
+        #expect(state.noSpaceMode == .off)
+
+        state.status = .ready
+        state.startRecording()
+        #expect(state.noSpaceMode == .off)
     }
 
     @Test("cancelSession clears armed replace that")

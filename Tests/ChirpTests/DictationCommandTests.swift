@@ -111,6 +111,52 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("esc") == .none)
     }
 
+    @Test("recognizes system undo without stealing undo that")
+    func pressUndo() {
+        #expect(DictationCommand.parse("system undo") == .pressUndo)
+        #expect(DictationCommand.parse("press undo") == .pressUndo)
+        #expect(DictationCommand.parse("undo key") == .pressUndo)
+        #expect(DictationCommand.parse("app undo") == .pressUndo)
+        #expect(DictationCommand.parse("command undo") == .pressUndo)
+        #expect(DictationCommand.parse("System Undo.") == .pressUndo)
+        #expect(DictationCommand.parse("please press undo") == .pressUndo)
+        // Must not steal session-buffer undo / scratch
+        #expect(DictationCommand.parse("undo that") == .scratchThat)
+        #expect(DictationCommand.parse("scratch that") == .scratchThat)
+        #expect(DictationCommand.parse("correct that") == .scratchThat)
+        #expect(DictationCommand.parse("undo it") == .scratchThat)
+    }
+
+    @Test("recognizes select next / previous word (keyboard)")
+    func selectNextPreviousWord() {
+        #expect(DictationCommand.parse("select next word") == .selectNextWord)
+        #expect(DictationCommand.parse("select forward word") == .selectNextWord)
+        #expect(DictationCommand.parse("Select next word.") == .selectNextWord)
+        #expect(DictationCommand.parse("please select next word") == .selectNextWord)
+
+        #expect(DictationCommand.parse("select previous word") == .selectPreviousWord)
+        #expect(DictationCommand.parse("select prior word") == .selectPreviousWord)
+        #expect(DictationCommand.parse("Select previous word.") == .selectPreviousWord)
+        #expect(DictationCommand.parse("please select prior word") == .selectPreviousWord)
+
+        // Buffer-based select last word stays separate
+        #expect(DictationCommand.parse("select last word") == .selectLastWord)
+        // Bare next/previous word stay navigation
+        #expect(DictationCommand.parse("next word") == .moveRightWord)
+        #expect(DictationCommand.parse("previous word") == .moveLeftWord)
+    }
+
+    @Test("recognizes delete next word (keyboard)")
+    func deleteNextWord() {
+        #expect(DictationCommand.parse("delete next word") == .deleteNextWord)
+        #expect(DictationCommand.parse("delete forward word") == .deleteNextWord)
+        #expect(DictationCommand.parse("Delete next word.") == .deleteNextWord)
+        #expect(DictationCommand.parse("please delete next word") == .deleteNextWord)
+        // Buffer-based delete last word stays separate
+        #expect(DictationCommand.parse("delete last word") == .deleteLastWord)
+        #expect(DictationCommand.parse("delete word") == .deleteLastWord)
+    }
+
     @Test("recognizes insert date / insert time")
     func insertDateTime() {
         #expect(DictationCommand.parse("insert date") == .insertDate)
@@ -192,6 +238,22 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("spell off") == .setSpellMode(.off))
         #expect(DictationCommand.parse("please spell mode") == .setSpellMode(.on))
         #expect(DictationCommand.parse("Spell Mode Off.") == .setSpellMode(.off))
+    }
+
+    @Test("recognizes sticky no-space mode on and off")
+    func noSpaceModeCommands() {
+        #expect(DictationCommand.parse("no space on") == .setNoSpaceMode(.on))
+        #expect(DictationCommand.parse("no spaces on") == .setNoSpaceMode(.on))
+        #expect(DictationCommand.parse("compound on") == .setNoSpaceMode(.on))
+        #expect(DictationCommand.parse("no space off") == .setNoSpaceMode(.off))
+        #expect(DictationCommand.parse("no spaces off") == .setNoSpaceMode(.off))
+        #expect(DictationCommand.parse("compound off") == .setNoSpaceMode(.off))
+        #expect(DictationCommand.parse("spaces on") == .setNoSpaceMode(.off))
+        #expect(DictationCommand.parse("please no space on") == .setNoSpaceMode(.on))
+        #expect(DictationCommand.parse("No Space Off.") == .setNoSpaceMode(.off))
+        // One-shot must not be stolen by sticky mode
+        #expect(DictationCommand.parse("no space that") == .noSpaceThat)
+        #expect(DictationCommand.parse("no spaces that") == .noSpaceThat)
     }
 
     @Test("tolerates please / now around commands")
@@ -490,6 +552,10 @@ struct DictationCommandTests {
         #expect(says.contains(where: { $0.lowercased().contains("insert date") }))
         #expect(says.contains(where: { $0.lowercased().contains("insert time") }))
         #expect(says.contains(where: { $0.lowercased().contains("escape") || $0.lowercased().contains("esc") }))
+        #expect(says.contains(where: { $0.lowercased().contains("system undo") || $0.lowercased().contains("press undo") }))
+        #expect(says.contains(where: { $0.lowercased().contains("select next word") }))
+        #expect(says.contains(where: { $0.lowercased().contains("select previous word") || $0.lowercased().contains("select prior word") }))
+        #expect(says.contains(where: { $0.lowercased().contains("delete next word") }))
     }
 
     @Test("spell as is content not a sticky command")

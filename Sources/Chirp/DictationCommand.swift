@@ -30,6 +30,8 @@ enum DictationCommand: Equatable, Sendable {
     case pressBackspace
     /// Press Escape once. Keyboard-only; buffer unchanged; does not cancel session.
     case pressEscape
+    /// System undo (⌘Z). Keyboard-only; buffer / edit stack unchanged.
+    case pressUndo
     /// Insert today's date (e.g. "July 10, 2026").
     case insertDate
     /// Insert current local time (e.g. "3:45 p.m.").
@@ -46,6 +48,8 @@ enum DictationCommand: Equatable, Sendable {
     case setCapsMode(CapsMode)
     /// Set sticky spell mode for following commits (letter packing).
     case setSpellMode(SpellMode)
+    /// Set sticky no-space mode for following commits (empty segment separators).
+    case setNoSpaceMode(NoSpaceMode)
     /// Select last phrase and enter spell mode (Dragon-style "spell that").
     case spellThat
     /// Capitalize the last word (one-shot).
@@ -66,6 +70,12 @@ enum DictationCommand: Equatable, Sendable {
     case selectThat
     /// Select the last whitespace-delimited word.
     case selectLastWord
+    /// Select next word via ⇧⌥→. Keyboard-only; buffer unchanged.
+    case selectNextWord
+    /// Select previous word via ⇧⌥←. Keyboard-only; buffer unchanged.
+    case selectPreviousWord
+    /// Delete next word via ⇧⌥→ then backspace. Keyboard-only; buffer unchanged.
+    case deleteNextWord
     /// Select the last sentence (after [.?!] + whitespace).
     case selectLastSentence
     /// Select the last paragraph (after \n\n or \n).
@@ -211,6 +221,9 @@ enum DictationCommand: Equatable, Sendable {
         case "press escape", "press esc", "hit escape", "hit esc",
              "escape key", "esc key", "press the escape key", "hit the escape key":
             return .pressEscape
+        // System ⌘Z — do not steal "undo that" / "scratch that" / "correct that".
+        case "system undo", "press undo", "undo key", "app undo", "command undo":
+            return .pressUndo
         case "insert date", "insert today's date", "today's date", "insert the date",
              "insert todays date", "todays date":
             return .insertDate
@@ -264,12 +277,30 @@ enum DictationCommand: Equatable, Sendable {
         case "no space that", "nospace that", "no spaces that",
              "delete the space", "remove the space":
             return .noSpaceThat
+        // Sticky no-space mode (segment glue only; not letter packing)
+        // Off phrases listed before bare "no space on" so exact match wins.
+        // "no space that" is one-shot above — does not steal sticky phrases.
+        case "no space off", "no spaces off", "compound off", "spaces on":
+            return .setNoSpaceMode(.off)
+        case "no space on", "no spaces on", "compound on":
+            return .setNoSpaceMode(.on)
         case "select that", "select it", "select last", "highlight that",
              "highlight it", "highlight last":
             return .selectThat
         case "select last word", "highlight last word",
              "select the last word", "highlight the last word":
             return .selectLastWord
+        // Keyboard select word — do not steal "select last word" or bare "next word".
+        case "select next word", "select forward word",
+             "highlight next word", "highlight forward word":
+            return .selectNextWord
+        case "select previous word", "select prior word",
+             "highlight previous word", "highlight prior word":
+            return .selectPreviousWord
+        // Keyboard delete next word — do not steal "delete last word" / "delete word".
+        case "delete next word", "delete forward word",
+             "remove next word", "remove forward word":
+            return .deleteNextWord
         case "select last sentence", "select previous sentence",
              "select sentence", "highlight last sentence",
              "highlight previous sentence", "highlight sentence":
@@ -355,6 +386,7 @@ enum DictationCommand: Equatable, Sendable {
         ("press space / hit space", "Insert Space"),
         ("press backspace / delete key", "Press Backspace once (keyboard only)"),
         ("press escape / escape key", "Press Escape once (keyboard only; does not cancel)"),
+        ("system undo / press undo / undo key", "System undo (⌘Z; keyboard only; not scratch that)"),
         ("insert date / today's date", "Type today's date (e.g. July 10, 2026)"),
         ("insert time / current time", "Type current time (e.g. 3:45 p.m.)"),
         ("copy that", "Copy session to clipboard"),
@@ -371,8 +403,13 @@ enum DictationCommand: Equatable, Sendable {
         ("title case that", "Title-case last phrase"),
         ("sentence case that", "Sentence-case last phrase"),
         ("no space that", "Join last word without space"),
+        ("no space on / compound on", "Sticky no-space mode (glue segments)"),
+        ("no space off / compound off / spaces on", "Exit no-space mode"),
         ("select that", "Select last phrase"),
         ("select last word", "Select last word"),
+        ("select next word / select forward word", "Select next word (⇧⌥→; keyboard only)"),
+        ("select previous word / select prior word", "Select previous word (⇧⌥←; keyboard only)"),
+        ("delete next word / delete forward word", "Delete next word (⇧⌥→ then ⌫; keyboard only)"),
         ("select last sentence / previous sentence", "Select last sentence"),
         ("select last paragraph / previous paragraph", "Select last paragraph"),
         ("select last line / select line", "Select last line"),
@@ -401,6 +438,7 @@ enum DictationCommand: Equatable, Sendable {
         ("end list / stop numbering", "Reset list counter"),
         ("dot com / at sign", "Domain & email bits"),
         ("www / https colon slash slash", "Spoken URL bits"),
+        ("tilde slash / home slash / dot slash", "Path prefixes (~/ and ./)"),
     ]
 }
 

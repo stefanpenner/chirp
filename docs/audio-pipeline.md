@@ -109,7 +109,11 @@ Spoken URLs: `www dot example dot com`→`www.example.com`,
 `w w w` / `double you double you double you`→`www`,
 `https colon slash slash`→`https://` (and `http` / `forward slash` variants).
 Spoken symbols: `slash`→`/`, `asterisk`→`*`,
-`underscore`→`_`, fractions `one half`→`½`. Lists: `bullet point` /
+`underscore`→`_`, fractions `one half`→`½`.
+Spoken path prefixes (before stutter collapse):
+`tilde slash` / `home slash`→`~/`, `dot slash`→`./` (not `dot com`),
+bare `tilde`→`~` (e.g. `open tilde slash .config`→`open ~/.config`).
+Lists: `bullet point` /
 `next bullet` → `•`; `number one` / `next number` → `1.` / `2.`;
 `end list` resets numbering. Session list counter resets each recording.
 Relative dates use the local timezone. Settings → Audio → Auto-Formatting
@@ -135,6 +139,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **spell as a b c** — one-shot pack (`SpellTransform.oneShot`); does not enable sticky spell mode
   (e.g. `spell as capital j o h n` → `John`)
 - Spoken single-letter runs pack to uppercase acronyms without sticky spell (`a p i` → `API` via `SpellTransform.packAcronyms`; min run 3, plus common 2-letter allowlist `i d`→`ID` / `u i`→`UI` / `a i`→`AI`; unlisted pairs like `a b` stay; `I a` stays)
+- **no space on** / **compound on** / **no spaces on** — sticky no-space mode (`NoSpaceMode`); glues segments with empty separator (HUD “no space”); does **not** pack letters
+- **no space off** / **compound off** / **spaces on** — exit no-space mode
 - **cap that / all caps that / no caps that** — transform last word
 - **cap next** / **capitalize next** / **caps next** — arm one-shot: next content’s first word is capitalized, then arm clears (`CapNext.tla`; HUD “cap next”)
 - **title case that** — title-case last phrase (stack delta)
@@ -142,6 +148,9 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **no space that** — join last word without leading space
 - **select that** / **highlight that** — select last phrase (shift+left)
 - **select last word** — select trailing word only
+- **select next word** / **select forward word** — select next word (⇧⌥→; keyboard only; buffer unchanged)
+- **select previous word** / **select prior word** — select previous word (⇧⌥←; keyboard only; buffer unchanged). Does **not** steal **select last word** or bare **previous word** (move left)
+- **delete next word** / **delete forward word** — delete next word (⇧⌥→ then ⌫; keyboard only; buffer unchanged). Does **not** steal **delete last word**
 - **select last sentence** / **select previous sentence** / **select sentence** — select trailing sentence
 - **select last paragraph** / **select previous paragraph** / **select paragraph** — select trailing paragraph
 - **select last line** / **select previous line** / **select line** / **select this line** — select trailing line (content after last `\n`)
@@ -169,6 +178,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **press enter** / **press tab** / **press space** — key inserts
 - **press backspace** / **delete key** — Backspace once (keyboard only; buffer unchanged)
 - **press escape** / **press esc** / **hit escape** / **escape key** — Escape once (keyboard only; buffer unchanged; does **not** cancel session). Bare **escape** is not a command
+- **system undo** / **press undo** / **undo key** / **app undo** / **command undo** — system undo (⌘Z; keyboard only; buffer / edit stack unchanged). Does **not** steal **undo that** / **scratch that** / **correct that**
 - **insert date** / **today's date** / **insert the date** — type today's date (e.g. `July 10, 2026`)
 - **insert time** / **current time** / **insert the time** — type current local time (e.g. `3:45 p.m.`)
 - **copy that** / **paste that** — clipboard

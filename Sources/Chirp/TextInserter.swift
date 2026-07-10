@@ -106,6 +106,32 @@ final class TextInserter: TextInserting {
         }
     }
 
+    /// System undo via ⌘Z (0x06 / kVK_ANSI_Z). Does not touch Chirp edit stack.
+    func pressUndo() {
+        postCommandKey(0x06) // kVK_ANSI_Z
+    }
+
+    /// Select one word via ⇧⌥← / ⇧⌥→ (0x7B / 0x7C).
+    func selectWord(direction: MoveDirection) {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let arrow: CGKeyCode = direction == .left ? 0x7B : 0x7C // kVK_LeftArrow / kVK_RightArrow
+        let flags: CGEventFlags = [.maskShift, .maskAlternate]
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: arrow, keyDown: true) {
+            keyDown.flags = flags
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: arrow, keyDown: false) {
+            keyUp.flags = flags
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
+    /// Delete one word: selectWord then backspace (deletes selection).
+    func deleteWord(direction: MoveDirection) {
+        selectWord(direction: direction)
+        deleteBackward(count: 1)
+    }
+
     /// Select characters backward by holding shift and pressing left arrow (0x7B).
     func selectBackward(count: Int) {
         guard count > 0 else { return }

@@ -257,6 +257,28 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("x equals sign y").contains("="))
         #expect(TextPostProcessor.process("one half cup").contains("½"))
         #expect(TextPostProcessor.process("site dot edu") == "site.edu")
+        // Tilde at start of string (path prefix) and mid-phrase
+        #expect(TextPostProcessor.process("tilde") == "~")
+        #expect(TextPostProcessor.process("tilde slash bin") == "~/bin")
+        #expect(TextPostProcessor.process("path tilde end").contains("~"))
+    }
+
+    @Test("Spoken path prefixes tilde home dot slash")
+    func spokenPathPrefixes() {
+        #expect(TextPostProcessor.process("tilde slash src") == "~/src")
+        #expect(TextPostProcessor.process("tilde forward slash src") == "~/src")
+        #expect(TextPostProcessor.process("home slash Documents") == "~/Documents")
+        #expect(TextPostProcessor.process("home forward slash Documents") == "~/Documents")
+        #expect(TextPostProcessor.process("dot slash foo") == "./foo")
+        #expect(TextPostProcessor.process("dot forward slash foo") == "./foo")
+        #expect(TextPostProcessor.process("open tilde slash .config") == "open ~/.config")
+        #expect(TextPostProcessor.process("cd home slash src") == "cd ~/src")
+        // Must not break domain ITN
+        #expect(TextPostProcessor.process("visit example dot com") == "visit example.com")
+        #expect(TextPostProcessor.process("dot company").contains("company"))
+        // Bare home / bare dot stay words
+        #expect(TextPostProcessor.process("go home now") == "go home now")
+        #expect(TextPostProcessor.process("the dot is here").contains("dot"))
     }
 
     @Test("Bullet list spoken commands")

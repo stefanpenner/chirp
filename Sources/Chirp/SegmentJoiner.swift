@@ -10,8 +10,9 @@ enum SegmentJoiner {
     /// Join `next` onto `existing`. Returns the full text and the delta to type.
     /// - Parameter preserveLeadingCase: when true (spell mode), skip first-letter
     ///   truecase so packed letters keep explicit casing ("abc", "Ab").
-    /// - Parameter emptySeparator: when true (spell mode glue), join with no space
-    ///   so multi-segment letter packs become "abc" not "ab c".
+    /// - Parameter emptySeparator: when true (spell mode or no-space mode glue),
+    ///   join with no space so multi-segment packs become "abc" / "worldwide"
+    ///   not "ab c" / "world wide".
     static func append(
         existing: String,
         next: String,

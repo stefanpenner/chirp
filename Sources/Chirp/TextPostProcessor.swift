@@ -28,6 +28,9 @@ enum TextPostProcessor {
         // Pack spoken URL tokens before repetition collapse ("w w w"→"w",
         // "slash slash"→"slash") can destroy them.
         result = packSpokenURL(result)
+        // Path prefixes before stutter collapse and generic slash phrase-fixes
+        // so "tilde slash" → "~/" (not "tilde/" then bare tilde).
+        result = packSpokenPath(result)
         result = removeFillersAndRepetitions(result)
         // Spoken single-letter runs → acronyms ("a p i" → "API") before phrase
         // fixes / ITN. Sticky spell + "spell as" re-split pure uppercase runs.
@@ -139,8 +142,8 @@ enum TextPostProcessor {
             (#"\s+less than\b"#, "<"),
             (#"\s+pipe\b"#, "|"),
             (#"\s+vertical bar\b"#, "|"),
-            (#"\s+tilde\b"#, "~"),
-            (#"\s+caret\b"#, "^"),
+            (#"(?:^|\s+)tilde\b"#, "~"),
+            (#"(?:^|\s+)caret\b"#, "^"),
             (#"\s+degree sign\b"#, "°"),
             // Degrees after numbers: handled in applyUnitsITN (after SpokenNumberITN)
             // so multi-word compounds ("seventy two degrees") become digits first.
@@ -180,6 +183,31 @@ enum TextPostProcessor {
     private static func packSpokenURL(_ text: String) -> String {
         var result = text
         for (pattern, replacement) in spokenURLPackPatterns {
+            let range = NSRange(result.startIndex..., in: result)
+            result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
+        }
+        return result
+    }
+
+    /// Spoken path prefixes before stutter collapse / generic slash phrase-fixes.
+    /// `"tilde slash src"` → `"~/src"`, `"dot slash foo"` → `"./foo"`.
+    /// Only `dot slash` (not `dot com`). Bare `tilde` → `~` after compound forms.
+    private static let spokenPathPackPatterns: [(NSRegularExpression, String)] = {
+        let pairs: [(String, String)] = [
+            // Compound first so bare tilde does not fire on "tilde slash"
+            (#"\btilde\s+(?:forward\s+)?slash\b\s*"#, "~/"),
+            (#"\bhome\s+(?:forward\s+)?slash\b\s*"#, "~/"),
+            // "dot slash" only — word boundary after slash keeps "dot com" alone
+            (#"\bdot\s+(?:forward\s+)?slash\b\s*"#, "./"),
+            // Bare tilde at start or after whitespace (path prefix)
+            (#"(?:^|\s+)tilde\b"#, "~"),
+        ]
+        return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
+    }()
+
+    private static func packSpokenPath(_ text: String) -> String {
+        var result = text
+        for (pattern, replacement) in spokenPathPackPatterns {
             let range = NSRange(result.startIndex..., in: result)
             result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
         }

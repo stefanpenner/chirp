@@ -155,6 +155,9 @@ final class MockTextInserter: TextInserting {
     var pasteCallCount = 0
     var copyCallCount = 0
     var pressEscapeCallCount = 0
+    var pressUndoCallCount = 0
+    var selectWordDirections: [MoveDirection] = []
+    var deleteWordDirections: [MoveDirection] = []
 
     func checkAccessibilityPermission() {
         accessibilityChecked = true
@@ -162,6 +165,18 @@ final class MockTextInserter: TextInserting {
 
     func pressEscape() {
         pressEscapeCallCount += 1
+    }
+
+    func pressUndo() {
+        pressUndoCallCount += 1
+    }
+
+    func selectWord(direction: MoveDirection) {
+        selectWordDirections.append(direction)
+    }
+
+    func deleteWord(direction: MoveDirection) {
+        deleteWordDirections.append(direction)
     }
 
     func typeText(_ text: String) {

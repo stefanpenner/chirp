@@ -141,6 +141,11 @@ public final class AppState {
     /// Observable for overlay badge when on. Dual of specs/SpellMode.tla.
     private(set) var spellMode: SpellMode = .off
 
+    /// Sticky no-space mode for new commits (empty separators between segments).
+    /// Observable for overlay badge when on. Dual of specs/NoSpaceMode.tla.
+    /// Does not pack letters (that is spell mode).
+    private(set) var noSpaceMode: NoSpaceMode = .off
+
     /// Multi-step "replace that": next content undoes last phrase then inserts.
     /// Observable for overlay badge. Dual of specs/ReplaceThat.tla.
     private(set) var awaitingReplace = false
@@ -544,6 +549,7 @@ public final class AppState {
         capsMode = .normal
         capitalizeNextWord = false
         spellMode = .off
+        noSpaceMode = .off
         awaitingReplace = false
         lastCommittedNormalized = ""
         recordingSession &+= 1
@@ -671,6 +677,8 @@ public final class AppState {
                         self.performPressBackspace()
                     case .pressEscape:
                         self.performPressEscape()
+                    case .pressUndo:
+                        self.performPressUndo()
                     case .insertDate:
                         self.performKeyInsert(InsertStamp.formatDate(), typesIncrementally: false)
                     case .insertTime:
@@ -687,6 +695,8 @@ public final class AppState {
                         self.capsMode = mode
                     case .setSpellMode(let mode):
                         self.spellMode = mode
+                    case .setNoSpaceMode(let mode):
+                        self.noSpaceMode = mode
                     case .spellThat:
                         self.performSpellThat(typesIncrementally: false)
                     case .capThat:
@@ -722,6 +732,12 @@ public final class AppState {
                         self.performSelectThat(typesIncrementally: false)
                     case .selectLastWord:
                         self.performSelectLastWord(typesIncrementally: false)
+                    case .selectNextWord:
+                        self.performSelectWord(direction: .right)
+                    case .selectPreviousWord:
+                        self.performSelectWord(direction: .left)
+                    case .deleteNextWord:
+                        self.performDeleteWord(direction: .right)
                     case .selectLastSentence:
                         self.performSelectLastSentence(typesIncrementally: false)
                     case .selectLastParagraph:
@@ -836,6 +852,8 @@ public final class AppState {
             performPressBackspace()
         case .pressEscape:
             performPressEscape()
+        case .pressUndo:
+            performPressUndo()
         case .insertDate:
             performKeyInsert(InsertStamp.formatDate(), typesIncrementally: typesIncrementally)
         case .insertTime:
@@ -852,6 +870,8 @@ public final class AppState {
             capsMode = mode
         case .setSpellMode(let mode):
             spellMode = mode
+        case .setNoSpaceMode(let mode):
+            noSpaceMode = mode
         case .spellThat:
             performSpellThat(typesIncrementally: typesIncrementally)
         case .capThat:
@@ -872,6 +892,12 @@ public final class AppState {
             performSelectThat(typesIncrementally: typesIncrementally)
         case .selectLastWord:
             performSelectLastWord(typesIncrementally: typesIncrementally)
+        case .selectNextWord:
+            performSelectWord(direction: .right)
+        case .selectPreviousWord:
+            performSelectWord(direction: .left)
+        case .deleteNextWord:
+            performDeleteWord(direction: .right)
         case .selectLastSentence:
             performSelectLastSentence(typesIncrementally: typesIncrementally)
         case .selectLastParagraph:
@@ -928,11 +954,13 @@ public final class AppState {
                 return
             }
             // One-shot pack preserves case ("abc"/"John"); sticky also glues segments.
+            // Spell mode and no-space mode both use empty separators (no letter packing
+            // for no-space — that is spell mode only).
             let joined = SegmentJoiner.append(
                 existing: transcribedText,
                 next: shaped.text,
                 preserveLeadingCase: shaped.preserveLeadingCase,
-                emptySeparator: spellMode == .on
+                emptySeparator: spellMode == .on || noSpaceMode.isOn
             )
             transcribedText = joined.full
             if typesIncrementally {
@@ -1334,6 +1362,21 @@ public final class AppState {
         textInserter.pressEscape()
     }
 
+    /// System undo (⌘Z). Keyboard-only; buffer / edit stack unchanged.
+    private func performPressUndo() {
+        textInserter.pressUndo()
+    }
+
+    /// Select one word via ⇧⌥← / ⇧⌥→. Buffer unchanged — caret-relative.
+    private func performSelectWord(direction: MoveDirection) {
+        textInserter.selectWord(direction: direction)
+    }
+
+    /// Delete one word via select then backspace. Buffer unchanged — caret-relative.
+    private func performDeleteWord(direction: MoveDirection) {
+        textInserter.deleteWord(direction: direction)
+    }
+
     /// Select the last whitespace-delimited word. Buffer unchanged.
     private func performSelectLastWord(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
@@ -1535,6 +1578,7 @@ public final class AppState {
         capsMode = .normal
         capitalizeNextWord = false
         spellMode = .off
+        noSpaceMode = .off
         awaitingReplace = false
         lastCommittedNormalized = ""
         audioLevel = 0

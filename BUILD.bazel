@@ -148,6 +148,7 @@ swift_test(
         "Tests/ChirpTests/EditStackTests.swift",
         "Tests/ChirpTests/CapsModeTests.swift",
         "Tests/ChirpTests/SpellModeTests.swift",
+        "Tests/ChirpTests/NoSpaceModeTests.swift",
         "Tests/ChirpTests/SpokenNumberITNTests.swift",
         "Tests/ChirpTests/SpokenDateITNTests.swift",
         "Tests/ChirpTests/InsertStampTests.swift",

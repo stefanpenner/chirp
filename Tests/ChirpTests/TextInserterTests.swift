@@ -134,6 +134,30 @@ struct TextInserterTests {
         #expect(inserter.pressEscapeCallCount == 1)
     }
 
+    @Test("pressUndo records call")
+    func pressUndo() {
+        let inserter = MockTextInserter()
+        #expect(inserter.pressUndoCallCount == 0)
+        inserter.pressUndo()
+        #expect(inserter.pressUndoCallCount == 1)
+    }
+
+    @Test("selectWord records direction")
+    func selectWord() {
+        let inserter = MockTextInserter()
+        inserter.selectWord(direction: .left)
+        inserter.selectWord(direction: .right)
+        #expect(inserter.selectWordDirections == [.left, .right])
+    }
+
+    @Test("deleteWord records direction")
+    func deleteWord() {
+        let inserter = MockTextInserter()
+        inserter.deleteWord(direction: .left)
+        inserter.deleteWord(direction: .right)
+        #expect(inserter.deleteWordDirections == [.left, .right])
+    }
+
     @Test("steps maps newlines to return keys")
     func newlineSteps() {
         #expect(TextInserter.steps(for: "") == [])

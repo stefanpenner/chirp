@@ -92,6 +92,12 @@ enum TextFormatStyle: Equatable, Sendable {
     func clipboardString() -> String?
     /// Press Escape (0x35). Keyboard-only; does not cancel Chirp session.
     func pressEscape()
+    /// System undo via ⌘Z. Keyboard-only; does not touch Chirp edit stack.
+    func pressUndo()
+    /// Select one word (shift+option+left/right). Spoken "select next/previous word".
+    func selectWord(direction: MoveDirection)
+    /// Delete one word (select then backspace). Spoken "delete next word".
+    func deleteWord(direction: MoveDirection)
 }
 
 extension TextInserting {
@@ -113,6 +119,9 @@ extension TextInserting {
     func pasteFromClipboard() {}
     func clipboardString() -> String? { nil }
     func pressEscape() {}
+    func pressUndo() {}
+    func selectWord(direction: MoveDirection) {}
+    func deleteWord(direction: MoveDirection) {}
 }
 
 protocol SpeakerVerifying: Sendable {

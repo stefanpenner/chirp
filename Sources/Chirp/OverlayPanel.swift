@@ -264,6 +264,17 @@ struct IslandView: View {
                             )
                             .accessibilityLabel("Spell mode: \(spellLabel)")
                     }
+                    if let noSpaceLabel = appState.noSpaceMode.overlayLabel {
+                        Text(noSpaceLabel)
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.primary.opacity(0.55))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule().fill(.primary.opacity(0.08))
+                            )
+                            .accessibilityLabel("No-space mode: \(noSpaceLabel)")
+                    }
                     if appState.awaitingReplace {
                         Text("Replace…")
                             .font(.system(size: 10, weight: .semibold, design: .rounded))

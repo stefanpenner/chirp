@@ -22,6 +22,7 @@ tlc specs/PipelineRebuild.tla
 | `CapNext` | one-shot arm: next content capitalizes first word then clears | `AppState.capitalizeNextWord` + `DictationCommand.capNext` |
 | `InsertStamp` | formatDate/formatTime always non-empty (clock injectable) | `InsertStamp` |
 | `SpellMode` | sticky spell mode (letter packing) | `SpellMode` / `SpellTransform` |
+| `NoSpaceMode` | sticky no-space mode (empty segment separators) | `NoSpaceMode` / `AppState.noSpaceMode` |
 | `PackAcronyms` | safer auto-pack of single-letter runs (≥3 or allowlisted pairs) | `SpellTransform.packAcronyms` |
 | `ReplaceThat` | multi-step replace: arm then next content swaps last | `ReplaceDecision` |
 | `ListCounter` | session numbered-list index for next number | `SpokenListITN` |
@@ -35,6 +36,7 @@ tlc specs/PipelineRebuild.tla
 | `TranscriptSelection` | last-sentence / last-paragraph / last-line lengths ≤ total buffer | `TranscriptSelection` + select last sentence/para + line nav |
 | `DeleteSegment` | delete last sentence/para/line: totalLen shrinks by lastSegLen | last-segment delete length dual (`TranscriptSelection` + edit path) |
 | `PageScroll` | page up/down leaves session bufferLen unchanged | `DictationCommand.pageUp/pageDown` + `performScrollPage` |
+| `KeyCommand` | press backspace/escape leave session bufferLen unchanged | `DictationCommand.pressBackspace/pressEscape` + performPress* |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |
 
@@ -53,6 +55,7 @@ tlc specs/InsertStamp.tla
 tlc specs/ClipboardCommands.tla
 tlc specs/DuplicateCommand.tla
 tlc specs/SpellMode.tla
+tlc specs/NoSpaceMode.tla
 tlc specs/PackAcronyms.tla
 tlc specs/ConfidenceGate.tla
 tlc specs/DecodeReject.tla
@@ -62,6 +65,7 @@ tlc specs/FormatCommands.tla
 tlc specs/TranscriptSelection.tla
 tlc specs/DeleteSegment.tla
 tlc specs/PageScroll.tla
+tlc specs/KeyCommand.tla
 tlc specs/ListCounter.tla
 tlc specs/PeekCommit.tla
 tlc specs/PipelineRebuild.tla
@@ -80,6 +84,7 @@ tlc -c InsertStamp_bait.cfg specs/InsertStamp.tla
 tlc -c ClipboardCommands_bait.cfg specs/ClipboardCommands.tla
 tlc -c DuplicateCommand_bait.cfg specs/DuplicateCommand.tla
 tlc -c SpellMode_bait.cfg specs/SpellMode.tla
+tlc -c NoSpaceMode_bait.cfg specs/NoSpaceMode.tla
 tlc -c PackAcronyms_bait.cfg specs/PackAcronyms.tla
 tlc -c ConfidenceGate_bait.cfg specs/ConfidenceGate.tla
 tlc -c DecodeReject_bait.cfg specs/DecodeReject.tla
@@ -89,6 +94,7 @@ tlc -c FormatCommands_bait.cfg specs/FormatCommands.tla
 tlc -c TranscriptSelection_bait.cfg specs/TranscriptSelection.tla
 tlc -c DeleteSegment_bait.cfg specs/DeleteSegment.tla
 tlc -c PageScroll_bait.cfg specs/PageScroll.tla
+tlc -c KeyCommand_bait.cfg specs/KeyCommand.tla
 tlc -c ListCounter_bait.cfg specs/ListCounter.tla
 tlc -c PeekCommit_bait.cfg specs/PeekCommit.tla
 tlc -c PipelineRebuild_bait.cfg specs/PipelineRebuild.tla
@@ -110,6 +116,7 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | `ClipboardCommands_bait` | copy may leave clip ≠ transcript | `CopyMirrors` |
 | `DuplicateCommand_bait` | after duplicate, clip may ≠ lastDelta | `DuplicateHoldsDelta` |
 | `SpellMode_bait` | reset may leave spell on | `ResetYieldsOff` |
+| `NoSpaceMode_bait` | reset may leave no-space on | `ResetYieldsOff` |
 | `PackAcronyms_bait` | packs may diverge from ≥3 / allowlisted-pair rule | `PacksIffRule` |
 | `ConfidenceGate_bait` | no-scores may reject | `NoScoresAccept` |
 | `DecodeReject_bait` | silence may accept non-empty hyp | `SilenceNonEmptyRejects` |
@@ -119,6 +126,7 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | `TranscriptSelection_bait` | last segment may exceed total | `LastWithinTotal` |
 | `DeleteSegment_bait` | after delete total may ≠ old − lastSeg | `DeleteSubtracts` |
 | `PageScroll_bait` | scroll may change bufferLen | `ScrollPreservesBuffer` |
+| `KeyCommand_bait` | key command may change bufferLen | `KeyPreservesBuffer` |
 | `ListCounter_bait` | end/reset may leave n ≠ 1 | `EndOrResetYieldsOne` |
 | `PeekCommit_bait` | speculative text may appear while idle | `SpecOnlyWhileRecording` |
 | `PipelineRebuild_bait` | type bounds may fail | `TypeOK` |
