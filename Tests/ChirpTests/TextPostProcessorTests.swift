@@ -189,7 +189,7 @@ struct TextPostProcessorTests {
     @Test("Spoken domain and at-sign fragments")
     func spokenDomain() {
         #expect(TextPostProcessor.process("visit example dot com") == "visit example.com")
-        #expect(TextPostProcessor.process("mail me at sign you") == "mail me@you")
+        #expect(TextPostProcessor.process("mail me at sign you") == "mail me @you")
         #expect(TextPostProcessor.process("site dot io") == "site.io")
         #expect(TextPostProcessor.process("visit site dot co") == "visit site.co")
         // "dot company" must not become ".company"
@@ -239,12 +239,33 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("wait semicolon go") == "wait; go")
         #expect(TextPostProcessor.process("open quote hi close quote") == "\u{201C}hi\u{201D}")
         #expect(TextPostProcessor.process("open paren x close paren") == "(x)")
-        #expect(TextPostProcessor.process("tag hashtag chirp") == "tag#chirp")
         #expect(TextPostProcessor.process("a and b ampersand c").contains("&"))
         #expect(TextPostProcessor.process("done ellipsis") == "done…")
         #expect(TextPostProcessor.process("word em dash word").contains("—"))
         let fullStop = TextPostProcessor.process("done full stop")
         #expect(fullStop == "done." || fullStop == "Done.")
+    }
+
+    @Test("Spoken hashtag and @-mention glue")
+    func spokenHashtagAndMention() {
+        // hashtag + word → #word (no space)
+        #expect(TextPostProcessor.process("hashtag chirp") == "#chirp")
+        #expect(TextPostProcessor.process("tag hashtag chirp") == "tag #chirp")
+        #expect(TextPostProcessor.process("pound sign openSource") == "#openSource")
+        // at sign / at symbol + word → @word
+        #expect(TextPostProcessor.process("at sign stefan") == "@stefan")
+        #expect(TextPostProcessor.process("mail me at sign you") == "mail me @you")
+        #expect(TextPostProcessor.process("ping at symbol alice") == "ping @alice")
+        // "mention" alias
+        #expect(TextPostProcessor.process("mention stefan") == "@stefan")
+        #expect(TextPostProcessor.process("ping mention bob now") == "ping @bob now")
+        // Bare "at" stays conversational (not a mention)
+        #expect(TextPostProcessor.process("meet at noon") == "meet at noon")
+        #expect(TextPostProcessor.process("look at this") == "look at this")
+        // Email path must win over any at-mention glue
+        #expect(TextPostProcessor.process("john at example dot com") == "john@example.com")
+        #expect(TextPostProcessor.process("john underscore smith at example dot com")
+                == "john_smith@example.com")
     }
 
     @Test("Spoken symbols slash asterisk underscore")
@@ -273,12 +294,25 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("dot forward slash foo") == "./foo")
         #expect(TextPostProcessor.process("open tilde slash .config") == "open ~/.config")
         #expect(TextPostProcessor.process("cd home slash src") == "cd ~/src")
+        // Leading absolute path: "slash usr slash bin" → "/usr/bin"
+        #expect(TextPostProcessor.process("slash usr slash bin") == "/usr/bin")
+        #expect(TextPostProcessor.process("forward slash usr slash local") == "/usr/local")
+        // Mid-phrase slash glues path segments (same as "docs slash readme" → "docs/readme").
+        #expect(TextPostProcessor.process("cd slash tmp") == "cd/tmp")
+        // Parent path: "dot dot slash" → "../"
+        #expect(TextPostProcessor.process("dot dot slash src") == "../src")
+        #expect(TextPostProcessor.process("dot dot forward slash src") == "../src")
+        #expect(TextPostProcessor.process("cd dot dot slash lib") == "cd ../lib")
         // Must not break domain ITN
         #expect(TextPostProcessor.process("visit example dot com") == "visit example.com")
         #expect(TextPostProcessor.process("dot company").contains("company"))
         // Bare home / bare dot stay words
         #expect(TextPostProcessor.process("go home now") == "go home now")
         #expect(TextPostProcessor.process("the dot is here").contains("dot"))
+        // Email / URL still work with path polish present
+        #expect(TextPostProcessor.process("john at example dot com") == "john@example.com")
+        #expect(TextPostProcessor.process("https colon slash slash example dot com")
+                == "https://example.com")
     }
 
     @Test("Bullet list spoken commands")

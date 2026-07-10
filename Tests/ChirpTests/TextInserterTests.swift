@@ -142,6 +142,22 @@ struct TextInserterTests {
         #expect(inserter.pressUndoCallCount == 1)
     }
 
+    @Test("pressRedo records call")
+    func pressRedo() {
+        let inserter = MockTextInserter()
+        #expect(inserter.pressRedoCallCount == 0)
+        inserter.pressRedo()
+        #expect(inserter.pressRedoCallCount == 1)
+    }
+
+    @Test("pressForwardDelete records call")
+    func pressForwardDelete() {
+        let inserter = MockTextInserter()
+        #expect(inserter.pressForwardDeleteCallCount == 0)
+        inserter.pressForwardDelete()
+        #expect(inserter.pressForwardDeleteCallCount == 1)
+    }
+
     @Test("selectWord records direction")
     func selectWord() {
         let inserter = MockTextInserter()

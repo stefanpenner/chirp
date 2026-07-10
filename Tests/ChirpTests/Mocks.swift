@@ -156,6 +156,8 @@ final class MockTextInserter: TextInserting {
     var copyCallCount = 0
     var pressEscapeCallCount = 0
     var pressUndoCallCount = 0
+    var pressRedoCallCount = 0
+    var pressForwardDeleteCallCount = 0
     var selectWordDirections: [MoveDirection] = []
     var deleteWordDirections: [MoveDirection] = []
 
@@ -169,6 +171,14 @@ final class MockTextInserter: TextInserting {
 
     func pressUndo() {
         pressUndoCallCount += 1
+    }
+
+    func pressRedo() {
+        pressRedoCallCount += 1
+    }
+
+    func pressForwardDelete() {
+        pressForwardDeleteCallCount += 1
     }
 
     func selectWord(direction: MoveDirection) {

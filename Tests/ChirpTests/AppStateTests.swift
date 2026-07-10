@@ -616,6 +616,73 @@ struct AppStateTests {
         #expect(inserter.deletedCounts.isEmpty, "⌘Z must not backspace session text")
     }
 
+    @Test("system redo sends ⌘⇧Z without changing buffer or stack")
+    func pressRedoCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["system redo"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.pressRedoCallCount >= 1 { break }
+        }
+
+        #expect(inserter.pressRedoCallCount >= 1)
+        #expect(state.transcribedText == "Hello world", "keyboard-only; buffer unchanged")
+        #expect(!inserter.typedTexts.contains("system redo"))
+        #expect(inserter.deletedCounts.isEmpty, "⌘⇧Z must not backspace session text")
+        #expect(inserter.pressUndoCallCount == 0, "redo must not send undo")
+    }
+
+    @Test("forward delete sends key without changing buffer")
+    func pressForwardDeleteCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["forward delete"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.pressForwardDeleteCallCount >= 1 { break }
+        }
+
+        #expect(inserter.pressForwardDeleteCallCount >= 1)
+        #expect(state.transcribedText == "Hello world", "keyboard-only; buffer unchanged")
+        #expect(!inserter.typedTexts.contains("forward delete"))
+        #expect(inserter.deletedCounts.isEmpty, "forward delete must not use backspace path")
+    }
+
     @Test("select next word uses keyboard select without changing buffer")
     func selectNextWordCommand() async throws {
         let mock = MockTranscriber()

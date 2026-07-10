@@ -3,14 +3,16 @@
   Keyboard-only dictation commands must not mutate the session buffer.
 
   Dual of:
-    DictationCommand.pressBackspace / pressEscape
-    AppState.performPressBackspace / performPressEscape
-    (TextInserter.deleteBackward / pressEscape only; transcribedText unchanged)
+    DictationCommand.pressBackspace / pressEscape / pressUndo / pressRedo / pressForwardDelete
+    AppState.performPressBackspace / performPressEscape / performPressUndo /
+      performPressRedo / performPressForwardDelete
+    (TextInserter key posts only; transcribedText unchanged)
 
   Grain: bufferLen only (0..4). Key actions leave bufferLen unchanged.
 
   Note: spoken "scratch that" is EditStack (session undo), not a key command.
-  System Cmd+Z (pressUndo) is not product-landed; same invariant if added later.
+  System Cmd+Z (pressUndo) and Cmd+Shift+Z (pressRedo) share this invariant.
+  Forward Delete (0x75) is also keyboard-only (not laptop Delete / Backspace).
 *)
 
 EXTENDS Integers, TLC
@@ -55,7 +57,25 @@ PressEscape ==
   /\ lastOp' = "key"
   /\ UNCHANGED bufferLen
 
-\* Generic key-only command (either backspace or escape)
+\* System undo (⌘Z) — keyboard only; session buffer / edit stack unchanged
+PressUndo ==
+  /\ prevBufferLen' = bufferLen
+  /\ lastOp' = "key"
+  /\ UNCHANGED bufferLen
+
+\* System redo (⌘⇧Z) — keyboard only; session buffer / edit stack unchanged
+PressRedo ==
+  /\ prevBufferLen' = bufferLen
+  /\ lastOp' = "key"
+  /\ UNCHANGED bufferLen
+
+\* Forward Delete (0x75) — keyboard only; not laptop Delete / Backspace
+PressForwardDelete ==
+  /\ prevBufferLen' = bufferLen
+  /\ lastOp' = "key"
+  /\ UNCHANGED bufferLen
+
+\* Generic key-only command (backspace, escape, undo, redo, forward delete)
 KeyOnly ==
   /\ prevBufferLen' = bufferLen
   /\ lastOp' = "key"
@@ -65,6 +85,9 @@ Next ==
   \/ \E n \in 1..MaxLen: Commit(n)
   \/ PressBackspace
   \/ PressEscape
+  \/ PressUndo
+  \/ PressRedo
+  \/ PressForwardDelete
   \/ KeyOnly
 
 Spec == Init /\ [][Next]_vars

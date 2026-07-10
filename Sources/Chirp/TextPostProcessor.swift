@@ -71,17 +71,23 @@ enum TextPostProcessor {
         )
     }()
 
+    /// Strip space before punct, but keep space before path prefixes "./" and "../".
     private static let spaceBeforePunctPattern: NSRegularExpression = {
-        try! NSRegularExpression(pattern: #"\s+([.?!,;:])"#)
+        try! NSRegularExpression(pattern: #"\s+([?!,;:]|\.(?!\.?/))"#)
     }()
 
     private static let multiSpacePattern: NSRegularExpression = {
         try! NSRegularExpression(pattern: #" {2,}"#)
     }()
 
+    /// "??" / ",," / ";;" → single mark (periods handled separately).
     private static let multiPunctPattern: NSRegularExpression = {
-        // "??" / ".." / ",," → single mark
-        try! NSRegularExpression(pattern: #"([.?!,;:])\1+"#)
+        try! NSRegularExpression(pattern: #"([?!,;:])\1+"#)
+    }()
+
+    /// ".." / "..." → "." but keep path parent prefix "../".
+    private static let multiPeriodPattern: NSRegularExpression = {
+        try! NSRegularExpression(pattern: #"\.{2,}(?!/)"#)
     }()
 
     private static let lowercaseIPattern: NSRegularExpression = {
@@ -117,8 +123,13 @@ enum TextPostProcessor {
             (#"(?:^|\s+)close quote\s*"#, "\u{201D}"),
             (#"(?:^|\s+)open paren(?:thesis)?\s*"#, "("),
             (#"(?:^|\s+)close paren(?:thesis)?\s*"#, ")"),
-            (#"(?:^|\s+)hashtag\s*"#, "#"),
-            (#"(?:^|\s+)pound sign\s*"#, "#"),
+            // Social: glue tag/handle to the following word ("hashtag chirp" → "#chirp").
+            // Capture form only — bare "hashtag" alone stays the word (low value as bare #).
+            // Email uses bare "at" + host dots (applySpokenEmail first); never bare "at" here.
+            (#"\bhashtag\s+(\w+)\b"#, "#$1"),
+            (#"\bpound sign\s+(\w+)\b"#, "#$1"),
+            (#"\b(?:at sign|at symbol)\s+(\w+)\b"#, "@$1"),
+            (#"\bmention\s+(\w+)\b"#, "@$1"),
             (#"\s+ampersand\s*"#, " & "),
             (#"\s+percent sign\b"#, "%"),
             (#"(?:^|\s+)space bar\b"#, " "),
@@ -126,6 +137,7 @@ enum TextPostProcessor {
             (#"\s+newline\s*"#, "\n"),
             (#"\s+new paragraph\s*"#, "\n\n"),
             // Spoken symbols (Mac / Windows dictation style)
+            // Absolute leading slash packed in packSpokenPath; mid-path slash here.
             (#"\s+(?:forward\s+)?slash\s+"#, "/"),
             (#"\s+(?:forward\s+)?slash$"#, "/"),
             (#"(?:^|\s+)backslash\s+"#, "\\"),
@@ -162,8 +174,6 @@ enum TextPostProcessor {
             (#"\s+dot gov\b"#, ".gov"),
             // "dot co" with word boundary — must not match "dot company"
             (#"\s+dot co\b"#, ".co"),
-            (#"\s+at sign\s*"#, "@"),
-            (#"\s+at symbol\s*"#, "@"),
         ]
         return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
     }()
@@ -190,15 +200,21 @@ enum TextPostProcessor {
     }
 
     /// Spoken path prefixes before stutter collapse / generic slash phrase-fixes.
-    /// `"tilde slash src"` → `"~/src"`, `"dot slash foo"` → `"./foo"`.
-    /// Only `dot slash` (not `dot com`). Bare `tilde` → `~` after compound forms.
+    /// `"tilde slash src"` → `"~/src"`, `"dot slash foo"` → `"./foo"`,
+    /// `"dot dot slash src"` → `"../src"`, `"slash usr slash bin"` → `"/usr/bin"`.
+    /// Only `dot slash` / `dot dot slash` (not `dot com`). Bare `tilde` → `~` last.
     private static let spokenPathPackPatterns: [(NSRegularExpression, String)] = {
         let pairs: [(String, String)] = [
+            // Parent path before single "dot slash" (else "dot ./")
+            (#"\bdot\s+dot\s+(?:forward\s+)?slash\b\s*"#, "../"),
             // Compound first so bare tilde does not fire on "tilde slash"
             (#"\btilde\s+(?:forward\s+)?slash\b\s*"#, "~/"),
             (#"\bhome\s+(?:forward\s+)?slash\b\s*"#, "~/"),
             // "dot slash" only — word boundary after slash keeps "dot com" alone
             (#"\bdot\s+(?:forward\s+)?slash\b\s*"#, "./"),
+            // Absolute path: leading or spaced slash → `/` (before stutter can collapse
+            // "slash slash"). Mid-path slash also covered later in phraseFixes.
+            (#"(?:^|\s+)(?:forward\s+)?slash\b\s*"#, "/"),
             // Bare tilde at start or after whitespace (path prefix)
             (#"(?:^|\s+)tilde\b"#, "~"),
         ]
@@ -1349,10 +1365,13 @@ enum TextPostProcessor {
     private static func cleanWhitespace(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         var result = spaceBeforePunctPattern.stringByReplacingMatches(in: text, range: range, withTemplate: "$1")
+        // Periods separate so "../" path parent is preserved (not collapsed to "./").
         let range2 = NSRange(result.startIndex..., in: result)
-        result = multiPunctPattern.stringByReplacingMatches(in: result, range: range2, withTemplate: "$1")
+        result = multiPeriodPattern.stringByReplacingMatches(in: result, range: range2, withTemplate: ".")
         let range3 = NSRange(result.startIndex..., in: result)
-        result = multiSpacePattern.stringByReplacingMatches(in: result, range: range3, withTemplate: " ")
+        result = multiPunctPattern.stringByReplacingMatches(in: result, range: range3, withTemplate: "$1")
+        let range4 = NSRange(result.startIndex..., in: result)
+        result = multiSpacePattern.stringByReplacingMatches(in: result, range: range4, withTemplate: " ")
         return result
     }
 

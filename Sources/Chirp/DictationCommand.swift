@@ -32,6 +32,10 @@ enum DictationCommand: Equatable, Sendable {
     case pressEscape
     /// System undo (⌘Z). Keyboard-only; buffer / edit stack unchanged.
     case pressUndo
+    /// System redo (⌘⇧Z). Keyboard-only; buffer / edit stack unchanged.
+    case pressRedo
+    /// Press Forward Delete once. Keyboard-only; buffer unchanged.
+    case pressForwardDelete
     /// Insert today's date (e.g. "July 10, 2026").
     case insertDate
     /// Insert current local time (e.g. "3:45 p.m.").
@@ -214,9 +218,14 @@ enum DictationCommand: Equatable, Sendable {
             return .pressSpace
         // Keyboard backspace only — do not match "delete that" / "delete it"
         // (those remain scratchThat) or "delete last" (deleteLastWord).
+        // Forward delete phrases are matched separately below.
         case "press backspace", "hit backspace", "backspace",
              "press delete", "hit delete", "delete key":
             return .pressBackspace
+        // Forward Delete (0x75) — not laptop Delete/Backspace.
+        case "forward delete", "press forward delete",
+             "delete forward", "press delete forward":
+            return .pressForwardDelete
         // Escape requires press/hit/key — bare "escape" is not a command.
         case "press escape", "press esc", "hit escape", "hit esc",
              "escape key", "esc key", "press the escape key", "hit the escape key":
@@ -224,6 +233,9 @@ enum DictationCommand: Equatable, Sendable {
         // System ⌘Z — do not steal "undo that" / "scratch that" / "correct that".
         case "system undo", "press undo", "undo key", "app undo", "command undo":
             return .pressUndo
+        // System ⌘⇧Z — do not steal "redo that" (EditStack redo).
+        case "system redo", "press redo", "redo key", "app redo", "command redo":
+            return .pressRedo
         case "insert date", "insert today's date", "today's date", "insert the date",
              "insert todays date", "todays date":
             return .insertDate
@@ -385,8 +397,10 @@ enum DictationCommand: Equatable, Sendable {
         ("press tab", "Insert Tab"),
         ("press space / hit space", "Insert Space"),
         ("press backspace / delete key", "Press Backspace once (keyboard only)"),
+        ("forward delete / delete forward", "Press Forward Delete once (keyboard only; not Backspace)"),
         ("press escape / escape key", "Press Escape once (keyboard only; does not cancel)"),
         ("system undo / press undo / undo key", "System undo (⌘Z; keyboard only; not scratch that)"),
+        ("system redo / press redo / redo key", "System redo (⌘⇧Z; keyboard only; not redo that)"),
         ("insert date / today's date", "Type today's date (e.g. July 10, 2026)"),
         ("insert time / current time", "Type current time (e.g. 3:45 p.m.)"),
         ("copy that", "Copy session to clipboard"),
@@ -437,8 +451,10 @@ enum DictationCommand: Equatable, Sendable {
         ("number one / next number", "Numbered list item"),
         ("end list / stop numbering", "Reset list counter"),
         ("dot com / at sign", "Domain & email bits"),
+        ("hashtag X / at sign X / mention X", "Social #tag and @handle"),
         ("www / https colon slash slash", "Spoken URL bits"),
-        ("tilde slash / home slash / dot slash", "Path prefixes (~/ and ./)"),
+        ("tilde slash / home slash / dot slash / slash / dot dot slash",
+         "Path prefixes (~/ ./ / ../)"),
     ]
 }
 

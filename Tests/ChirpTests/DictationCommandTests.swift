@@ -127,6 +127,39 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("undo it") == .scratchThat)
     }
 
+    @Test("recognizes system redo without stealing redo that")
+    func pressRedo() {
+        #expect(DictationCommand.parse("system redo") == .pressRedo)
+        #expect(DictationCommand.parse("press redo") == .pressRedo)
+        #expect(DictationCommand.parse("redo key") == .pressRedo)
+        #expect(DictationCommand.parse("app redo") == .pressRedo)
+        #expect(DictationCommand.parse("command redo") == .pressRedo)
+        #expect(DictationCommand.parse("System Redo.") == .pressRedo)
+        #expect(DictationCommand.parse("please press redo") == .pressRedo)
+        // Must not steal EditStack redo
+        #expect(DictationCommand.parse("redo that") == .redoThat)
+        #expect(DictationCommand.parse("redo it") == .redoThat)
+        #expect(DictationCommand.parse("restore that") == .redoThat)
+        #expect(DictationCommand.parse("put it back") == .redoThat)
+    }
+
+    @Test("recognizes forward delete without stealing press delete / delete that")
+    func pressForwardDelete() {
+        #expect(DictationCommand.parse("forward delete") == .pressForwardDelete)
+        #expect(DictationCommand.parse("press forward delete") == .pressForwardDelete)
+        #expect(DictationCommand.parse("delete forward") == .pressForwardDelete)
+        #expect(DictationCommand.parse("press delete forward") == .pressForwardDelete)
+        #expect(DictationCommand.parse("Forward Delete.") == .pressForwardDelete)
+        #expect(DictationCommand.parse("please forward delete") == .pressForwardDelete)
+        // Laptop Delete stays backspace
+        #expect(DictationCommand.parse("press delete") == .pressBackspace)
+        #expect(DictationCommand.parse("delete key") == .pressBackspace)
+        #expect(DictationCommand.parse("hit delete") == .pressBackspace)
+        // Session scratch / delete-last paths unchanged
+        #expect(DictationCommand.parse("delete that") == .scratchThat)
+        #expect(DictationCommand.parse("delete it") == .scratchThat)
+    }
+
     @Test("recognizes select next / previous word (keyboard)")
     func selectNextPreviousWord() {
         #expect(DictationCommand.parse("select next word") == .selectNextWord)
@@ -553,6 +586,8 @@ struct DictationCommandTests {
         #expect(says.contains(where: { $0.lowercased().contains("insert time") }))
         #expect(says.contains(where: { $0.lowercased().contains("escape") || $0.lowercased().contains("esc") }))
         #expect(says.contains(where: { $0.lowercased().contains("system undo") || $0.lowercased().contains("press undo") }))
+        #expect(says.contains(where: { $0.lowercased().contains("system redo") || $0.lowercased().contains("press redo") }))
+        #expect(says.contains(where: { $0.lowercased().contains("forward delete") }))
         #expect(says.contains(where: { $0.lowercased().contains("select next word") }))
         #expect(says.contains(where: { $0.lowercased().contains("select previous word") || $0.lowercased().contains("select prior word") }))
         #expect(says.contains(where: { $0.lowercased().contains("delete next word") }))

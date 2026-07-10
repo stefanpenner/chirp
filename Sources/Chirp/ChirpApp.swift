@@ -679,6 +679,10 @@ public final class AppState {
                         self.performPressEscape()
                     case .pressUndo:
                         self.performPressUndo()
+                    case .pressRedo:
+                        self.performPressRedo()
+                    case .pressForwardDelete:
+                        self.performPressForwardDelete()
                     case .insertDate:
                         self.performKeyInsert(InsertStamp.formatDate(), typesIncrementally: false)
                     case .insertTime:
@@ -854,6 +858,10 @@ public final class AppState {
             performPressEscape()
         case .pressUndo:
             performPressUndo()
+        case .pressRedo:
+            performPressRedo()
+        case .pressForwardDelete:
+            performPressForwardDelete()
         case .insertDate:
             performKeyInsert(InsertStamp.formatDate(), typesIncrementally: typesIncrementally)
         case .insertTime:
@@ -1365,6 +1373,16 @@ public final class AppState {
     /// System undo (⌘Z). Keyboard-only; buffer / edit stack unchanged.
     private func performPressUndo() {
         textInserter.pressUndo()
+    }
+
+    /// System redo (⌘⇧Z). Keyboard-only; buffer / edit stack unchanged.
+    private func performPressRedo() {
+        textInserter.pressRedo()
+    }
+
+    /// Press Forward Delete once. Keyboard-only; buffer / stack unchanged.
+    private func performPressForwardDelete() {
+        textInserter.pressForwardDelete()
     }
 
     /// Select one word via ⇧⌥← / ⇧⌥→. Buffer unchanged — caret-relative.

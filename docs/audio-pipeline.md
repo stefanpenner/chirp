@@ -112,7 +112,11 @@ Spoken symbols: `slash`→`/`, `asterisk`→`*`,
 `underscore`→`_`, fractions `one half`→`½`.
 Spoken path prefixes (before stutter collapse):
 `tilde slash` / `home slash`→`~/`, `dot slash`→`./` (not `dot com`),
+`dot dot slash`→`../`, leading `slash` / `forward slash`→`/`
+(e.g. `slash usr slash bin`→`/usr/bin`),
 bare `tilde`→`~` (e.g. `open tilde slash .config`→`open ~/.config`).
+Social tags: `hashtag chirp`→`#chirp`, `at sign stefan` / `mention stefan`→`@stefan`
+(email `john at example dot com` still wins; bare `at` stays conversational).
 Lists: `bullet point` /
 `next bullet` → `•`; `number one` / `next number` → `1.` / `2.`;
 `end list` resets numbering. Session list counter resets each recording.
@@ -177,8 +181,10 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **clear all** — wipe session transcript
 - **press enter** / **press tab** / **press space** — key inserts
 - **press backspace** / **delete key** — Backspace once (keyboard only; buffer unchanged)
+- **forward delete** / **press forward delete** / **delete forward** / **press delete forward** — Forward Delete once (0x75; keyboard only; buffer unchanged). Does **not** steal **press delete** / **delete key** (Backspace)
 - **press escape** / **press esc** / **hit escape** / **escape key** — Escape once (keyboard only; buffer unchanged; does **not** cancel session). Bare **escape** is not a command
 - **system undo** / **press undo** / **undo key** / **app undo** / **command undo** — system undo (⌘Z; keyboard only; buffer / edit stack unchanged). Does **not** steal **undo that** / **scratch that** / **correct that**
+- **system redo** / **press redo** / **redo key** / **app redo** / **command redo** — system redo (⌘⇧Z; keyboard only; buffer / edit stack unchanged). Does **not** steal **redo that** (EditStack redo)
 - **insert date** / **today's date** / **insert the date** — type today's date (e.g. `July 10, 2026`)
 - **insert time** / **current time** / **insert the time** — type current local time (e.g. `3:45 p.m.`)
 - **copy that** / **paste that** — clipboard

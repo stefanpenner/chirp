@@ -111,6 +111,23 @@ final class TextInserter: TextInserting {
         postCommandKey(0x06) // kVK_ANSI_Z
     }
 
+    /// System redo via ⌘⇧Z (0x06 / kVK_ANSI_Z). Does not touch Chirp edit stack.
+    func pressRedo() {
+        postCommandShiftKey(0x06) // kVK_ANSI_Z
+    }
+
+    /// Press Forward Delete (0x75 / kVK_ForwardDelete). Does not touch Chirp buffer.
+    func pressForwardDelete() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let forwardDelete: CGKeyCode = 0x75 // kVK_ForwardDelete
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: forwardDelete, keyDown: true) {
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: forwardDelete, keyDown: false) {
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
     /// Select one word via ⇧⌥← / ⇧⌥→ (0x7B / 0x7C).
     func selectWord(direction: MoveDirection) {
         let source = CGEventSource(stateID: .combinedSessionState)
@@ -343,6 +360,20 @@ final class TextInserter: TextInserting {
         }
         if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) {
             keyUp.flags = .maskCommand
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
+    /// Post a ⌘⇧+key keystroke (down then up with command+shift flags).
+    private func postCommandShiftKey(_ key: CGKeyCode) {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let flags: CGEventFlags = [.maskCommand, .maskShift]
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true) {
+            keyDown.flags = flags
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) {
+            keyUp.flags = flags
             keyUp.post(tap: .cgAnnotatedSessionEventTap)
         }
     }
