@@ -197,6 +197,25 @@ swift_test(
     copts = ["-swift-version", "6"],
 )
 
+# Always-on real-audio ASR smoke (hello_world.wav). Skips if model missing.
+# bazel test //:FixtureASRTests --test_output=errors
+swift_test(
+    name = "FixtureASRTests",
+    srcs = [
+        "Tests/ChirpTests/FixtureASRTests.swift",
+        "Tests/ChirpTests/SpeechAudioGenerator.swift",
+        "Tests/ChirpTests/TranscriptionScoring.swift",
+    ],
+    data = [
+        "Tests/ChirpTests/hello_world.wav",
+        "@silero_vad//file",
+    ],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+    env_inherit = ["HOME"],
+    local = True,
+)
+
 swift_test(
     name = "TranscriberIntegrationTests",
     srcs = [

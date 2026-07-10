@@ -475,6 +475,10 @@ enum TextPostProcessor {
         result = applyCurrencyITN(result)
         // Street suffixes after numbers: "35 Lexington avenue" → "35 Lexington Ave."
         result = applyStreetSuffixITN(result)
+        // US states + ZIP after street suffixes so "… avenue california" → "… Ave. CA"
+        // and "zip code 90210" → "90210". Pragmatic: whole-word state names always
+        // rewrite ("I love california" → "I love CA") — typical for dictation ITN.
+        result = applyAddressITN(result)
         return result
     }
 
@@ -813,6 +817,120 @@ enum TextPostProcessor {
             let rawSuffix = String(result[suffixRange]).lowercased()
             guard let abbr = streetSuffixAbbreviations[rawSuffix] else { continue }
             result.replaceSubrange(fullRange, with: "\(num) \(name) \(abbr)")
+        }
+        return result
+    }
+
+    // MARK: - Address ITN (US states + ZIP)
+
+    /// Full US state / DC names → USPS 2-letter codes (keys lowercased).
+    /// Multi-word names included; apply longest-first via pattern alternation order.
+    private static let usStateAbbreviations: [String: String] = [
+        "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+        "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+        "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+        "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+        "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+        "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
+        "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+        "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+        "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
+        "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
+        "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
+        "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
+        "wisconsin": "WI", "wyoming": "WY",
+        "district of columbia": "DC",
+    ]
+
+    /// Whole-word state names, longest first so "new york" wins over nothing
+    /// and "north carolina" is not partial-matched as shorter fragments.
+    private static let stateITNPattern: NSRegularExpression = {
+        let names = usStateAbbreviations.keys.sorted { $0.count > $1.count }
+        let alt = names
+            .map { NSRegularExpression.escapedPattern(for: $0) }
+            .joined(separator: "|")
+        return try! NSRegularExpression(
+            pattern: #"\b("# + alt + #")\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "zip code 90210" / "zip codes 90210" / "zip 90210" (+ optional +4).
+    private static let zipPrefixPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bzip(?:\s+codes?)?\s+(\d{5})(?:\s+(\d{4}))?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Spaced ZIP+4: "90210 1234" → "90210-1234".
+    private static let zipPlus4Pattern: NSRegularExpression = {
+        try! NSRegularExpression(pattern: #"\b(\d{5})\s+(\d{4})\b"#)
+    }()
+
+    /// States → USPS codes, then ZIP prefix strip / ZIP+4 hyphen.
+    private static func applyAddressITN(_ text: String) -> String {
+        var result = applyStateAbbreviationITN(text)
+        result = applyZIPITN(result)
+        return result
+    }
+
+    private static func applyStateAbbreviationITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = stateITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let nameRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let key = String(result[nameRange]).lowercased()
+            guard let code = usStateAbbreviations[key] else { continue }
+            result.replaceSubrange(fullRange, with: code)
+        }
+        return result
+    }
+
+    private static func applyZIPITN(_ text: String) -> String {
+        var result = applyZIPPrefixStrip(text)
+        result = applyZIPPlus4Hyphen(result)
+        return result
+    }
+
+    private static func applyZIPPrefixStrip(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = zipPrefixPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let zip5Range = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let zip5 = String(result[zip5Range])
+            var out = zip5
+            if match.numberOfRanges >= 3,
+               match.range(at: 2).location != NSNotFound,
+               let zip4Range = Range(match.range(at: 2), in: result) {
+                out += "-\(result[zip4Range])"
+            }
+            result.replaceSubrange(fullRange, with: out)
+        }
+        return result
+    }
+
+    private static func applyZIPPlus4Hyphen(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = zipPlus4Pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let zip5Range = Range(match.range(at: 1), in: result),
+                  let zip4Range = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let zip5 = String(result[zip5Range])
+            let zip4 = String(result[zip4Range])
+            result.replaceSubrange(fullRange, with: "\(zip5)-\(zip4)")
         }
         return result
     }

@@ -10,10 +10,13 @@ enum SegmentJoiner {
     /// Join `next` onto `existing`. Returns the full text and the delta to type.
     /// - Parameter preserveLeadingCase: when true (spell mode), skip first-letter
     ///   truecase so packed letters keep explicit casing ("abc", "Ab").
+    /// - Parameter emptySeparator: when true (spell mode glue), join with no space
+    ///   so multi-segment letter packs become "abc" not "ab c".
     static func append(
         existing: String,
         next: String,
-        preserveLeadingCase: Bool = false
+        preserveLeadingCase: Bool = false,
+        emptySeparator: Bool = false
     ) -> (full: String, delta: String) {
         var piece = next.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !piece.isEmpty else {
@@ -27,7 +30,7 @@ enum SegmentJoiner {
             return (piece, piece)
         }
 
-        let separator = separator(between: existing, and: piece)
+        let separator = emptySeparator ? "" : separator(between: existing, and: piece)
         // After terminal punct, next clause should start capitalized (SOTA truecase).
         if !preserveLeadingCase {
             if let last = existing.last, ".!?…".contains(last) {

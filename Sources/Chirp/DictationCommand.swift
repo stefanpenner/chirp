@@ -18,6 +18,8 @@ enum DictationCommand: Equatable, Sendable {
     case pressEnter
     /// Insert a tab.
     case pressTab
+    /// Press Backspace / Delete once. Keyboard-only; buffer unchanged.
+    case pressBackspace
     /// Copy session transcript to the clipboard.
     case copyThat
     /// Paste from the clipboard into the focused app.
@@ -28,6 +30,8 @@ enum DictationCommand: Equatable, Sendable {
     case setCapsMode(CapsMode)
     /// Set sticky spell mode for following commits (letter packing).
     case setSpellMode(SpellMode)
+    /// Select last phrase and enter spell mode (Dragon-style "spell that").
+    case spellThat
     /// Capitalize the last word (one-shot).
     case capThat
     /// UPPERCASE the last word (one-shot).
@@ -132,6 +136,11 @@ enum DictationCommand: Equatable, Sendable {
             return .pressEnter
         case "press tab", "hit tab", "press tab key", "press the tab key":
             return .pressTab
+        // Keyboard backspace only — do not match "delete that" / "delete it"
+        // (those remain scratchThat) or "delete last" (deleteLastWord).
+        case "press backspace", "hit backspace", "backspace",
+             "press delete", "hit delete", "delete key":
+            return .pressBackspace
         case "copy that", "copy all", "copy it", "copy this", "copy the text":
             return .copyThat
         case "paste that", "paste it", "paste this", "paste here":
@@ -156,6 +165,9 @@ enum DictationCommand: Equatable, Sendable {
             return .setSpellMode(.off)
         case "spell mode", "spelling mode", "start spelling", "spell on":
             return .setSpellMode(.on)
+        // Select last phrase + enter spell mode (does not delete text)
+        case "spell that", "spell it", "spell last":
+            return .spellThat
         // One-shot last-word transforms
         case "cap that", "capitalize that", "caps that", "capital that":
             return .capThat
@@ -206,12 +218,14 @@ enum DictationCommand: Equatable, Sendable {
         ("clear all", "Wipe session text"),
         ("press enter", "Insert Return"),
         ("press tab", "Insert Tab"),
+        ("press backspace / delete key", "Press Backspace once (keyboard only)"),
         ("copy that", "Copy session to clipboard"),
         ("paste that", "Paste clipboard (⌘V)"),
         ("caps on / all caps on / no caps on", "Sticky capitalization mode"),
         ("caps off", "Back to normal casing"),
         ("spell mode / start spelling", "Sticky spell mode (letter packing)"),
         ("spell off / end spelling / dictation mode", "Exit spell mode"),
+        ("spell that", "Select last phrase + enter spell mode"),
         ("cap that / all caps that", "Transform last word"),
         ("title case that", "Title-case last phrase"),
         ("sentence case that", "Sentence-case last phrase"),

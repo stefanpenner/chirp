@@ -108,6 +108,9 @@ IdleOrFlagOnly ==
 Inv ==
   /\ TypeOK
 
+\* Bait: negation of a real safety property (must FAIL under TLC)
+BaitInv == ~TypeOK
+
 StateConstraint == pipelineGen <= MaxGen
 
 ====

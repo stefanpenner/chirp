@@ -342,6 +342,112 @@ struct AppStateTests {
         #expect(inserter.typedTexts.contains("abc"))
     }
 
+    @Test("spell that selects last phrase and enables spell mode")
+    func spellThatCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["spell that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.spellMode == .on, !inserter.selectBackwardCounts.isEmpty { break }
+        }
+
+        #expect(state.spellMode == .on)
+        #expect(state.transcribedText == "Hello world", "spell that must not delete text")
+        #expect(inserter.selectBackwardCounts.last == "Hello world".count)
+        #expect(inserter.deletedCounts.isEmpty, "spell that must not delete")
+        #expect(!inserter.typedTexts.contains("spell that"))
+    }
+
+    @Test("spell mode glues multi-segment commits without space")
+    func spellModeMultiSegmentGlue() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["spell mode"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.spellMode == .on { break }
+        }
+        #expect(state.spellMode == .on)
+
+        await mock.setFeedAudioResult(["a b"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "ab" { break }
+        }
+        #expect(state.transcribedText == "ab")
+
+        await mock.setFeedAudioResult(["c"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "abc" { break }
+        }
+        #expect(state.transcribedText == "abc", "spell segments must glue: got \"\(state.transcribedText)\"")
+        #expect(inserter.typedTexts.contains("c"))
+        #expect(!inserter.typedTexts.contains(" c"), "must not type leading space under spell glue")
+    }
+
+    @Test("press backspace deletes one char without changing session buffer")
+    func pressBackspaceCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["press backspace"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.deletedCounts.contains(1) { break }
+        }
+
+        #expect(state.transcribedText == "Hello world", "v1: keyboard-only, buffer unchanged")
+        #expect(inserter.deletedCounts.contains(1))
+        #expect(!inserter.typedTexts.contains("press backspace"))
+    }
+
     @Test("sentence case that transforms last phrase")
     func sentenceCaseThatLastPhrase() async throws {
         let mock = MockTranscriber()

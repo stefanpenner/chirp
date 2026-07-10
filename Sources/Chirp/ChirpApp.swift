@@ -642,6 +642,8 @@ public final class AppState {
                         self.performKeyInsert("\n", typesIncrementally: false)
                     case .pressTab:
                         self.performKeyInsert("\t", typesIncrementally: false)
+                    case .pressBackspace:
+                        self.performPressBackspace()
                     case .copyThat:
                         self.performCopyThat()
                     case .pasteThat:
@@ -652,6 +654,8 @@ public final class AppState {
                         self.capsMode = mode
                     case .setSpellMode(let mode):
                         self.spellMode = mode
+                    case .spellThat:
+                        self.performSpellThat(typesIncrementally: false)
                     case .capThat:
                         self.performTransformLastWord(
                             CapsTransform.capitalizeWord,
@@ -741,6 +745,8 @@ public final class AppState {
             performKeyInsert("\n", typesIncrementally: typesIncrementally)
         case .pressTab:
             performKeyInsert("\t", typesIncrementally: typesIncrementally)
+        case .pressBackspace:
+            performPressBackspace()
         case .copyThat:
             performCopyThat()
         case .pasteThat:
@@ -751,6 +757,8 @@ public final class AppState {
             capsMode = mode
         case .setSpellMode(let mode):
             spellMode = mode
+        case .spellThat:
+            performSpellThat(typesIncrementally: typesIncrementally)
         case .capThat:
             performTransformLastWord(CapsTransform.capitalizeWord, typesIncrementally: typesIncrementally)
         case .allCapsThat:
@@ -790,10 +798,12 @@ public final class AppState {
                 Log.transcription.debug("Skipping duplicate segment: \"\(shaped)\"")
                 return
             }
+            let spellOn = spellMode == .on
             let joined = SegmentJoiner.append(
                 existing: transcribedText,
                 next: shaped,
-                preserveLeadingCase: spellMode == .on
+                preserveLeadingCase: spellOn,
+                emptySeparator: spellOn
             )
             transcribedText = joined.full
             if typesIncrementally {
@@ -1058,6 +1068,18 @@ public final class AppState {
         guard typesIncrementally else { return }
         guard let delta = editStack.lastDelta, !delta.isEmpty else { return }
         textInserter.selectBackward(count: delta.count)
+    }
+
+    /// Enter spell mode and select last phrase (Dragon-style "spell that").
+    /// Does not delete text — next spoken letters replace selection when typed.
+    private func performSpellThat(typesIncrementally: Bool) {
+        spellMode = .on
+        performSelectThat(typesIncrementally: typesIncrementally)
+    }
+
+    /// Press Backspace once. Keyboard-only; session buffer / edit stack unchanged.
+    private func performPressBackspace() {
+        textInserter.deleteBackward(count: 1)
     }
 
     /// Select the last whitespace-delimited word. Buffer unchanged.

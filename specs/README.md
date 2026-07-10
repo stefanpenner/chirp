@@ -38,11 +38,14 @@ Config path is relative to the **spec directory** (TLC’s cwd), not the repo ro
 tlc specs/AdaptivePeek.tla
 tlc specs/CancelVoid.tla
 tlc specs/CapsMode.tla
+tlc specs/ClipboardCommands.tla
 tlc specs/SpellMode.tla
 tlc specs/ConfidenceGate.tla
 tlc specs/DecodeReject.tla
 tlc specs/EditStack.tla
 tlc specs/ListCounter.tla
+tlc specs/PeekCommit.tla
+tlc specs/PipelineRebuild.tla
 tlc specs/ReplaceThat.tla
 tlc specs/SegmentJoin.tla
 tlc specs/SessionMachine.tla
@@ -52,11 +55,14 @@ tlc specs/TranscriberBuffer.tla
 tlc -c AdaptivePeek_bait.cfg specs/AdaptivePeek.tla
 tlc -c CancelVoid_bait.cfg specs/CancelVoid.tla
 tlc -c CapsMode_bait.cfg specs/CapsMode.tla
+tlc -c ClipboardCommands_bait.cfg specs/ClipboardCommands.tla
 tlc -c SpellMode_bait.cfg specs/SpellMode.tla
 tlc -c ConfidenceGate_bait.cfg specs/ConfidenceGate.tla
 tlc -c DecodeReject_bait.cfg specs/DecodeReject.tla
 tlc -c EditStack_bait.cfg specs/EditStack.tla
 tlc -c ListCounter_bait.cfg specs/ListCounter.tla
+tlc -c PeekCommit_bait.cfg specs/PeekCommit.tla
+tlc -c PipelineRebuild_bait.cfg specs/PipelineRebuild.tla
 tlc -c ReplaceThat_bait.cfg specs/ReplaceThat.tla
 tlc -c SegmentJoin_bait.cfg specs/SegmentJoin.tla
 tlc -c SessionMachine_bait.cfg specs/SessionMachine.tla
@@ -68,11 +74,14 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | `AdaptivePeek_bait` | idle interval may appear before threshold misses | `IdleImpliesMisses` |
 | `CancelVoid_bait` | ready may keep session text | `ReadyIsVoided` |
 | `CapsMode_bait` | reset may leave non-normal mode | `ResetYieldsNormal` |
+| `ClipboardCommands_bait` | copy may leave clip ≠ transcript | `CopyMirrors` |
 | `SpellMode_bait` | reset may leave spell on | `ResetYieldsOff` |
 | `ConfidenceGate_bait` | no-scores may reject | `NoScoresAccept` |
 | `DecodeReject_bait` | silence may accept non-empty hyp | `SilenceNonEmptyRejects` |
 | `EditStack_bait` | typed length may diverge from text | `TypedMatchesText` |
 | `ListCounter_bait` | end/reset may leave n ≠ 1 | `EndOrResetYieldsOne` |
+| `PeekCommit_bait` | speculative text may appear while idle | `SpecOnlyWhileRecording` |
+| `PipelineRebuild_bait` | type bounds may fail | `TypeOK` |
 | `ReplaceThat_bait` | may await with no last phrase | `AwaitNeedsLastTyped` |
 | `SegmentJoin_bait` | sentence sep may appear with no text | `SentenceImpliesContext` |
 | `SessionMachine_bait` | ready may not be idle | `ReadyIsIdle` |

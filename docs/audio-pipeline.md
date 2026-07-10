@@ -19,6 +19,9 @@ Corpus pipeline tests synthesize speech with macOS `say`, convert to
 score each phrase with word/character error rate, and rank the corpus.
 
 ```
+# Always-on fixture smoke (hello_world.wav; skips if model missing):
+bazel test //:FixtureASRTests --test_output=errors
+# Full TTS corpus (manual — not in default //... without --test_tag_filters):
 bazel test //:AudioCorpusPipelineTests --test_output=all
 # or the broader suite (same harness + older integration cases):
 bazel test //:TranscriberIntegrationTests --test_output=all
@@ -28,7 +31,8 @@ bazel test //:TranscriberIntegrationTests --test_output=all
 |---|---|
 | `SpeechAudioGenerator` | TTS (`say` + `afconvert`), noise, silence, WAV load |
 | `TranscriptionScoring` | WER / majorWER / CER + ranked leaderboard |
-| `AudioCorpusPipelineTests` | Generate → pipe → score → assert budgets |
+| `FixtureASRTests` | Always-on WAV smoke: hard WER when model present |
+| `AudioCorpusPipelineTests` | Generate → pipe → score → assert budgets (manual) |
 
 Coverage:
 
@@ -70,7 +74,10 @@ weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
 (`20 dollars`→`$20`, `20 euros`→`€20`, `20 yen`→`¥20`, `50 cents`→`50¢`,
 `20 dollars and 50 cents`→`$20.50`; bare `20 pounds`→`20 lb` weight;
 `20 pounds sterling` / `20 quid`→`£20`), street suffixes after a house number
-(`35 Lexington avenue`→`35 Lexington Ave.`; `hit the road` stays).
+(`35 Lexington avenue`→`35 Lexington Ave.`; `hit the road` stays), US states →
+USPS codes (`california`→`CA`, `new york`→`NY`; whole-word always) and ZIP
+(`zip code 90210`→`90210`, `90210 1234`→`90210-1234`; address e.g.
+`35 Lexington avenue california`→`35 Lexington Ave. CA`).
 Bare `one`/`two` stay words. Digit runs (≥3 single digits) concatenate for
 phones (`five five five one two one two`→`555-1212`; 10-digit `XXX-XXX-XXXX`;
 11-digit leading-1 `1-XXX-XXX-XXXX`; `oh`→`0`). Negatives: `minus twenty` /
@@ -99,6 +106,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **caps off** — back to normal casing
 - **spell mode** / **start spelling** / **spell on** — sticky spell mode (`SpellMode`); packs letters / NATO / digits
 - **spell off** / **end spelling** / **dictation mode** — exit spell mode
+- **spell that** / **spell it** / **spell last** — select last phrase + enter spell mode (does not delete)
 - **cap that / all caps that / no caps that** — transform last word
 - **title case that** — title-case last phrase (stack delta)
 - **sentence case that** — sentence-case last phrase
@@ -111,9 +119,10 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **go to start** / **beginning of line** — cursor to line start (⌘←)
 - **go to end** / **end of line** — cursor to line end (⌘→)
 - Overlay badge shows sticky caps / spell mode when active
-- When spell mode is on, caps transform is skipped for that segment
+- When spell mode is on, caps transform is skipped and multi-segment joins glue without spaces
 - **clear all** — wipe session transcript
 - **press enter** / **press tab** — key inserts
+- **press backspace** / **delete key** — Backspace once (keyboard only; buffer unchanged)
 - **copy that** / **paste that** — clipboard
 First segment auto-capitalizes. Consecutive duplicate segments skipped.
 When sherpa provides token log-probs, `ConfidenceGate` rejects extreme

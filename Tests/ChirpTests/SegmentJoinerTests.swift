@@ -39,6 +39,25 @@ struct SegmentJoinerTests {
         #expect(afterPeriod.delta == " yz")
     }
 
+    @Test("emptySeparator glues spell-mode segments without space")
+    func emptySeparatorGlue() {
+        let first = SegmentJoiner.append(
+            existing: "",
+            next: "ab",
+            preserveLeadingCase: true,
+            emptySeparator: true
+        )
+        #expect(first.full == "ab")
+        let second = SegmentJoiner.append(
+            existing: first.full,
+            next: "c",
+            preserveLeadingCase: true,
+            emptySeparator: true
+        )
+        #expect(second.full == "abc")
+        #expect(second.delta == "c")
+    }
+
     @Test("lowercase continuation gets a single space")
     func lowercaseContinuation() {
         let j = SegmentJoiner.append(existing: "Hello", next: "world")

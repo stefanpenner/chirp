@@ -43,6 +43,25 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("press tab") == .pressTab)
     }
 
+    @Test("recognizes press backspace without stealing delete that")
+    func pressBackspace() {
+        #expect(DictationCommand.parse("press backspace") == .pressBackspace)
+        #expect(DictationCommand.parse("hit backspace") == .pressBackspace)
+        #expect(DictationCommand.parse("backspace") == .pressBackspace)
+        #expect(DictationCommand.parse("press delete") == .pressBackspace)
+        #expect(DictationCommand.parse("delete key") == .pressBackspace)
+        #expect(DictationCommand.parse("delete that") == .scratchThat)
+        #expect(DictationCommand.parse("delete it") == .scratchThat)
+    }
+
+    @Test("recognizes spell that")
+    func spellThat() {
+        #expect(DictationCommand.parse("spell that") == .spellThat)
+        #expect(DictationCommand.parse("spell it") == .spellThat)
+        #expect(DictationCommand.parse("spell last") == .spellThat)
+        #expect(DictationCommand.parse("please spell that") == .spellThat)
+    }
+
     @Test("recognizes copy and paste")
     func copyPaste() {
         #expect(DictationCommand.parse("copy that") == .copyThat)
@@ -172,6 +191,8 @@ struct DictationCommandTests {
         let says = DictationCommand.helpCatalog.map(\.say)
         #expect(Set(says).count == says.count)
         #expect(says.contains(where: { $0.lowercased().contains("select that") }))
+        #expect(says.contains(where: { $0.lowercased().contains("spell that") }))
+        #expect(says.contains(where: { $0.lowercased().contains("backspace") }))
         #expect(says.contains(where: { $0.lowercased().contains("move left") }))
         #expect(says.contains(where: { $0.lowercased().contains("move right") }))
     }

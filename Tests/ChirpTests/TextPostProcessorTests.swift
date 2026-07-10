@@ -345,6 +345,57 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("go down the street") == "go down the street")
     }
 
+    @Test("Light ITN US state names to USPS abbreviations")
+    func lightITNStateAbbreviations() {
+        // Single-word states (case-insensitive whole words)
+        #expect(TextPostProcessor.process("california") == "CA")
+        #expect(TextPostProcessor.process("TEXAS") == "TX")
+        #expect(TextPostProcessor.process("lives in Florida now") == "lives in FL now")
+        #expect(TextPostProcessor.process("Massachusetts") == "MA")
+        #expect(TextPostProcessor.process("washington") == "WA")
+        // Multi-word: longest match first
+        #expect(TextPostProcessor.process("new york") == "NY")
+        #expect(TextPostProcessor.process("new jersey") == "NJ")
+        #expect(TextPostProcessor.process("new mexico") == "NM")
+        #expect(TextPostProcessor.process("north carolina") == "NC")
+        #expect(TextPostProcessor.process("south carolina") == "SC")
+        #expect(TextPostProcessor.process("north dakota") == "ND")
+        #expect(TextPostProcessor.process("south dakota") == "SD")
+        #expect(TextPostProcessor.process("west virginia") == "WV")
+        #expect(TextPostProcessor.process("rhode island") == "RI")
+        #expect(TextPostProcessor.process("district of columbia") == "DC")
+        // Pragmatic v1: whole-word always (dictation-friendly; "I love CA" ok)
+        #expect(TextPostProcessor.process("I love california") == "I love CA")
+        // Partial / non-state tokens stay
+        #expect(TextPostProcessor.process("carolina") == "carolina")
+        #expect(TextPostProcessor.process("york") == "york")
+    }
+
+    @Test("Light ITN ZIP codes")
+    func lightITNZIPCodes() {
+        // Strip spoken "zip code" / "zip" prefix before digits
+        #expect(TextPostProcessor.process("zip code 90210") == "90210")
+        #expect(TextPostProcessor.process("zip 90210") == "90210")
+        #expect(TextPostProcessor.process("ZIP CODE 90210") == "90210")
+        // ZIP+4 spaced digits → hyphenated
+        #expect(TextPostProcessor.process("90210 1234") == "90210-1234")
+        #expect(TextPostProcessor.process("zip code 90210 1234") == "90210-1234")
+        // Bare 5-digit ZIP stays
+        #expect(TextPostProcessor.process("mail to 90210 please") == "mail to 90210 please")
+    }
+
+    @Test("Light ITN combined street + state address")
+    func lightITNAddressCombined() {
+        #expect(
+            TextPostProcessor.process("35 Lexington avenue california")
+                == "35 Lexington Ave. CA"
+        )
+        #expect(
+            TextPostProcessor.process("141 Dorchester street massachusetts zip code 02125")
+                == "141 Dorchester St. MA 02125"
+        )
+    }
+
     @Test("Light ITN compact unit abbreviations after numbers")
     func lightITNUnits() {
         #expect(TextPostProcessor.process("5 miles") == "5 mi")
