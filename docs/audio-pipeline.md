@@ -24,10 +24,27 @@ bazel test //:AudioCorpusPipelineTests --test_output=all
 bazel test //:TranscriberIntegrationTests --test_output=all
 ```
 
+| Piece | Role |
+|---|---|
+| `SpeechAudioGenerator` | TTS (`say` + `afconvert`), noise, silence, WAV load |
+| `TranscriptionScoring` | WER / majorWER / CER + ranked leaderboard |
+| `AudioCorpusPipelineTests` | Generate → pipe → score → assert budgets |
+
+Coverage:
+
+- **Clean corpus** — 16 golden phrases, mean majorWER ≤ 8%, WER ≤ 12%, CER ≤ 8%, median ≤ 5%, RTF ≤ 0.5
+- **AppState E2E** — MockAudioRecorder → typed text, ranked subset
+- **Silence** — no hallucination (WER 0 against empty ref)
+- **Noisy** — 15 dB SNR, relaxed WER budget
+- **Fixture WAV** — committed `hello_world.wav`
+- **Multi-utterance** — two phrases + silence via AppState + SegmentJoiner
+- **Spoken punctuation** — “period” / “question mark” / … rewrite hits
+- **Continuous stream** — mid-session VAD commits, full-session rank
+- **Multi-voice** — same phrase across system voices
+- **Ranked report** — compact leaderboard for CI logs
+
 Scoring helpers live in `Tests/ChirpTests/TranscriptionScoring.swift`
-(always-on unit tests via `//:TextTests`). Generation is
-`SpeechAudioGenerator` (`say` + `afconvert`). Budgets: mean majorWER ≤ 8%,
-mean raw WER ≤ 12%, median ≤ 5% on clean TTS; silence must not hallucinate.
+(always-on unit tests via `//:TextTests`).
 Decode uses `withSpeechWindow` (lead+trail energy trim with 200ms rolls).
 Constants live in `DecodePolicy` (dual-tested with `TranscriberBuffer.tla`).
 Pipeline rebuild deferral: `PipelineRebuildDecision` + `PipelineRebuild.tla`.

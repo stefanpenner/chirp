@@ -1,20 +1,28 @@
 // AudioCorpusPipelineTests.swift — Generate real speech audio, pipe through the
 // offline pipeline, score hypotheses with WER/CER, and rank the corpus.
 //
+// Flow per phrase:
+//   text → macOS `say`/`afconvert` (16 kHz mono Float32)
+//        → Transcriber (or AppState) in ~85 ms chunks
+//        → TextPostProcessor
+//        → TranscriptionScoring (WER / majorWER / CER)
+//        → ranked leaderboard + hard budgets
+//
 // Requires Parakeet + Silero models (same discovery as TranscriberIntegrationTests).
-// Run: bazel test //:TranscriberIntegrationTests --test_output=all
+// Run: bazel test //:AudioCorpusPipelineTests --test_output=all
 
 import Testing
 import Foundation
 @testable import Chirp
 
-@Suite("Audio corpus pipeline (generated speech → ranked WER)")
+// Serialized: one model load / TTS at a time → clean ranked logs, no EP thrash.
+@Suite("Audio corpus pipeline (generated speech → ranked WER)", .serialized)
 struct AudioCorpusPipelineTests {
 
     // MARK: - Corpus
 
     /// Golden phrases: short, clear, ASCII-friendly for macOS TTS + Parakeet.
-    /// Expected text is what we score against after ASR.
+    /// Expected text is what we score against after ASR (+ light post-process).
     private static let corpus: [(id: String, text: String)] = [
         ("hello_world", "hello world"),
         ("numbers", "the quick brown fox jumps over the lazy dog"),
@@ -27,6 +35,12 @@ struct AudioCorpusPipelineTests {
         ("email", "send an email to the team"),
         ("remind", "remind me to call mom tomorrow"),
         ("search", "search for the quarterly budget"),
+        // Broader dictation coverage
+        ("thanks", "thanks for your help"),
+        ("weather", "what is the weather tomorrow"),
+        ("ship", "ship the package on monday"),
+        ("code", "open the pull request"),
+        ("name", "my name is alex"),
     ]
 
     /// Mean WER ceiling for clean TTS → Parakeet on this corpus.
@@ -34,6 +48,7 @@ struct AudioCorpusPipelineTests {
     private static let maxMeanMajorWER: Double = 0.08
     private static let maxMeanWER: Double = 0.12
     private static let maxMedianWER: Double = 0.05
+    private static let maxMeanCER: Double = 0.08
     /// No single phrase may be a near-total miss on clean audio.
     private static let maxPerPhraseWER: Double = 0.35
     /// Real-time factor budget (decode_time / audio_duration). Offline Parakeet
@@ -269,6 +284,10 @@ struct AudioCorpusPipelineTests {
             "median WER \(ranking.medianWER) exceeds budget \(Self.maxMedianWER)\n\(ranking.leaderboard)"
         )
         #expect(
+            ranking.meanCER <= Self.maxMeanCER,
+            "mean CER \(ranking.meanCER) exceeds budget \(Self.maxMeanCER)\n\(ranking.leaderboard)"
+        )
+        #expect(
             meanRTF <= Self.maxMeanRTF,
             "mean RTF \(meanRTF) exceeds budget \(Self.maxMeanRTF)"
         )
@@ -483,5 +502,245 @@ struct AudioCorpusPipelineTests {
             hyp.contains(". ") || hyp.contains("."),
             "expected sentence boundary between multi-utterance phrases: \"\(hyp)\""
         )
+    }
+
+    // MARK: - Spoken punctuation (audio → post-process → ranked)
+
+    /// Spoken punctuation phrases: TTS speaks the command words; pipeline should
+    /// rewrite them into punctuation via TextPostProcessor.
+    @Test("Spoken punctuation audio ranks under WER budget")
+    func rankedSpokenPunctuation() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+
+        // (id, spoken TTS text, expected content after post-process for WER)
+        // Normalize strips punctuation, so content WER scores the words;
+        // separate asserts check marks landed.
+        let items: [(id: String, spoken: String, reference: String, mustContain: String)] = [
+            ("punct_period", "hello world period", "hello world", "."),
+            ("punct_question", "what time is it question mark", "what time is it", "?"),
+            ("punct_comma", "yes comma please", "yes please", ","),
+            ("punct_exclaim", "great job exclamation mark", "great job", "!"),
+        ]
+
+        var pairs: [(id: String, reference: String, hypothesis: String)] = []
+        var markHits = 0
+
+        for item in items {
+            let speech: [Float]
+            do {
+                speech = try SpeechAudioGenerator.synthesize(text: item.spoken, voice: "Samantha")
+            } catch {
+                speech = try SpeechAudioGenerator.synthesize(text: item.spoken, voice: nil)
+            }
+            let samples = SpeechAudioGenerator.withTrailingSilence(speech, seconds: 0.8)
+            let (hyp, elapsed) = try await Self.transcribe(samples: samples, paths: paths)
+            pairs.append((id: item.id, reference: item.reference, hypothesis: hyp))
+            if hyp.contains(item.mustContain) { markHits += 1 }
+            print(String(format:
+                "punct[%@] spoken=\"%@\" hyp=\"%@\" wantMark=\"%@\" hit=%@ decode=%.2fs",
+                item.id, item.spoken, hyp, item.mustContain,
+                hyp.contains(item.mustContain) ? "yes" : "no", elapsed))
+        }
+
+        let ranking = TranscriptionScoring.rank(pairs)
+        print(ranking.leaderboard)
+        print("punctuation mark hits: \(markHits)/\(items.count)")
+
+        #expect(pairs.count == items.count)
+        // Content words must land; punctuation rewrite is best-effort under TTS variance
+        #expect(
+            ranking.meanMajorWER <= 0.25,
+            "spoken-punct mean majorWER \(ranking.meanMajorWER) exceeds 0.25\n\(ranking.leaderboard)"
+        )
+        // At least half the marks should survive ASR + rewrite on clean TTS
+        #expect(
+            markHits >= items.count / 2,
+            "too few punctuation marks rewritten (\(markHits)/\(items.count))"
+        )
+    }
+
+    // MARK: - Continuous stream with mid-session VAD commits
+
+    /// Feed a long stream: phrase → silence → phrase → silence.
+    /// VAD should commit mid-stream; flush gets the tail. Score full session.
+    @Test("Continuous stream with mid-session VAD commits, ranked")
+    func continuousStreamMidCommitsRanked() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+
+        let phrases = [
+            "hello world",
+            "create a new note",
+            "schedule a meeting for three pm",
+        ]
+
+        var samples: [Float] = []
+        for (i, phrase) in phrases.enumerated() {
+            let speech = try SpeechAudioGenerator.synthesize(text: phrase, voice: "Samantha")
+            samples += speech
+            // Mid-phrase silence long enough for VAD endpoint (≥0.5s min_silence)
+            let gap = i < phrases.count - 1 ? 0.9 : 0.8
+            samples += SpeechAudioGenerator.silence(seconds: gap)
+        }
+
+        let transcriber = Transcriber()
+        let ok = await transcriber.initialize(paths: paths)
+        guard ok else {
+            Issue.record("Transcriber failed to initialize")
+            return
+        }
+
+        let chunkSize = DecodePolicy.streamChunkSamples
+        var committed: [String] = []
+        var midCommits = 0
+        let t0 = Date()
+        for start in stride(from: 0, to: samples.count, by: chunkSize) {
+            let end = min(start + chunkSize, samples.count)
+            let chunk = Array(samples[start..<end])
+            let segs = await transcriber.feedAudio(samples: chunk)
+            if !segs.isEmpty {
+                midCommits += segs.count
+                committed.append(contentsOf: segs)
+            }
+        }
+        let flushed = await transcriber.flush()
+        if !flushed.isEmpty { committed.append(flushed) }
+        let elapsed = Date().timeIntervalSince(t0)
+
+        let raw = committed.joined(separator: " ")
+        let hyp = TextPostProcessor.process(raw)
+        let reference = phrases.joined(separator: " ")
+        let score = TranscriptionScoring.score(
+            id: "stream_session",
+            reference: reference,
+            hypothesis: hyp
+        )
+        let audioSec = Double(samples.count) / Double(DecodePolicy.sampleRate)
+        let rtf = audioSec > 0 ? elapsed / audioSec : 0
+
+        print(String(format:
+            "stream midCommits=%d segments=%d audio=%.2fs decode=%.2fs RTF=%.2f",
+            midCommits, committed.count, audioSec, elapsed, rtf))
+        print("stream segments: \(committed)")
+        print(score.summaryLine)
+
+        #expect(!hyp.isEmpty, "continuous stream produced empty hyp")
+        // Prefer mid-session commits when silence gaps are present
+        #expect(
+            midCommits >= 1 || !flushed.isEmpty,
+            "expected at least one VAD commit or flush text"
+        )
+        #expect(
+            score.majorWER <= 0.30,
+            "stream majorWER \(score.majorWER) too high: \"\(hyp)\"\nref=\"\(reference)\""
+        )
+        #expect(rtf <= Self.maxMeanRTF, "stream RTF \(rtf) exceeds budget")
+
+        let norm = TranscriptionScoring.normalize(hyp)
+        #expect(norm.contains("hello") || norm.contains("world"), "missing phrase1 in \"\(hyp)\"")
+        #expect(norm.contains("note") || norm.contains("create"), "missing phrase2 in \"\(hyp)\"")
+        #expect(norm.contains("meeting") || norm.contains("schedule"), "missing phrase3 in \"\(hyp)\"")
+    }
+
+    // MARK: - Ranked multi-voice robustness
+
+    /// Same phrase across a few system voices — rank per-voice, budget mean majorWER.
+    @Test("Multi-voice same phrase ranks under budget")
+    func multiVoiceRanked() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+
+        let phrase = "please send the report by friday"
+        let candidates = ["Samantha", "Alex", "Daniel", "Victoria", "Karen"]
+        var pairs: [(id: String, reference: String, hypothesis: String)] = []
+
+        for voice in candidates {
+            let speech: [Float]
+            do {
+                speech = try SpeechAudioGenerator.synthesize(text: phrase, voice: voice)
+            } catch {
+                print("voice \(voice) unavailable, skip")
+                continue
+            }
+            let samples = SpeechAudioGenerator.withTrailingSilence(speech, seconds: 0.8)
+            let (hyp, _) = try await Self.transcribe(samples: samples, paths: paths)
+            pairs.append((id: "voice_\(voice)", reference: phrase, hypothesis: hyp))
+            print("voice[\(voice)] hyp=\"\(hyp)\"")
+        }
+
+        #expect(pairs.count >= 2, "need at least 2 working TTS voices")
+        let ranking = TranscriptionScoring.rank(pairs)
+        print(ranking.leaderboard)
+
+        #expect(
+            ranking.meanMajorWER <= 0.20,
+            "multi-voice mean majorWER \(ranking.meanMajorWER) exceeds 0.20\n\(ranking.leaderboard)"
+        )
+        // Best voice should be near-perfect on this clean phrase
+        if let best = ranking.best {
+            #expect(
+                best.majorWER <= 0.20,
+                "best voice still majorWER \(best.majorWER): \"\(best.hypothesis)\""
+            )
+        }
+    }
+
+    // MARK: - Full ranked report (smoke for CI logs)
+
+    /// Single entry that prints a compact ranked table for the core subset.
+    /// Useful when scanning bazel --test_output=all for regressions.
+    @Test("Ranked report: generate → pipe → score → leaderboard")
+    func rankedReportSmoke() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+
+        let core = [
+            ("rpt_hello", "hello world"),
+            ("rpt_fox", "the quick brown fox"),
+            ("rpt_note", "create a new note"),
+            ("rpt_meet", "schedule a meeting for three pm"),
+            ("rpt_email", "send an email to the team"),
+        ]
+
+        var pairs: [(id: String, reference: String, hypothesis: String)] = []
+        for item in core {
+            let speech: [Float]
+            do {
+                speech = try SpeechAudioGenerator.synthesize(text: item.1, voice: "Samantha")
+            } catch {
+                speech = try SpeechAudioGenerator.synthesize(text: item.1, voice: nil)
+            }
+            let samples = SpeechAudioGenerator.withTrailingSilence(speech, seconds: 0.8)
+            let (hyp, _) = try await Self.transcribe(samples: samples, paths: paths)
+            pairs.append((id: item.0, reference: item.1, hypothesis: hyp))
+        }
+
+        let ranking = TranscriptionScoring.rank(pairs)
+        // Explicit ranked table for humans reading CI logs
+        print("\n========== CHIRP AUDIO PIPELINE RANKED REPORT ==========")
+        print(ranking.leaderboard)
+        print("========================================================\n")
+
+        #expect(pairs.count == core.count)
+        #expect(
+            ranking.meanMajorWER <= 0.10,
+            "report mean majorWER \(ranking.meanMajorWER) exceeds 0.10\n\(ranking.leaderboard)"
+        )
+        #expect(
+            ranking.meanWER <= 0.15,
+            "report mean WER \(ranking.meanWER) exceeds 0.15\n\(ranking.leaderboard)"
+        )
+        for s in ranking.scores {
+            #expect(!s.hypothesis.isEmpty, "empty hyp for \(s.id)")
+        }
     }
 }
