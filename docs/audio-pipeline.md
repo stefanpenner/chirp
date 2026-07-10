@@ -31,6 +31,7 @@ mean raw WER ≤ 12%, median ≤ 5% on clean TTS; silence must not hallucinate.
 Decode uses `withSpeechWindow` (lead+trail energy trim with 200ms rolls).
 Constants live in `DecodePolicy` (dual-tested with `TranscriberBuffer.tla`).
 Pipeline rebuild deferral: `PipelineRebuildDecision` + `PipelineRebuild.tla`.
+ASR EP selection: `InferenceProvider` tries CoreML then CPU (VAD stays CPU).
 
 
 ## Components

@@ -113,6 +113,7 @@ swift_test(
         "Tests/ChirpTests/SessionDecisionTests.swift",
         "Tests/ChirpTests/PipelineRebuildDecisionTests.swift",
         "Tests/ChirpTests/DecodePolicyTests.swift",
+        "Tests/ChirpTests/InferenceProviderTests.swift",
         "Tests/ChirpTests/Mocks.swift",
     ],
     deps = [":ChirpLib"],

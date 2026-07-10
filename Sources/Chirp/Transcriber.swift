@@ -22,12 +22,41 @@ actor Transcriber: TranscriberProtocol {
     // MARK: - Initialization
 
     /// Configures the offline recognizer and VAD from model files on disk.
+    /// Tries CoreML first (Apple Neural Engine), then CPU.
     /// Returns false if either fails to initialize.
     func initialize(paths: ModelPaths) -> Bool {
         let modelDir = paths.modelDir
 
+        guard createRecognizer(modelDir: modelDir) else {
+            Log.transcription.error("Failed to create offline recognizer (coreml+cpu)")
+            return false
+        }
+
+        if !initializeVAD(vadPath: paths.vadPath) {
+            Log.transcription.error("Failed to create VAD")
+            return false
+        }
+
+        Log.transcription.info("Transcriber initialized successfully")
+        return true
+    }
+
+    /// Try preferred ASR providers in order until create succeeds.
+    private func createRecognizer(modelDir: String) -> Bool {
+        for provider in InferenceProvider.asrCandidates {
+            if let handle = makeRecognizer(modelDir: modelDir, provider: provider) {
+                recognizer = handle
+                Log.transcription.info("Offline recognizer using provider=\(provider)")
+                return true
+            }
+            Log.transcription.info("Provider \(provider) unavailable for ASR — trying next")
+        }
+        return false
+    }
+
+    private func makeRecognizer(modelDir: String, provider: String) -> OpaquePointer? {
         let tokensPath = toCString("\(modelDir)/tokens.txt")
-        let providerStr = toCString("cpu")
+        let providerStr = toCString(provider)
         let modelTypeStr = toCString(ModelVariant.modelType)
         let emptyStr = toCString("")
         let decodingMethodStr = toCString("greedy_search")
@@ -60,7 +89,7 @@ actor Transcriber: TranscriberProtocol {
         modelConfig.telespeech_ctc = UnsafePointer(emptyStr)
 
         var featConfig = SherpaOnnxFeatureConfig()
-        featConfig.sample_rate = 16000
+        featConfig.sample_rate = Int32(DecodePolicy.sampleRate)
         featConfig.feature_dim = 80
 
         var lmConfig = SherpaOnnxOfflineLMConfig()
@@ -85,26 +114,13 @@ actor Transcriber: TranscriberProtocol {
         config.blank_penalty = 0.0
         config.hr = hrConfig
 
-        recognizer = SherpaOnnxCreateOfflineRecognizer(&config)
-
-        if recognizer == nil {
-            Log.transcription.error("Failed to create offline recognizer")
-            return false
-        }
-
-        if !initializeVAD(vadPath: paths.vadPath) {
-            Log.transcription.error("Failed to create VAD")
-            return false
-        }
-
-        Log.transcription.info("Transcriber initialized successfully")
-        return true
+        return SherpaOnnxCreateOfflineRecognizer(&config)
     }
 
     private func initializeVAD(vadPath: String) -> Bool {
         let vadModelStr = toCString(vadPath)
         let emptyStr = toCString("")
-        let providerStr = toCString("cpu")
+        let providerStr = toCString(InferenceProvider.vadProvider)
 
         defer {
             free(vadModelStr); free(emptyStr); free(providerStr)

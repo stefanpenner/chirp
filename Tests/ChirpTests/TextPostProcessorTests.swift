@@ -114,6 +114,16 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("graph node") == "graph node")
     }
 
+    @Test("Spoken punctuation commands")
+    func spokenPunctuation() {
+        #expect(TextPostProcessor.process("Hello world period") == "Hello world.")
+        #expect(TextPostProcessor.process("Wait comma no") == "Wait, no")
+        #expect(TextPostProcessor.process("are you there question mark") == "are you there?")
+        #expect(TextPostProcessor.process("wow exclamation mark") == "wow!")
+        // Word "period" mid-sentence (not trailing) stays
+        #expect(TextPostProcessor.process("the period is over") == "the period is over")
+    }
+
     @Test("Light ITN formats spoken times")
     func lightITN() {
         #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")

@@ -72,6 +72,11 @@ enum TextPostProcessor {
             // Common email/command confusions
             (#"\bsend (?:a )?mail\b"#, "send email"),
             (#"\bopen (?:the )?app store\b"#, "open the App Store"),
+            // Desktop dictation: spoken punctuation commands
+            (#"\s+period$"#, "."),
+            (#"\s+comma\b\s*"#, ", "),
+            (#"\s+question mark$"#, "?"),
+            (#"\s+exclamation (?:mark|point)$"#, "!"),
         ]
         return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
     }()
