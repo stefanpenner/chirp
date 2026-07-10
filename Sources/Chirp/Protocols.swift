@@ -58,6 +58,8 @@ enum TextFormatStyle: Equatable, Sendable {
     func deleteBackward(count: Int)
     /// Select `count` characters backward (shift+left). Spoken "select that".
     func selectBackward(count: Int)
+    /// Select `count` characters forward (shift+right). Spoken "select first sentence".
+    func selectForward(count: Int)
     /// Select all in the focused app (⌘A). Spoken "select all".
     func selectAll()
     /// Move cursor one word (option+left/right). Spoken "move left" / "move right".
@@ -106,6 +108,7 @@ enum TextFormatStyle: Equatable, Sendable {
 
 extension TextInserting {
     func selectBackward(count: Int) {}
+    func selectForward(count: Int) {}
     func selectAll() {}
     func moveWord(direction: MoveDirection) {}
     func moveLine(direction: MoveDirection) {}

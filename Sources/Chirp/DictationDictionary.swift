@@ -51,6 +51,19 @@ enum DictationDictionary {
         "redis": "Redis",
         // Claude Code ASR: "cloud code" only (avoid bare "claude" — common name)
         "cloud code": "Claude Code",
+        // Coding / web-stack ASR confusions (low risk; skip short "p r", "type o")
+        "pull request": "PR",
+        "next j s": "Next.js",
+        "fast a p i": "FastAPI",
+        "tail wind": "Tailwind",
+        "home brew": "Homebrew",
+        "py torch": "PyTorch",
+        "l l m": "LLM",
+        "web pack": "webpack",
+        "vs codium": "VSCodium",
+        "cloud flare": "Cloudflare",
+        "super base": "Supabase",
+        "fire base": "Firebase",
     ]
 
     /// Load user replacements from UserDefaults (keys stored lowercase).

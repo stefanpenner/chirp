@@ -166,6 +166,23 @@ final class TextInserter: TextInserting {
         }
     }
 
+    /// Select characters forward by holding shift and pressing right arrow (0x7C).
+    func selectForward(count: Int) {
+        guard count > 0 else { return }
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let rightArrow: CGKeyCode = 0x7C // kVK_RightArrow
+        for _ in 0..<count {
+            if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: rightArrow, keyDown: true) {
+                keyDown.flags = .maskShift
+                keyDown.post(tap: .cgAnnotatedSessionEventTap)
+            }
+            if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: rightArrow, keyDown: false) {
+                keyUp.flags = .maskShift
+                keyUp.post(tap: .cgAnnotatedSessionEventTap)
+            }
+        }
+    }
+
     /// Select all via ⌘A.
     func selectAll() {
         let source = CGEventSource(stateID: .combinedSessionState)

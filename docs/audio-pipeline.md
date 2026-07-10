@@ -71,7 +71,9 @@ dict products like GitHub). Light ITN: times (`three pm`→`3 p.m.`,
 meridiem: `from three to five pm`→`from 3-5 p.m.`, `three to five p.m.`→`3-5 p.m.`,
 `two through four pm` / `one until three a.m.` same form; first-side minutes
 `three thirty to five pm`→`3:30-5 p.m.`; dual meridiem `nine am to five pm`→
-`9 a.m.-5 p.m.`), spoken cardinals
+`9 a.m.-5 p.m.`; cardinal ranges without am/pm after time ranges:
+`from ten to twenty` / `from 10 to 20`→`from 10-20`, `10 to 20`→`10-20`;
+time ranges still win over cardinals), spoken cardinals
 (`one hundred`→`100`, `twenty five`→`25`, `three point five`→`3.5`), ordinals
 (`twenty first`→`21st`, `first of all` stays), dates (`march fifth twenty
 twenty four`→`March 5, 2024`, `tomorrow`/`next monday` → absolute dates,
@@ -113,7 +115,8 @@ Spoken symbols: `slash`→`/`, `asterisk`→`*`,
 Spoken path prefixes (before stutter collapse):
 `tilde slash` / `home slash`→`~/`, `dot slash`→`./` (not `dot com`),
 `dot dot slash`→`../`, leading `slash` / `forward slash`→`/`
-(e.g. `slash usr slash bin`→`/usr/bin`),
+(e.g. `slash usr slash bin`→`/usr/bin`; after a word keeps space:
+`cd slash tmp`→`cd /tmp`, not `cd/tmp`),
 bare `tilde`→`~` (e.g. `open tilde slash .config`→`open ~/.config`).
 Social tags: `hashtag chirp`→`#chirp`, `at sign stefan` / `mention stefan`→`@stefan`
 (email `john at example dot com` still wins; bare `at` stays conversational).

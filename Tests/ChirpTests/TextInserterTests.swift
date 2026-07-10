@@ -42,6 +42,15 @@ struct TextInserterTests {
         #expect(inserter.selectBackwardCounts == [5])
     }
 
+    @Test("selectForward records positive count; zero is no-op")
+    func selectForward() {
+        let inserter = MockTextInserter()
+        inserter.selectForward(count: 0)
+        #expect(inserter.selectForwardCounts.isEmpty)
+        inserter.selectForward(count: 4)
+        #expect(inserter.selectForwardCounts == [4])
+    }
+
     @Test("selectAll records call")
     func selectAll() {
         let inserter = MockTextInserter()

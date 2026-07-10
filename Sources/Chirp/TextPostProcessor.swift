@@ -137,9 +137,10 @@ enum TextPostProcessor {
             (#"\s+newline\s*"#, "\n"),
             (#"\s+new paragraph\s*"#, "\n\n"),
             // Spoken symbols (Mac / Windows dictation style)
-            // Absolute leading slash packed in packSpokenPath; mid-path slash here.
-            (#"\s+(?:forward\s+)?slash\s+"#, "/"),
-            (#"\s+(?:forward\s+)?slash$"#, "/"),
+            // Absolute slash+segment runs packed in packSpokenPath (keeps space
+            // before `/` after a word). Residual mid/end slash keeps space before `/`.
+            (#"\s+(?:forward\s+)?slash\s+"#, " /"),
+            (#"\s+(?:forward\s+)?slash$"#, " /"),
             (#"(?:^|\s+)backslash\s+"#, "\\"),
             (#"(?:^|\s+)back slash\s+"#, "\\"),
             (#"\s+asterisk\s+"#, "*"),
@@ -203,6 +204,8 @@ enum TextPostProcessor {
     /// `"tilde slash src"` → `"~/src"`, `"dot slash foo"` → `"./foo"`,
     /// `"dot dot slash src"` → `"../src"`, `"slash usr slash bin"` → `"/usr/bin"`.
     /// Only `dot slash` / `dot dot slash` (not `dot com`). Bare `tilde` → `~` last.
+    /// Absolute `slash` runs are packed separately so "cd slash tmp" → "cd /tmp"
+    /// (space before `/` when not at string start).
     private static let spokenPathPackPatterns: [(NSRegularExpression, String)] = {
         let pairs: [(String, String)] = [
             // Parent path before single "dot slash" (else "dot ./")
@@ -212,13 +215,28 @@ enum TextPostProcessor {
             (#"\bhome\s+(?:forward\s+)?slash\b\s*"#, "~/"),
             // "dot slash" only — word boundary after slash keeps "dot com" alone
             (#"\bdot\s+(?:forward\s+)?slash\b\s*"#, "./"),
-            // Absolute path: leading or spaced slash → `/` (before stutter can collapse
-            // "slash slash"). Mid-path slash also covered later in phraseFixes.
-            (#"(?:^|\s+)(?:forward\s+)?slash\b\s*"#, "/"),
             // Bare tilde at start or after whitespace (path prefix)
             (#"(?:^|\s+)tilde\b"#, "~"),
         ]
         return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
+    }()
+
+    /// Absolute spoken path run: one or more `slash` + segment pairs.
+    /// Group 1 = start anchor or leading whitespace; group 2 = spoken path body.
+    private static let absoluteSpokenPathPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"(^|\s+)((?:forward\s+)?slash\b\s+\S+(?:\s+(?:forward\s+)?slash\b\s+\S+)*)"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Strip spoken `slash` / `forward slash` tokens inside a path body → `/`.
+    /// Optional leading whitespace so "usr slash bin" interiors pack as `/` not ` /`.
+    private static let spokenSlashInPathPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\s*(?:forward\s+)?slash\b\s+"#,
+            options: .caseInsensitive
+        )
     }()
 
     private static func packSpokenPath(_ text: String) -> String {
@@ -226,6 +244,35 @@ enum TextPostProcessor {
         for (pattern, replacement) in spokenPathPackPatterns {
             let range = NSRange(result.startIndex..., in: result)
             result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
+        }
+        result = packAbsoluteSpokenPaths(result)
+        return result
+    }
+
+    /// Pack absolute paths: `"slash usr"` → `"/usr"`, `"cd slash tmp"` → `"cd /tmp"`,
+    /// `"slash usr slash bin"` → `"/usr/bin"`. Keeps one leading space when the
+    /// match is not at string start (does not glue the previous word to `/`).
+    private static func packAbsoluteSpokenPaths(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = absoluteSpokenPathPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let leadRange = Range(match.range(at: 1), in: result),
+                  let bodyRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let lead = String(result[leadRange])
+            let body = String(result[bodyRange])
+            let bodyNS = body as NSString
+            let packed = spokenSlashInPathPattern.stringByReplacingMatches(
+                in: body,
+                range: NSRange(location: 0, length: bodyNS.length),
+                withTemplate: "/"
+            )
+            // At string start → no leading space; after a word → keep one space before `/`.
+            let prefix = lead.isEmpty ? "" : " "
+            result.replaceSubrange(fullRange, with: prefix + packed)
         }
         return result
     }
@@ -542,6 +589,24 @@ enum TextPostProcessor {
         )
     }()
 
+    /// Digit or bare spoken unit/decade for cardinal ranges (after SpokenNumberITN
+    /// most multi-word numbers are already digits; bare "ten" may remain).
+    private static let cardinalRangeNumberToken =
+        #"(\d{1,6}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"#
+
+    /// "from 10 to 20" / "from ten to twenty" / "3 through 5" → "from 10-20" / "3-5".
+    /// Negative lookahead: do not consume bounds that still have am/pm (time ranges
+    /// should already have run; belt-and-suspenders).
+    private static let cardinalRangePattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(from\s+)?"# + cardinalRangeNumberToken
+                + #"\s+(?:to|through|until)\s+"#
+                + cardinalRangeNumberToken
+                + #"\b(?!\s*[ap]\.?m\.?)"#,
+            options: .caseInsensitive
+        )
+    }()
+
     private static let spokenNumbers: [String: String] = [
         "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
         "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
@@ -564,6 +629,10 @@ enum TextPostProcessor {
         result = SpokenDateITN.apply(result)
         // Digit clock form after numbers: "3 30 pm" → "3:30 p.m."
         result = applyTimeITN(result)
+        // Cardinal ranges after time ranges so "from 3 to 5 pm" is already
+        // "from 3-5 p.m." and not stolen as "from 3-5" + leftover "pm".
+        // "from ten to twenty" / "from 10 to 20" → "from 10-20".
+        result = applyCardinalRangeITN(result)
         // Sterling/quid before units so "20 pounds sterling" → "£20" not "20 lb sterling".
         // Bare "pounds" stays weight via units; currency needs "sterling" or "quid".
         result = applySterlingCurrencyITN(result)
@@ -927,11 +996,41 @@ enum TextPostProcessor {
 
     private static let extendedSpokenNumbers: [String: String] = {
         var m = spokenNumbers
+        m["thirteen"] = "13"; m["fourteen"] = "14"; m["fifteen"] = "15"
+        m["sixteen"] = "16"; m["seventeen"] = "17"; m["eighteen"] = "18"
+        m["nineteen"] = "19"
         m["twenty"] = "20"; m["thirty"] = "30"; m["forty"] = "40"
         m["fifty"] = "50"; m["sixty"] = "60"; m["seventy"] = "70"
         m["eighty"] = "80"; m["ninety"] = "90"
         return m
     }()
+
+    /// Cardinal ranges without am/pm: "from ten to twenty" → "from 10-20".
+    /// Time ranges with am/pm must run first and consume those matches.
+    private static func applyCardinalRangeITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = cardinalRangePattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            // Groups: 1=from?, 2=left, 3=right
+            guard match.numberOfRanges >= 4,
+                  let leftRange = Range(match.range(at: 2), in: result),
+                  let rightRange = Range(match.range(at: 3), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let fromPrefix = match.range(at: 1).location != NSNotFound ? "from " : ""
+            let left = rangeDigits(from: String(result[leftRange]))
+            let right = rangeDigits(from: String(result[rightRange]))
+            result.replaceSubrange(fullRange, with: "\(fromPrefix)\(left)-\(right)")
+        }
+        return result
+    }
+
+    private static func rangeDigits(from raw: String) -> String {
+        let key = raw.lowercased()
+        return extendedSpokenNumbers[key] ?? raw
+    }
 
     private static func applyPercentITN(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)

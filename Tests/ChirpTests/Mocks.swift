@@ -138,6 +138,7 @@ final class MockTextInserter: TextInserting {
     var typedTexts: [String] = []
     var deletedCounts: [Int] = []
     var selectBackwardCounts: [Int] = []
+    var selectForwardCounts: [Int] = []
     var selectAllCalled = false
     var moveWordDirections: [MoveDirection] = []
     var moveLineDirections: [MoveDirection] = []
@@ -218,6 +219,11 @@ final class MockTextInserter: TextInserting {
     func selectBackward(count: Int) {
         guard count > 0 else { return }
         selectBackwardCounts.append(count)
+    }
+
+    func selectForward(count: Int) {
+        guard count > 0 else { return }
+        selectForwardCounts.append(count)
     }
 
     func selectAll() {

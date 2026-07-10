@@ -744,8 +744,12 @@ public final class AppState {
                         self.performDeleteWord(direction: .right)
                     case .selectLastSentence:
                         self.performSelectLastSentence(typesIncrementally: false)
+                    case .selectFirstSentence:
+                        self.performSelectFirstSentence(typesIncrementally: false)
                     case .selectLastParagraph:
                         self.performSelectLastParagraph(typesIncrementally: false)
+                    case .selectFirstParagraph:
+                        self.performSelectFirstParagraph(typesIncrementally: false)
                     case .selectLastLine:
                         self.performSelectLastLine(typesIncrementally: false)
                     case .selectAll:
@@ -908,8 +912,12 @@ public final class AppState {
             performDeleteWord(direction: .right)
         case .selectLastSentence:
             performSelectLastSentence(typesIncrementally: typesIncrementally)
+        case .selectFirstSentence:
+            performSelectFirstSentence(typesIncrementally: typesIncrementally)
         case .selectLastParagraph:
             performSelectLastParagraph(typesIncrementally: typesIncrementally)
+        case .selectFirstParagraph:
+            performSelectFirstParagraph(typesIncrementally: typesIncrementally)
         case .selectLastLine:
             performSelectLastLine(typesIncrementally: typesIncrementally)
         case .selectAll:
@@ -1436,6 +1444,18 @@ public final class AppState {
         }
     }
 
+    /// Select the first sentence. Assumes caret at end of session text.
+    /// Moves to session start, then selects forward over the first sentence.
+    private func performSelectFirstSentence(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let text = transcribedText
+        guard !text.isEmpty else { return }
+        let first = TranscriptSelection.firstSentence(text)
+        guard !first.isEmpty else { return }
+        textInserter.moveBackward(count: text.count)
+        textInserter.selectForward(count: first.count)
+    }
+
     /// Select the last paragraph. Buffer unchanged.
     private func performSelectLastParagraph(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
@@ -1443,6 +1463,17 @@ public final class AppState {
         if !selected.isEmpty {
             textInserter.selectBackward(count: selected.count)
         }
+    }
+
+    /// Select the first paragraph. Assumes caret at end of session text.
+    private func performSelectFirstParagraph(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let text = transcribedText
+        guard !text.isEmpty else { return }
+        let first = TranscriptSelection.firstParagraph(text)
+        guard !first.isEmpty else { return }
+        textInserter.moveBackward(count: text.count)
+        textInserter.selectForward(count: first.count)
     }
 
     /// Select the last line. Buffer unchanged.
@@ -1503,11 +1534,16 @@ public final class AppState {
         textInserter.moveBackward(count: selected.count)
     }
 
-    /// Best-effort "next sentence" without caret tracking: land at line end (⌘→).
-    /// Hold-to-talk usually leaves the caret at end; after previous sentence this
-    /// advances past the current line / last sentence.
+    /// Session-relative "next sentence": from end of buffer, jump to start of
+    /// the second sentence (← full session, → past first sentence).
+    /// Single-sentence buffers are a no-op (already at end of only sentence).
     private func performMoveToNextSentence() {
-        textInserter.moveToLineEnd()
+        let text = transcribedText
+        guard !text.isEmpty else { return }
+        let first = TranscriptSelection.firstSentence(text)
+        guard first.count < text.count else { return }
+        textInserter.moveBackward(count: text.count)
+        textInserter.moveForward(count: first.count)
     }
 
     /// Polls the pipeline for a speculative preview of uncommitted audio.

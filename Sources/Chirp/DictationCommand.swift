@@ -82,8 +82,12 @@ enum DictationCommand: Equatable, Sendable {
     case deleteNextWord
     /// Select the last sentence (after [.?!] + whitespace).
     case selectLastSentence
+    /// Select the first sentence (before first [.?!] + whitespace).
+    case selectFirstSentence
     /// Select the last paragraph (after \n\n or \n).
     case selectLastParagraph
+    /// Select the first paragraph (before first \n\n or \n).
+    case selectFirstParagraph
     /// Select the last line (after final \n).
     case selectLastLine
     /// Select all in the focused app (⌘A).
@@ -120,7 +124,7 @@ enum DictationCommand: Equatable, Sendable {
     case pageDown
     /// Move cursor to start of last sentence (plain ← × n). Buffer unchanged.
     case moveToPreviousSentence
-    /// Move cursor toward next sentence. Without caret tracking, lands at line end (⌘→).
+    /// Move cursor to start of second sentence (← × full, then → past first). Buffer unchanged.
     case moveToNextSentence
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
@@ -317,10 +321,22 @@ enum DictationCommand: Equatable, Sendable {
              "select sentence", "highlight last sentence",
              "highlight previous sentence", "highlight sentence":
             return .selectLastSentence
+        // "first" → "1st" via SpokenNumberITN before parse; match both.
+        case "select first sentence", "select the first sentence",
+             "select 1st sentence", "select the 1st sentence",
+             "highlight first sentence", "highlight the first sentence",
+             "highlight 1st sentence", "highlight the 1st sentence":
+            return .selectFirstSentence
         case "select last paragraph", "select previous paragraph",
              "select paragraph", "highlight last paragraph",
              "highlight previous paragraph", "highlight paragraph":
             return .selectLastParagraph
+        // "first" → "1st" via SpokenNumberITN before parse; match both.
+        case "select first paragraph", "select the first paragraph",
+             "select 1st paragraph", "select the 1st paragraph",
+             "highlight first paragraph", "highlight the first paragraph",
+             "highlight 1st paragraph", "highlight the 1st paragraph":
+            return .selectFirstParagraph
         // Select line — listed before move "previous line" so select wins on
         // full phrases; bare "previous line" is moveUpLine only.
         case "select last line", "select previous line", "select line",
@@ -425,7 +441,9 @@ enum DictationCommand: Equatable, Sendable {
         ("select previous word / select prior word", "Select previous word (⇧⌥←; keyboard only)"),
         ("delete next word / delete forward word", "Delete next word (⇧⌥→ then ⌫; keyboard only)"),
         ("select last sentence / previous sentence", "Select last sentence"),
+        ("select first sentence / the first sentence", "Select first sentence"),
         ("select last paragraph / previous paragraph", "Select last paragraph"),
+        ("select first paragraph / the first paragraph", "Select first paragraph"),
         ("select last line / select line", "Select last line"),
         ("select all", "Select all (⌘A)"),
         ("unselect that / deselect", "Collapse selection (caret to end)"),
@@ -444,7 +462,7 @@ enum DictationCommand: Equatable, Sendable {
         ("page up / scroll up", "Page up (Page Up key)"),
         ("page down / scroll down", "Page down (Page Down key)"),
         ("previous sentence / go to previous sentence", "Cursor to start of last sentence (← × n)"),
-        ("next sentence / go to next sentence", "Cursor to line end (no caret track; best-effort)"),
+        ("next sentence / go to next sentence", "Cursor to start of second sentence (session-relative)"),
         ("period / comma / …", "Spoken punctuation"),
         ("new line / new paragraph", "Line breaks"),
         ("bullet point / next bullet", "Bulleted list item"),
@@ -460,8 +478,8 @@ enum DictationCommand: Equatable, Sendable {
 
 // MARK: - Transcript selection bounds (pure)
 
-/// Pure helpers for spoken select-last-sentence / select-last-paragraph.
-/// Return the trailing substring to feed `selectBackward(count:)` via `String.count`.
+/// Pure helpers for spoken select-first/last sentence / paragraph.
+/// Substrings feed `selectBackward` / `selectForward` via `String.count`.
 enum TranscriptSelection {
     /// Last sentence: segment after final `[.?!]` + whitespace, else whole buffer.
     /// Includes the whitespace after the terminator (matches select-last-word style).
@@ -478,6 +496,21 @@ enum TranscriptSelection {
         return String(text[afterPunct...])
     }
 
+    /// First sentence: segment through first `[.?!]` before whitespace, else whole buffer.
+    /// Includes trailing punct; excludes following whitespace.
+    static func firstSentence(_ text: String) -> String {
+        guard !text.isEmpty else { return "" }
+        let pattern = try! NSRegularExpression(pattern: #"[.?!]\s+"#)
+        let range = NSRange(text.startIndex..., in: text)
+        guard let first = pattern.firstMatch(in: text, range: range),
+              let matchRange = Range(first.range, in: text) else {
+            return text
+        }
+        // Include punct only (match is punct + whitespace; stop after punct).
+        let afterPunct = text.index(after: matchRange.lowerBound)
+        return String(text[..<afterPunct])
+    }
+
     /// Last paragraph: segment after final `\n\n` or `\n`, else whole buffer.
     /// Trailing blank paragraph (`…\n\n` / `…\n`) returns the separator so
     /// delete peels it instead of no-op on empty content.
@@ -490,6 +523,18 @@ enum TranscriptSelection {
         if let r = text.range(of: "\n", options: .backwards) {
             let after = String(text[r.upperBound...])
             return after.isEmpty ? "\n" : after
+        }
+        return text
+    }
+
+    /// First paragraph: segment before first `\n\n` or `\n`, else whole buffer.
+    static func firstParagraph(_ text: String) -> String {
+        guard !text.isEmpty else { return "" }
+        if let r = text.range(of: "\n\n") {
+            return String(text[..<r.lowerBound])
+        }
+        if let r = text.range(of: "\n") {
+            return String(text[..<r.lowerBound])
         }
         return text
     }

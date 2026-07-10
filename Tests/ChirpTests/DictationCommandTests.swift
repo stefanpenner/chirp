@@ -354,6 +354,18 @@ struct DictationCommandTests {
         #expect(TranscriptSelection.lastSentence("Hi. There  ") == " There  ")
     }
 
+    @Test("first sentence selection boundaries")
+    func firstSentenceSelection() {
+        #expect(TranscriptSelection.firstSentence("") == "")
+        #expect(TranscriptSelection.firstSentence("Hello world") == "Hello world")
+        #expect(TranscriptSelection.firstSentence("Hello. World") == "Hello.")
+        #expect(TranscriptSelection.firstSentence("A. B. C") == "A.")
+        #expect(TranscriptSelection.firstSentence("Wait? Next") == "Wait?")
+        #expect(TranscriptSelection.firstSentence("Wow! Yes") == "Wow!")
+        #expect(TranscriptSelection.firstSentence("Done.") == "Done.")
+        #expect(TranscriptSelection.firstSentence("Hi. There  ") == "Hi.")
+    }
+
     @Test("last paragraph selection boundaries")
     func lastParagraphSelection() {
         #expect(TranscriptSelection.lastParagraph("") == "")
@@ -364,6 +376,43 @@ struct DictationCommandTests {
         // Blank trailing paragraph: peel separator so delete is not a no-op
         #expect(TranscriptSelection.lastParagraph("Only\n\n") == "\n\n")
         #expect(TranscriptSelection.lastParagraph("Only\n") == "\n")
+    }
+
+    @Test("first paragraph selection boundaries")
+    func firstParagraphSelection() {
+        #expect(TranscriptSelection.firstParagraph("") == "")
+        #expect(TranscriptSelection.firstParagraph("Hello world") == "Hello world")
+        #expect(TranscriptSelection.firstParagraph("Para one\n\nPara two") == "Para one")
+        #expect(TranscriptSelection.firstParagraph("Line one\nLine two") == "Line one")
+        #expect(TranscriptSelection.firstParagraph("A\n\nB\n\nC") == "A")
+        #expect(TranscriptSelection.firstParagraph("Only\n\n") == "Only")
+        #expect(TranscriptSelection.firstParagraph("Only\n") == "Only")
+    }
+
+    @Test("recognizes select first sentence")
+    func selectFirstSentenceCommands() {
+        #expect(DictationCommand.parse("select first sentence") == .selectFirstSentence)
+        #expect(DictationCommand.parse("select the first sentence") == .selectFirstSentence)
+        #expect(DictationCommand.parse("Select first sentence.") == .selectFirstSentence)
+        #expect(DictationCommand.parse("please select the first sentence") == .selectFirstSentence)
+        #expect(DictationCommand.parse("highlight first sentence") == .selectFirstSentence)
+        // Post-process ITN rewrites first → 1st before command parse
+        #expect(DictationCommand.parse("select 1st sentence") == .selectFirstSentence)
+        #expect(DictationCommand.parse("select the 1st sentence") == .selectFirstSentence)
+        #expect(DictationCommand.parse("highlight 1st sentence") == .selectFirstSentence)
+    }
+
+    @Test("recognizes select first paragraph")
+    func selectFirstParagraphCommands() {
+        #expect(DictationCommand.parse("select first paragraph") == .selectFirstParagraph)
+        #expect(DictationCommand.parse("select the first paragraph") == .selectFirstParagraph)
+        #expect(DictationCommand.parse("Select first paragraph.") == .selectFirstParagraph)
+        #expect(DictationCommand.parse("please select the first paragraph") == .selectFirstParagraph)
+        #expect(DictationCommand.parse("highlight first paragraph") == .selectFirstParagraph)
+        // Post-process ITN rewrites first → 1st before command parse
+        #expect(DictationCommand.parse("select 1st paragraph") == .selectFirstParagraph)
+        #expect(DictationCommand.parse("select the 1st paragraph") == .selectFirstParagraph)
+        #expect(DictationCommand.parse("highlight 1st paragraph") == .selectFirstParagraph)
     }
 
     @Test("last line selection boundaries (content after last \\n, no leading separator)")

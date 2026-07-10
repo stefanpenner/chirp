@@ -46,6 +46,19 @@ struct DictationDictionaryTests {
             #expect(DictationDictionary.apply("from hugging face") == "from Hugging Face")
             #expect(DictationDictionary.apply("metrics in data dog") == "metrics in Datadog")
             #expect(DictationDictionary.apply("setup c i c d") == "setup CI/CD")
+            // Low-risk ASR confusions (coding / web stack)
+            #expect(DictationDictionary.apply("open pull request") == "open PR")
+            #expect(DictationDictionary.apply("use next j s") == "use Next.js")
+            #expect(DictationDictionary.apply("build fast a p i") == "build FastAPI")
+            #expect(DictationDictionary.apply("style with tail wind") == "style with Tailwind")
+            #expect(DictationDictionary.apply("install home brew") == "install Homebrew")
+            #expect(DictationDictionary.apply("train py torch") == "train PyTorch")
+            #expect(DictationDictionary.apply("run l l m") == "run LLM")
+            #expect(DictationDictionary.apply("configure web pack") == "configure webpack")
+            #expect(DictationDictionary.apply("open vs codium") == "open VSCodium")
+            #expect(DictationDictionary.apply("use cloud flare") == "use Cloudflare")
+            #expect(DictationDictionary.apply("deploy super base") == "deploy Supabase")
+            #expect(DictationDictionary.apply("use fire base") == "use Firebase")
         }
     }
 
@@ -58,6 +71,9 @@ struct DictationDictionaryTests {
             #expect(DictationDictionary.apply("elastic search index") == "Elasticsearch index")
             #expect(DictationDictionary.apply("hugging face model") == "Hugging Face model")
             #expect(DictationDictionary.apply("react native and type script") == "React Native and TypeScript")
+            #expect(DictationDictionary.apply("fast a p i server") == "FastAPI server")
+            #expect(DictationDictionary.apply("next j s app") == "Next.js app")
+            #expect(DictationDictionary.apply("pull request ready") == "PR ready")
         }
     }
 

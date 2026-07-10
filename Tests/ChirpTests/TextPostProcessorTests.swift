@@ -270,8 +270,9 @@ struct TextPostProcessorTests {
 
     @Test("Spoken symbols slash asterisk underscore")
     func spokenSymbols() {
-        #expect(TextPostProcessor.process("docs slash readme") == "docs/readme")
-        #expect(TextPostProcessor.process("path forward slash bin") == "path/bin")
+        // Mid-phrase slash keeps space before / when after a word ("docs /readme").
+        #expect(TextPostProcessor.process("docs slash readme") == "docs /readme")
+        #expect(TextPostProcessor.process("path forward slash bin") == "path /bin")
         #expect(TextPostProcessor.process("star asterisk note").contains("*"))
         #expect(TextPostProcessor.process("file underscore name").contains("_"))
         #expect(TextPostProcessor.process("a plus sign b").contains("+"))
@@ -297,8 +298,9 @@ struct TextPostProcessorTests {
         // Leading absolute path: "slash usr slash bin" → "/usr/bin"
         #expect(TextPostProcessor.process("slash usr slash bin") == "/usr/bin")
         #expect(TextPostProcessor.process("forward slash usr slash local") == "/usr/local")
-        // Mid-phrase slash glues path segments (same as "docs slash readme" → "docs/readme").
-        #expect(TextPostProcessor.process("cd slash tmp") == "cd/tmp")
+        // Absolute path after a word: keep space before / ("cd /tmp", not "cd/tmp").
+        #expect(TextPostProcessor.process("cd slash tmp") == "cd /tmp")
+        #expect(TextPostProcessor.process("cd slash usr slash local") == "cd /usr/local")
         // Parent path: "dot dot slash" → "../"
         #expect(TextPostProcessor.process("dot dot slash src") == "../src")
         #expect(TextPostProcessor.process("dot dot forward slash src") == "../src")
@@ -405,6 +407,23 @@ struct TextPostProcessorTests {
         // Minutes / o'clock still work alongside ranges
         #expect(TextPostProcessor.process("three thirty pm") == "3:30 p.m.")
         #expect(TextPostProcessor.process("three o'clock") == "3:00")
+    }
+
+    @Test("Light ITN formats cardinal number ranges without am/pm")
+    func lightITNCardinalRanges() {
+        // Spoken bounds → digits with hyphen; keep optional "from"
+        #expect(TextPostProcessor.process("from ten to twenty") == "from 10-20")
+        #expect(TextPostProcessor.process("from 10 to 20") == "from 10-20")
+        #expect(TextPostProcessor.process("10 to 20") == "10-20")
+        #expect(TextPostProcessor.process("three through five") == "3-5")
+        #expect(TextPostProcessor.process("one until ten") == "1-10")
+        // Time ranges must NOT be stolen by cardinal ranges
+        #expect(TextPostProcessor.process("from three to five pm") == "from 3-5 p.m.")
+        #expect(TextPostProcessor.process("three to five p.m.") == "3-5 p.m.")
+        #expect(TextPostProcessor.process("from 3 to 5 pm") == "from 3-5 p.m.")
+        // Bare meeting time still works
+        #expect(TextPostProcessor.process("meeting at three pm") == "meeting at 3 p.m.")
+        #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")
     }
 
     @Test("Light ITN formats percent and dollars")
