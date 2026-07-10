@@ -161,6 +161,18 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("one more thing") == "one more thing")
     }
 
+    @Test("Light ITN formats percent and dollars")
+    func lightITNPercentCurrency() {
+        #expect(TextPostProcessor.process("about 50 percent done") == "about 50% done")
+        #expect(TextPostProcessor.process("fifty percent complete") == "50% complete")
+        #expect(TextPostProcessor.process("costs 20 dollars") == "costs $20")
+        #expect(TextPostProcessor.process("pay twenty dollars now") == "pay $20 now")
+        #expect(TextPostProcessor.process("one dollar please").contains("$1"))
+        // Bare numbers / words without unit stay put
+        #expect(TextPostProcessor.process("one more thing") == "one more thing")
+        #expect(TextPostProcessor.process("percent of cases") == "percent of cases")
+    }
+
 
     @Test("Does not drop bare function words as whole utterance")
     func keepsBareFunctionWords() {

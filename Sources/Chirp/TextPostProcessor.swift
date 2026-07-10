@@ -165,7 +165,10 @@ enum TextPostProcessor {
     ]
 
     private static func applyLightITN(_ text: String) -> String {
-        applyTimeITN(text)
+        var result = applyTimeITN(text)
+        result = applyPercentITN(result)
+        result = applyCurrencyITN(result)
+        return result
     }
 
     private static func applyTimeITN(_ text: String) -> String {
@@ -183,6 +186,62 @@ enum TextPostProcessor {
             let hour = spokenNumbers[hourRaw] ?? hourRaw
             let ap = result[apRange].lowercased()
             result.replaceSubrange(fullRange, with: "\(hour) \(ap).m.")
+        }
+        return result
+    }
+
+    /// "50 percent" / "fifty percent" → "50%" (digits or small spoken numbers only).
+    private static let percentITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|\d{1,3})\s+percent\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let extendedSpokenNumbers: [String: String] = {
+        var m = spokenNumbers
+        m["twenty"] = "20"; m["thirty"] = "30"; m["forty"] = "40"
+        m["fifty"] = "50"; m["sixty"] = "60"; m["seventy"] = "70"
+        m["eighty"] = "80"; m["ninety"] = "90"
+        return m
+    }()
+
+    private static func applyPercentITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = percentITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let raw = String(result[numRange]).lowercased()
+            let digits = extendedSpokenNumbers[raw] ?? raw
+            result.replaceSubrange(fullRange, with: "\(digits)%")
+        }
+        return result
+    }
+
+    /// "20 dollars" / "twenty dollars" → "$20". Avoids bare "one" without dollars.
+    private static let currencyITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|\d{1,6})\s+dollars?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static func applyCurrencyITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = currencyITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let raw = String(result[numRange]).lowercased()
+            let digits = extendedSpokenNumbers[raw] ?? raw
+            result.replaceSubrange(fullRange, with: "$\(digits)")
         }
         return result
     }
