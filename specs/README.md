@@ -16,7 +16,8 @@ tlc specs/PipelineRebuild.tla
 | `PeekCommit` | stale peeks discarded via commitGen | `AppState` peek loop |
 | `PipelineRebuild` | defer pipeline rebuild mid-session | `PipelineRebuildDecision` |
 | `SegmentJoin` | multi-utterance separators (space vs ". ") | `SegmentJoiner` |
-| `ScratchUndo` | spoken "scratch that" undoes last segment | `DictationCommand` |
+| `ScratchUndo` | spoken "scratch that" undoes last segment (single-level) | `DictationCommand` |
+| `EditStack` | multi-level undo/redo stack + wipe on destructive edit | `EditStack` |
 | `EditCommands` | scratch / delete-word / clear-all over transcript | `DictationCommand` |
 | `ConfidenceGate` | accept/reject ASR when token log-probs exist | `ConfidenceGate` |
 | `ClipboardCommands` | copy that / paste that vs session buffer | `DictationCommand` |

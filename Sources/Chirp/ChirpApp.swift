@@ -126,9 +126,8 @@ public final class AppState {
     /// Peek previews that were started before the latest commit are discarded.
     private var commitGen = 0
 
-    /// Character count of the last typed delta (for "scratch that" undo).
-    /// Includes any join separator SegmentJoiner prepended.
-    private var lastTypedCount = 0
+    /// Multi-level undo/redo stack of typed deltas (spoken scratch/redo that).
+    private var editStack = EditStack()
 
     /// Normalized form of the last committed non-command segment (dedup echoes).
     private var lastCommittedNormalized = ""
@@ -515,7 +514,7 @@ public final class AppState {
         transcribedText = ""
         speculativeText = ""
         commitGen = 0
-        lastTypedCount = 0
+        editStack.clear()
         lastCommittedNormalized = ""
         recordingSession &+= 1
         let session = recordingSession
@@ -616,10 +615,12 @@ public final class AppState {
                         self.performCopyThat()
                     case .pasteThat:
                         self.performPasteThat(typesIncrementally: true)
+                    case .redoThat:
+                        self.performRedoThat(typesIncrementally: true)
                     case .none:
                         self.transcribedText = remaining
                         self.textInserter.typeText(remaining)
-                        self.lastTypedCount = remaining.count
+                        self.editStack.push(remaining)
                         self.lastCommittedNormalized = TranscriptNormalize.key(remaining)
                     }
                 }
@@ -656,6 +657,8 @@ public final class AppState {
             performCopyThat()
         case .pasteThat:
             performPasteThat(typesIncrementally: typesIncrementally)
+        case .redoThat:
+            performRedoThat(typesIncrementally: typesIncrementally)
         case .none:
             // Skip consecutive identical segments (VAD/ASR echo under noise)
             let norm = TranscriptNormalize.key(text)
@@ -668,7 +671,7 @@ public final class AppState {
             if typesIncrementally {
                 textInserter.typeText(joined.delta)
             }
-            lastTypedCount = joined.delta.count
+            editStack.push(joined.delta)
             lastCommittedNormalized = norm
         }
     }
@@ -678,7 +681,7 @@ public final class AppState {
         if typesIncrementally {
             textInserter.typeText(s)
         }
-        lastTypedCount = s.count
+        editStack.push(s)
         lastCommittedNormalized = ""
     }
 
@@ -695,22 +698,32 @@ public final class AppState {
         textInserter.pasteFromClipboard()
         if let clip = textInserter.clipboardString(), !clip.isEmpty {
             transcribedText += clip
-            lastTypedCount = clip.count
+            editStack.push(clip)
             lastCommittedNormalized = ""
         }
     }
 
-    /// Undo the last typed segment (Dragon-style "scratch that").
+    /// Undo the last typed segment (multi-level; Dragon-style "scratch that").
     private func performScratchThat(typesIncrementally: Bool) {
-        guard lastTypedCount > 0 else { return }
-        let remove = min(lastTypedCount, transcribedText.count)
+        guard let delta = editStack.undo() else { return }
+        let remove = min(delta.count, transcribedText.count)
         if remove > 0 {
             transcribedText = String(transcribedText.dropLast(remove))
             if typesIncrementally {
                 textInserter.deleteBackward(count: remove)
             }
         }
-        lastTypedCount = 0
+        lastCommittedNormalized = ""
+    }
+
+    /// Redo the last scratched segment ("redo that").
+    private func performRedoThat(typesIncrementally: Bool) {
+        guard let delta = editStack.redo() else { return }
+        transcribedText += delta
+        if typesIncrementally {
+            textInserter.typeText(delta)
+        }
+        lastCommittedNormalized = ""
     }
 
     /// Delete the last whitespace-delimited word from the session transcript.
@@ -730,11 +743,10 @@ public final class AppState {
             if typesIncrementally, remove > 0 {
                 textInserter.deleteBackward(count: remove)
             }
-            lastTypedCount = 0
+            editStack.clear()
             return
         }
         let wordStart = buffer.index(after: lastSpace)
-        let removeCount = transcribedText.distance(from: wordStart, to: transcribedText.endIndex)
         // Also remove one trailing space before the word if present
         var start = wordStart
         if start > transcribedText.startIndex {
@@ -748,8 +760,9 @@ public final class AppState {
         if typesIncrementally, remove > 0 {
             textInserter.deleteBackward(count: remove)
         }
-        lastTypedCount = 0
-        _ = removeCount
+        // Destructive edit — stack no longer matches buffer offsets
+        editStack.clear()
+        lastCommittedNormalized = ""
     }
 
     /// Clear the entire session transcript (spoken "clear all").
@@ -760,7 +773,7 @@ public final class AppState {
         if typesIncrementally {
             textInserter.deleteBackward(count: remove)
         }
-        lastTypedCount = 0
+        editStack.clear()
         lastCommittedNormalized = ""
     }
 
@@ -836,7 +849,7 @@ public final class AppState {
         recordingSession &+= 1  // discard in-flight async work
         transcribedText = ""
         speculativeText = ""
-        lastTypedCount = 0
+        editStack.clear()
         lastCommittedNormalized = ""
         audioLevel = 0
         processingPhase = .none

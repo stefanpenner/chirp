@@ -19,6 +19,8 @@ enum DictationCommand: Equatable, Sendable {
     case copyThat
     /// Paste from the clipboard into the focused app.
     case pasteThat
+    /// Redo the last scratched segment.
+    case redoThat
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -50,6 +52,8 @@ enum DictationCommand: Equatable, Sendable {
             return .copyThat
         case "paste that", "paste it", "paste this":
             return .pasteThat
+        case "redo that", "redo it", "restore that", "undo undo":
+            return .redoThat
         default:
             return .none
         }
@@ -59,7 +63,8 @@ enum DictationCommand: Equatable, Sendable {
 
     /// User-facing command catalog for Settings / help (say → effect).
     static let helpCatalog: [(say: String, effect: String)] = [
-        ("scratch that", "Undo last phrase"),
+        ("scratch that", "Undo last phrase (multi-level)"),
+        ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
         ("clear all", "Wipe session text"),
         ("press enter", "Insert Return"),

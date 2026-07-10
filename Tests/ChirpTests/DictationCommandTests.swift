@@ -45,6 +45,14 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("paste this") == .pasteThat)
     }
 
+    @Test("recognizes redo that")
+    func redoThat() {
+        #expect(DictationCommand.parse("redo that") == .redoThat)
+        #expect(DictationCommand.parse("Redo it.") == .redoThat)
+        #expect(DictationCommand.parse("restore that") == .redoThat)
+        #expect(DictationCommand.parse("undo undo") == .redoThat)
+    }
+
     @Test("normal text is not a command")
     func normalText() {
         #expect(DictationCommand.parse("hello world") == .none)
