@@ -18,6 +18,7 @@ enum TextPostProcessor {
         var result = text
         result = removeFillersAndRepetitions(result)
         result = applyPhraseFixes(result)
+        result = applySpokenTerminalPunct(result)
         result = DictationDictionary.apply(result)
         result = applyLightITN(result)
         result = cleanWhitespace(result)
@@ -77,11 +78,9 @@ enum TextPostProcessor {
             (#"\bsend (?:a )?mail\b"#, "send email"),
             (#"\bopen (?:the )?app store\b"#, "open the App Store"),
             // Desktop dictation: spoken punctuation / structure (Mac Voice Control style)
-            (#"\s+period$"#, "."),
-            (#"\s+full stop$"#, "."),
+            // Terminal punct (period / full stop / ? / !) is handled in
+            // applySpokenTerminalPunct so mid-segment commands work too.
             (#"\s+comma\b\s*"#, ", "),
-            (#"\s+question mark$"#, "?"),
-            (#"\s+exclamation (?:mark|point)$"#, "!"),
             (#"\s+colon\b\s*"#, ": "),
             (#"\s+semicolon\b\s*"#, "; "),
             (#"\s+ellipsis\b"#, "…"),
@@ -146,6 +145,132 @@ enum TextPostProcessor {
             result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
         }
         return result
+    }
+
+    // MARK: - Mid-segment spoken terminal punctuation
+
+    /// Safe multi-word terminal commands (almost never content words).
+    private static let safeTerminalCommands: [(phrase: String, mid: String, end: String)] = [
+        ("full stop", ". ", "."),
+        ("question mark", "? ", "?"),
+        ("exclamation mark", "! ", "!"),
+        ("exclamation point", "! ", "!"),
+    ]
+
+    /// Words before "period" that mean the content noun, not a command.
+    private static let periodContentPrev: Set<String> = [
+        "the", "a", "an", "this", "that", "time", "grace", "trial", "waiting",
+        "short", "long", "class", "first", "second", "third", "fourth",
+        "cooling", "busy", "rest", "lunch", "peak", "open", "closed",
+        "warranty", "notice", "transition", "probation",
+    ]
+
+    /// Words after "period" that mean the content noun, not a command.
+    private static let periodContentNext: Set<String> = [
+        "of", "is", "was", "were", "when", "between", "from", "in", "to",
+        "for", "and", "or", "as", "end", "ends", "ended", "ending",
+        "start", "starts", "started", "starting", "over", "under",
+        "piece", "pieces", "drama", "table",
+    ]
+
+    /// Rewrite spoken terminal punct mid-segment and trailing.
+    /// `"hello period next"` → `"hello. next"` (then capitalizeAfter → `"hello. Next"`).
+    /// Keeps content collocations: `"the period is over"`.
+    private static func applySpokenTerminalPunct(_ text: String) -> String {
+        var result = text
+        for cmd in safeTerminalCommands {
+            result = replaceSpokenCommand(result, phrase: cmd.phrase, mid: cmd.mid, end: cmd.end)
+        }
+        result = replaceSpokenPeriod(result)
+        return result
+    }
+
+    private static func replaceSpokenCommand(
+        _ text: String,
+        phrase: String,
+        mid: String,
+        end: String
+    ) -> String {
+        let pattern = #"\b"# + NSRegularExpression.escapedPattern(for: phrase) + #"\b"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            return text
+        }
+        let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            guard let matchRange = Range(match.range, in: result) else { continue }
+            // Require a word boundary with space before (or start) — phrase already \b
+            // Drop one leading whitespace so "hello full stop" → "hello."
+            var replaceStart = matchRange.lowerBound
+            if replaceStart > result.startIndex {
+                let before = result.index(before: replaceStart)
+                if result[before].isWhitespace {
+                    replaceStart = before
+                }
+            }
+            let after = matchRange.upperBound
+            let trailing = result[after...].allSatisfy { $0.isWhitespace || $0.isNewline }
+            let replacement = trailing ? end : mid
+            // Consume one following space when mid so we don't double-space
+            var replaceEnd = after
+            if !trailing, replaceEnd < result.endIndex, result[replaceEnd].isWhitespace {
+                replaceEnd = result.index(after: replaceEnd)
+            }
+            result.replaceSubrange(replaceStart..<replaceEnd, with: replacement)
+        }
+        return result
+    }
+
+    private static func replaceSpokenPeriod(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"\bperiod\b"#,
+            options: .caseInsensitive
+        ) else { return text }
+
+        let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            guard let matchRange = Range(match.range, in: result) else { continue }
+            let prev = wordBefore(result, before: matchRange.lowerBound)?.lowercased()
+            let next = wordAfter(result, after: matchRange.upperBound)?.lowercased()
+
+            // Content collocations stay as the word "period"
+            if let prev, periodContentPrev.contains(prev) { continue }
+            if let next, periodContentNext.contains(next) { continue }
+
+            var replaceStart = matchRange.lowerBound
+            if replaceStart > result.startIndex {
+                let before = result.index(before: replaceStart)
+                if result[before].isWhitespace {
+                    replaceStart = before
+                }
+            }
+            let after = matchRange.upperBound
+            let trailing = result[after...].allSatisfy { $0.isWhitespace || $0.isNewline }
+            let replacement = trailing ? "." : ". "
+            var replaceEnd = after
+            if !trailing, replaceEnd < result.endIndex, result[replaceEnd].isWhitespace {
+                replaceEnd = result.index(after: replaceEnd)
+            }
+            result.replaceSubrange(replaceStart..<replaceEnd, with: replacement)
+        }
+        return result
+    }
+
+    private static func wordBefore(_ text: String, before index: String.Index) -> String? {
+        let prefix = text[text.startIndex..<index]
+        let parts = prefix.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+        return parts.last.map(String.init)
+    }
+
+    private static func wordAfter(_ text: String, after index: String.Index) -> String? {
+        let suffix = text[index...]
+        let parts = suffix.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+        return parts.first.map(String.init)
     }
 
     /// Light inverse text normalization for dictation readability.

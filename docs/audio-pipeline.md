@@ -54,8 +54,10 @@ VAD stays on CPU.
 Multi-utterance joins use `SegmentJoiner` (insert ". " when a new
 capitalized clause follows bare text; suppress before proper nouns /
 dict products like GitHub). Light ITN: times, `50 percent`→`50%`,
-`20 dollars`→`$20`. Spoken `new line` / `new paragraph` rewrite in
-`TextPostProcessor`; newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
+`20 dollars`→`$20`. Spoken terminal punct works mid-segment
+(`hello period next` → `hello. Next`) with content-word guards.
+Spoken `new line` / `new paragraph` rewrite in `TextPostProcessor`;
+newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
 (built-in tech phrases + UserDefaults `chirp.dictationDictionary`).
 Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** — multi-level undo of typed segments (`EditStack`)

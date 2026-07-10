@@ -599,24 +599,25 @@ public final class AppState {
                 if typesIncrementally {
                     self.applyCommittedText(remaining, typesIncrementally: true)
                 } else {
-                    // Non-incremental: pipeline returns full processed text on flush
+                    // Non-incremental: pipeline returns full processed text on flush.
+                    // Commands still mutate buffer/stack; do not force incremental typing.
                     switch DictationCommand.parse(remaining) {
                     case .scratchThat:
-                        self.performScratchThat(typesIncrementally: true)
+                        self.performScratchThat(typesIncrementally: false)
                     case .deleteLastWord:
-                        self.performDeleteLastWord(typesIncrementally: true)
+                        self.performDeleteLastWord(typesIncrementally: false)
                     case .clearAll:
-                        self.performClearAll(typesIncrementally: true)
+                        self.performClearAll(typesIncrementally: false)
                     case .pressEnter:
-                        self.performKeyInsert("\n", typesIncrementally: true)
+                        self.performKeyInsert("\n", typesIncrementally: false)
                     case .pressTab:
-                        self.performKeyInsert("\t", typesIncrementally: true)
+                        self.performKeyInsert("\t", typesIncrementally: false)
                     case .copyThat:
                         self.performCopyThat()
                     case .pasteThat:
-                        self.performPasteThat(typesIncrementally: true)
+                        self.performPasteThat(typesIncrementally: false)
                     case .redoThat:
-                        self.performRedoThat(typesIncrementally: true)
+                        self.performRedoThat(typesIncrementally: false)
                     case .none:
                         self.transcribedText = remaining
                         self.textInserter.typeText(remaining)

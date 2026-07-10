@@ -120,8 +120,22 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("Wait comma no") == "Wait, no")
         #expect(TextPostProcessor.process("are you there question mark") == "are you there?")
         #expect(TextPostProcessor.process("wow exclamation mark") == "wow!")
-        // Word "period" mid-sentence (not trailing) stays
+        // Content-word collocations keep the word "period"
         #expect(TextPostProcessor.process("the period is over") == "the period is over")
+        #expect(TextPostProcessor.process("grace period ends soon").contains("period"))
+    }
+
+    @Test("Mid-segment spoken terminal punctuation")
+    func midSegmentTerminalPunct() {
+        #expect(TextPostProcessor.process("hello period next sentence") == "hello. Next sentence")
+        #expect(TextPostProcessor.process("stop full stop go on") == "stop. Go on")
+        #expect(TextPostProcessor.process("are you there question mark yes") == "are you there? Yes")
+        #expect(TextPostProcessor.process("wow exclamation mark great") == "wow! Great")
+        // Multi-clause one breath
+        #expect(
+            TextPostProcessor.process("first clause period second clause period")
+                == "first clause. Second clause."
+        )
     }
 
     @Test("Spoken new line and paragraph commands")
