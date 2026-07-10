@@ -1,17 +1,25 @@
 // SpokenDateITN.swift — Light inverse text normalization for spoken dates.
-// Runs after SpokenNumberITN so ordinals may already be "15th".
+// Runs in the light-ITN pipeline (before/after cardinals as needed).
 //
 // Examples:
 //   "march fifth" → "March 5"
-//   "march the 5th" → "March 5"
 //   "july 15th twenty twenty four" → "July 15, 2024"
 //   "in twenty twenty six" → "in 2026"
+//   "tomorrow" / "next monday" → absolute dates (clock injectable for tests)
 //
 // Safe: month alone ("march on") is not rewritten; needs a day or year span.
 
 import Foundation
 
 enum SpokenDateITN {
+    /// Injectable clock for relative dates (tests pin this; production uses `Date()`).
+    /// `nonisolated(unsafe)` — tests set on the test thread only.
+    nonisolated(unsafe) static var nowProvider: () -> Date = { Date() }
+
+    /// Reset clock to system time (call after tests that override).
+    static func resetClock() {
+        nowProvider = { Date() }
+    }
     private static let months: [String: String] = [
         "january": "January", "february": "February", "march": "March",
         "april": "April", "may": "May", "june": "June",
@@ -57,17 +65,17 @@ enum SpokenDateITN {
         "sunday": "Sunday",
     ]
 
-    /// Relative day words kept as words but capitalized for dictation polish.
-    private static let relativeDays: [String: String] = [
-        "today": "today",
-        "tomorrow": "tomorrow",
-        "yesterday": "yesterday",
+    /// Calendar weekday: Sunday=1 … Saturday=7 (Calendar.Component.weekday).
+    private static let weekdayNumbers: [String: Int] = [
+        "sunday": 1, "monday": 2, "tuesday": 3, "wednesday": 4,
+        "thursday": 5, "friday": 6, "saturday": 7,
     ]
 
-    /// Rewrite spoken month/day(/year), standalone years, and weekdays.
+    /// Rewrite spoken month/day(/year), relative dates, years, and weekdays.
     static func apply(_ text: String) -> String {
         let parts = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         guard !parts.isEmpty else { return text }
+        let now = nowProvider()
 
         var out: [String] = []
         var i = 0
@@ -81,6 +89,26 @@ enum SpokenDateITN {
                     i += consumed
                     continue
                 }
+            }
+
+            // next/this/last + weekday → absolute date
+            if (core == "next" || core == "this" || core == "last"),
+               i + 1 < parts.count,
+               let wd = weekdayNumbers[normalize(parts[i + 1])] {
+                let date = relativeWeekday(wd, mode: core, from: now)
+                let trailing = trailingPunct(parts[i + 1])
+                out.append(formatAbsoluteDate(date) + trailing)
+                i += 2
+                continue
+            }
+
+            // today / tomorrow / yesterday → absolute date
+            if core == "today" || core == "tomorrow" || core == "yesterday" {
+                let date = relativeDay(core, from: now)
+                let trailing = trailingPunct(parts[i])
+                out.append(formatAbsoluteDate(date) + trailing)
+                i += 1
+                continue
             }
 
             // Standalone year: "twenty twenty four" / "two thousand twenty six"
@@ -98,20 +126,56 @@ enum SpokenDateITN {
                 continue
             }
 
-            // Relative days stay lowercase mid-sentence; capitalize only at start
-            // of string or after newline (handled lightly here as word form).
-            if relativeDays[core] != nil {
-                // Keep as-is (already lowercase spoken); no absolute date conversion
-                // so tests stay deterministic without a clock.
-                out.append(parts[i])
-                i += 1
-                continue
-            }
-
             out.append(parts[i])
             i += 1
         }
         return out.joined(separator: " ")
+    }
+
+    // MARK: - Relative dates
+
+    static func formatAbsoluteDate(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "MMMM d, yyyy"
+        return f.string(from: date)
+    }
+
+    static func relativeDay(_ word: String, from now: Date) -> Date {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let start = cal.startOfDay(for: now)
+        switch word {
+        case "today": return start
+        case "tomorrow": return cal.date(byAdding: .day, value: 1, to: start) ?? start
+        case "yesterday": return cal.date(byAdding: .day, value: -1, to: start) ?? start
+        default: return start
+        }
+    }
+
+    /// next = strictly after today; this = today if match else next; last = strictly before today.
+    static func relativeWeekday(_ weekday: Int, mode: String, from now: Date) -> Date {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let start = cal.startOfDay(for: now)
+        let todayWD = cal.component(.weekday, from: start)
+
+        switch mode {
+        case "this":
+            if todayWD == weekday { return start }
+            fallthrough
+        case "next":
+            var delta = weekday - todayWD
+            if delta <= 0 { delta += 7 }
+            return cal.date(byAdding: .day, value: delta, to: start) ?? start
+        case "last":
+            var delta = todayWD - weekday
+            if delta <= 0 { delta += 7 }
+            return cal.date(byAdding: .day, value: -delta, to: start) ?? start
+        default:
+            return start
+        }
     }
 
     // MARK: - Month + day (+ year)

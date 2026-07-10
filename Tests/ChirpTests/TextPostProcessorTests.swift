@@ -193,6 +193,17 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("site dot edu") == "site.edu")
     }
 
+    @Test("Bullet list spoken commands")
+    func bulletLists() {
+        let r = TextPostProcessor.process("buy milk bullet point eggs next bullet bread")
+        #expect(r.contains("•"), "expected bullets in \"\(r)\"")
+        #expect(r.contains("eggs"))
+        #expect(r.contains("bread"))
+        // Avoid false positive on "bullet train"
+        #expect(TextPostProcessor.process("bullet train arrives") == "bullet train arrives"
+                || TextPostProcessor.process("bullet train arrives").contains("bullet train"))
+    }
+
     @Test("Light ITN formats spoken times")
     func lightITN() {
         #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")

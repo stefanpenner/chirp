@@ -101,6 +101,11 @@ enum TextPostProcessor {
             (#"\s+new line\s*"#, "\n"),
             (#"\s+newline\s*"#, "\n"),
             (#"\s+new paragraph\s*"#, "\n\n"),
+            // Bulleted lists (Dragon-style multi-word only — avoid "bullet train")
+            (#"(?:^|\s+)bullet point\s*"#, "\n• "),
+            (#"(?:^|\s+)new bullet\s*"#, "\n• "),
+            (#"(?:^|\s+)next bullet\s*"#, "\n• "),
+            (#"(?:^|\s+)next item\s*"#, "\n• "),
             // Spoken symbols (Mac / Windows dictation style)
             (#"\s+(?:forward\s+)?slash\s+"#, "/"),
             (#"\s+(?:forward\s+)?slash$"#, "/"),

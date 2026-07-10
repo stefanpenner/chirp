@@ -1,6 +1,7 @@
 // SpokenDateITNTests.swift — Light spoken date ITN.
 
 import Testing
+import Foundation
 @testable import Chirp
 
 @Suite("SpokenDateITN")
@@ -54,8 +55,46 @@ struct SpokenDateITNTests {
     @Test("weekday capitalization")
     func weekdays() {
         #expect(SpokenDateITN.apply("meet on monday") == "meet on Monday")
-        #expect(SpokenDateITN.apply("next friday morning") == "next Friday morning")
         #expect(SpokenDateITN.apply("sunday") == "Sunday")
+    }
+
+    @Test("relative days resolve with injectable clock")
+    func relativeDays() {
+        // Pin clock: Wednesday 2026-07-08 UTC
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 7; comps.day = 8
+        comps.hour = 15
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let pinned = cal.date(from: comps)!
+        SpokenDateITN.nowProvider = { pinned }
+        defer { SpokenDateITN.resetClock() }
+
+        #expect(SpokenDateITN.apply("today") == "July 8, 2026")
+        #expect(SpokenDateITN.apply("tomorrow") == "July 9, 2026")
+        #expect(SpokenDateITN.apply("yesterday") == "July 7, 2026")
+        #expect(SpokenDateITN.apply("due tomorrow please") == "due July 9, 2026 please")
+    }
+
+    @Test("next this last weekday")
+    func relativeWeekdays() {
+        // Wednesday 2026-07-08
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 7; comps.day = 8
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let pinned = cal.date(from: comps)!
+        SpokenDateITN.nowProvider = { pinned }
+        defer { SpokenDateITN.resetClock() }
+
+        // Next Friday = July 10
+        #expect(SpokenDateITN.apply("next friday") == "July 10, 2026")
+        // This Wednesday = today
+        #expect(SpokenDateITN.apply("this wednesday") == "July 8, 2026")
+        // Last Monday = July 6
+        #expect(SpokenDateITN.apply("last monday") == "July 6, 2026")
+        // Next Monday = July 13 (not today)
+        #expect(SpokenDateITN.apply("meet next monday") == "meet July 13, 2026")
     }
 }
 
