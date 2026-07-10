@@ -44,6 +44,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **delete last word** — drop trailing word
 - **clear all** — wipe session transcript
 - **press enter** / **press tab** — key inserts
+- **copy that** / **paste that** — clipboard
 First segment auto-capitalizes. Consecutive duplicate segments skipped.
 When sherpa provides token log-probs, `ConfidenceGate` rejects extreme
 low-confidence dumps (`ConfidenceGate.tla`). Spoken `dot com` / `at sign`.

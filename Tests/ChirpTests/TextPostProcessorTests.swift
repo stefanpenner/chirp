@@ -138,6 +138,20 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("site dot io") == "site.io")
     }
 
+    @Test("Expanded spoken punctuation")
+    func expandedPunctuation() {
+        #expect(TextPostProcessor.process("items colon one") == "items: one")
+        #expect(TextPostProcessor.process("wait semicolon go") == "wait; go")
+        #expect(TextPostProcessor.process("open quote hi close quote") == "\u{201C}hi\u{201D}")
+        #expect(TextPostProcessor.process("open paren x close paren") == "(x)")
+        #expect(TextPostProcessor.process("tag hashtag chirp") == "tag#chirp")
+        #expect(TextPostProcessor.process("a and b ampersand c").contains("&"))
+        #expect(TextPostProcessor.process("done ellipsis") == "done…")
+        #expect(TextPostProcessor.process("word em dash word").contains("—"))
+        #expect(TextPostProcessor.process("done full stop") == "Done." ||
+                TextPostProcessor.process("done full stop") == "done.")
+    }
+
     @Test("Light ITN formats spoken times")
     func lightITN() {
         #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")

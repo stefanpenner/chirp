@@ -41,6 +41,18 @@ extension AudioRecording {
     func checkAccessibilityPermission()
     func typeText(_ text: String)
     func deleteBackward(count: Int)
+    /// Copy `text` to the system pasteboard (spoken "copy that").
+    func copyToClipboard(_ text: String)
+    /// Paste from the system pasteboard into the focused app (spoken "paste that").
+    func pasteFromClipboard()
+    /// Current pasteboard string, if any.
+    func clipboardString() -> String?
+}
+
+extension TextInserting {
+    func copyToClipboard(_ text: String) {}
+    func pasteFromClipboard() {}
+    func clipboardString() -> String? { nil }
 }
 
 protocol SpeakerVerifying: Sendable {

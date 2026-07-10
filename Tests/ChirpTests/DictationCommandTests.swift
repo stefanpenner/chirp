@@ -37,6 +37,14 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("press tab") == .pressTab)
     }
 
+    @Test("recognizes copy and paste")
+    func copyPaste() {
+        #expect(DictationCommand.parse("copy that") == .copyThat)
+        #expect(DictationCommand.parse("copy all") == .copyThat)
+        #expect(DictationCommand.parse("paste that") == .pasteThat)
+        #expect(DictationCommand.parse("paste this") == .pasteThat)
+    }
+
     @Test("normal text is not a command")
     func normalText() {
         #expect(DictationCommand.parse("hello world") == .none)

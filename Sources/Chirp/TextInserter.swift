@@ -92,4 +92,29 @@ final class TextInserter: TextInserting {
             }
         }
     }
+
+    func copyToClipboard(_ text: String) {
+        guard !text.isEmpty else { return }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+    }
+
+    func clipboardString() -> String? {
+        NSPasteboard.general.string(forType: .string)
+    }
+
+    /// Paste via ⌘V so the target app's native paste path runs.
+    func pasteFromClipboard() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let vKey: CGKeyCode = 0x09 // kVK_ANSI_V
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true) {
+            keyDown.flags = .maskCommand
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false) {
+            keyUp.flags = .maskCommand
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
 }

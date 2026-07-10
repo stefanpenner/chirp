@@ -327,6 +327,70 @@ struct AppStateTests {
         #expect(inserter.typedTexts.count == 1)
     }
 
+    @Test("copy that puts transcript on clipboard")
+    func copyThatCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["copy that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.copyCallCount > 0 { break }
+        }
+
+        #expect(inserter.copyCallCount == 1)
+        #expect(inserter.clipboard == "Hello world")
+        #expect(state.transcribedText == "Hello world")
+    }
+
+    @Test("paste that inserts clipboard into session")
+    func pasteThatCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        inserter.clipboard = " world"
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["paste that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.pasteCallCount > 0 { break }
+        }
+
+        #expect(inserter.pasteCallCount == 1)
+        #expect(state.transcribedText == "Hello world")
+    }
+
     @Test("press enter inserts newline")
     func pressEnterCommand() async throws {
         let mock = MockTranscriber()

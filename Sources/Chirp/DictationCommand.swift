@@ -15,6 +15,10 @@ enum DictationCommand: Equatable, Sendable {
     case pressEnter
     /// Insert a tab.
     case pressTab
+    /// Copy session transcript to the clipboard.
+    case copyThat
+    /// Paste from the clipboard into the focused app.
+    case pasteThat
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -42,6 +46,10 @@ enum DictationCommand: Equatable, Sendable {
             return .pressEnter
         case "press tab", "hit tab", "press tab key":
             return .pressTab
+        case "copy that", "copy all", "copy it", "copy this":
+            return .copyThat
+        case "paste that", "paste it", "paste this":
+            return .pasteThat
         default:
             return .none
         }

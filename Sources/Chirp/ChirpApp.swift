@@ -612,6 +612,10 @@ public final class AppState {
                         self.performKeyInsert("\n", typesIncrementally: true)
                     case .pressTab:
                         self.performKeyInsert("\t", typesIncrementally: true)
+                    case .copyThat:
+                        self.performCopyThat()
+                    case .pasteThat:
+                        self.performPasteThat(typesIncrementally: true)
                     case .none:
                         self.transcribedText = remaining
                         self.textInserter.typeText(remaining)
@@ -648,6 +652,10 @@ public final class AppState {
             performKeyInsert("\n", typesIncrementally: typesIncrementally)
         case .pressTab:
             performKeyInsert("\t", typesIncrementally: typesIncrementally)
+        case .copyThat:
+            performCopyThat()
+        case .pasteThat:
+            performPasteThat(typesIncrementally: typesIncrementally)
         case .none:
             // Skip consecutive identical segments (VAD/ASR echo under noise)
             let norm = TranscriptNormalize.key(text)
@@ -672,6 +680,24 @@ public final class AppState {
         }
         lastTypedCount = s.count
         lastCommittedNormalized = ""
+    }
+
+    /// Copy session transcript to the pasteboard (does not type).
+    private func performCopyThat() {
+        let text = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        textInserter.copyToClipboard(text)
+    }
+
+    /// Paste clipboard into the focused app; also append into session buffer when known.
+    private func performPasteThat(typesIncrementally: Bool) {
+        // Prefer native ⌘V path so apps get their own paste handling.
+        textInserter.pasteFromClipboard()
+        if let clip = textInserter.clipboardString(), !clip.isEmpty {
+            transcribedText += clip
+            lastTypedCount = clip.count
+            lastCommittedNormalized = ""
+        }
     }
 
     /// Undo the last typed segment (Dragon-style "scratch that").

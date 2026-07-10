@@ -136,6 +136,9 @@ final class MockTextInserter: TextInserting {
     var accessibilityChecked = false
     var typedTexts: [String] = []
     var deletedCounts: [Int] = []
+    var clipboard: String = ""
+    var pasteCallCount = 0
+    var copyCallCount = 0
 
     func checkAccessibilityPermission() {
         accessibilityChecked = true
@@ -144,6 +147,22 @@ final class MockTextInserter: TextInserting {
     func typeText(_ text: String) {
         guard !text.isEmpty else { return }
         typedTexts.append(text)
+    }
+
+    func copyToClipboard(_ text: String) {
+        copyCallCount += 1
+        clipboard = text
+    }
+
+    func pasteFromClipboard() {
+        pasteCallCount += 1
+        if !clipboard.isEmpty {
+            typedTexts.append(clipboard)
+        }
+    }
+
+    func clipboardString() -> String? {
+        clipboard.isEmpty ? nil : clipboard
     }
 
     func deleteBackward(count: Int) {
