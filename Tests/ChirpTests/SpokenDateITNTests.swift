@@ -68,7 +68,11 @@ struct SpokenDateITNTests {
         cal.timeZone = TimeZone(identifier: "UTC")!
         let pinned = cal.date(from: comps)!
         SpokenDateITN.nowProvider = { pinned }
-        defer { SpokenDateITN.resetClock() }
+        SpokenDateITN.timeZoneProvider = { TimeZone(identifier: "UTC")! }
+        defer {
+            SpokenDateITN.resetClock()
+            SpokenDateITN.resetTimeZone()
+        }
 
         #expect(SpokenDateITN.apply("today") == "July 8, 2026")
         #expect(SpokenDateITN.apply("tomorrow") == "July 9, 2026")
@@ -85,7 +89,11 @@ struct SpokenDateITNTests {
         cal.timeZone = TimeZone(identifier: "UTC")!
         let pinned = cal.date(from: comps)!
         SpokenDateITN.nowProvider = { pinned }
-        defer { SpokenDateITN.resetClock() }
+        SpokenDateITN.timeZoneProvider = { TimeZone(identifier: "UTC")! }
+        defer {
+            SpokenDateITN.resetClock()
+            SpokenDateITN.resetTimeZone()
+        }
 
         // Next Friday = July 10
         #expect(SpokenDateITN.apply("next friday") == "July 10, 2026")

@@ -14,11 +14,21 @@
 import Foundation
 
 enum TextPostProcessor {
+    /// Session list counter for "next number" across segments. Reset on new recording.
+    /// `nonisolated(unsafe)` — single consumer thread / actor serializes access in practice.
+    nonisolated(unsafe) static var sessionListCounter: Int = 1
+
+    /// Call at the start of each hold-to-talk session (pipeline resetVAD).
+    static func resetSessionFormatState() {
+        sessionListCounter = 1
+    }
+
     static func process(_ text: String) -> String {
         var result = text
         result = removeFillersAndRepetitions(result)
         result = applyPhraseFixes(result)
         result = applySpokenTerminalPunct(result)
+        result = SpokenListITN.apply(result, counter: &sessionListCounter)
         result = DictationDictionary.apply(result)
         result = applyLightITN(result)
         result = cleanWhitespace(result)

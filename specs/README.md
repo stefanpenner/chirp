@@ -19,6 +19,7 @@ tlc specs/PipelineRebuild.tla
 | `EditStack` | multi-level undo/redo + DropSuffix (delete-last-word) | `EditStack` |
 | `CapsMode` | sticky caps mode + one-shot cap that | `CapsMode` / `CapsTransform` |
 | `ReplaceThat` | multi-step replace: arm then next content swaps last | `ReplaceDecision` |
+| `ListCounter` | session numbered-list index for next number | `SpokenListITN` |
 | `ScratchUndo` | **legacy** single-level scratch (superseded by `EditStack`) | — |
 | `EditCommands` | coarse length model of edit commands (see `EditStack` for stack) | `DictationCommand` |
 | `ConfidenceGate` | accept/reject ASR when token log-probs exist | `ConfidenceGate` |

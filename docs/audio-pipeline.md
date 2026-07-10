@@ -63,7 +63,9 @@ dict products like GitHub). Light ITN: times, spoken cardinals (`one hundred`→
 `Monday`, bare `may I` stays), `50 percent`→`50%`, `20 dollars`→`$20`.
 Bare `one`/`two` stay words. Spoken symbols: `slash`→`/`, `asterisk`→`*`,
 `underscore`→`_`, fractions `one half`→`½`. Lists: `bullet point` /
-`next bullet` → `•`. Spoken terminal punct works mid-segment
+`next bullet` → `•`; `number one` / `next number` → `1.` / `2.`
+(session counter resets each recording). Relative dates use the local
+timezone. Spoken terminal punct works mid-segment
 (`hello period next` → `hello. Next`) with content-word guards.
 Spoken `new line` / `new paragraph` rewrite in `TextPostProcessor`;
 newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`

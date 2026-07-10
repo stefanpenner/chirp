@@ -175,6 +175,8 @@ enum DictationCommand: Equatable, Sendable {
         ("no space that", "Join last word without space"),
         ("period / comma / …", "Spoken punctuation"),
         ("new line / new paragraph", "Line breaks"),
+        ("bullet point / next bullet", "Bulleted list item"),
+        ("number one / next number", "Numbered list item"),
         ("dot com / at sign", "Domain & email bits"),
     ]
 }

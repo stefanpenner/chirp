@@ -161,6 +161,7 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
     func resetVAD() async {
         accumulatedText.removeAll()
         recentAudio.removeAll()
+        TextPostProcessor.resetSessionFormatState()
         await transcriber.resetVAD()
     }
 }
@@ -269,6 +270,7 @@ actor CloudTranscriptionPipeline: TranscriptionPipeline {
     func resetVAD() async {
         accumulatedSamples.removeAll()
         previewSegments.removeAll()
+        TextPostProcessor.resetSessionFormatState()
         await localTranscriber.resetVAD()
     }
 }

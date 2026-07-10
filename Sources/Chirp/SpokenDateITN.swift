@@ -134,17 +134,29 @@ enum SpokenDateITN {
 
     // MARK: - Relative dates
 
+    /// Injectable timezone (tests use UTC; production uses the user local zone).
+    nonisolated(unsafe) static var timeZoneProvider: () -> TimeZone = { .current }
+
+    static func resetTimeZone() {
+        timeZoneProvider = { .current }
+    }
+
     static func formatAbsoluteDate(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(identifier: "UTC")
+        f.timeZone = timeZoneProvider()
         f.dateFormat = "MMMM d, yyyy"
         return f.string(from: date)
     }
 
-    static func relativeDay(_ word: String, from now: Date) -> Date {
+    private static func calendar() -> Calendar {
         var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
+        cal.timeZone = timeZoneProvider()
+        return cal
+    }
+
+    static func relativeDay(_ word: String, from now: Date) -> Date {
+        let cal = calendar()
         let start = cal.startOfDay(for: now)
         switch word {
         case "today": return start
@@ -156,8 +168,7 @@ enum SpokenDateITN {
 
     /// next = strictly after today; this = today if match else next; last = strictly before today.
     static func relativeWeekday(_ weekday: Int, mode: String, from now: Date) -> Date {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
+        let cal = calendar()
         let start = cal.startOfDay(for: now)
         let todayWD = cal.component(.weekday, from: start)
 
