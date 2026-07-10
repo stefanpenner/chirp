@@ -69,6 +69,23 @@ struct TextInserterTests {
         #expect(inserter.moveToLineEndCalled)
     }
 
+    @Test("applyFormat records bold / italic / underline")
+    func applyFormat() {
+        let inserter = MockTextInserter()
+        inserter.applyFormat(.bold)
+        inserter.applyFormat(.italic)
+        inserter.applyFormat(.underline)
+        #expect(inserter.appliedFormats == [.bold, .italic, .underline])
+    }
+
+    @Test("cutSelection records call")
+    func cutSelection() {
+        let inserter = MockTextInserter()
+        #expect(inserter.cutCallCount == 0)
+        inserter.cutSelection()
+        #expect(inserter.cutCallCount == 1)
+    }
+
     @Test("steps maps newlines to return keys")
     func newlineSteps() {
         #expect(TextInserter.steps(for: "") == [])

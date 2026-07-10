@@ -43,6 +43,13 @@ enum MoveDirection: Equatable, Sendable {
     case right
 }
 
+/// Rich-text format styles applied via ⌘B / ⌘I / ⌘U on the current selection.
+enum TextFormatStyle: Equatable, Sendable {
+    case bold
+    case italic
+    case underline
+}
+
 @MainActor protocol TextInserting {
     func checkAccessibilityPermission()
     func typeText(_ text: String)
@@ -57,6 +64,10 @@ enum MoveDirection: Equatable, Sendable {
     func moveToLineStart()
     /// Move cursor to line end (⌘+right). Spoken "go to end".
     func moveToLineEnd()
+    /// Apply rich-text format to the current selection (⌘B / ⌘I / ⌘U).
+    func applyFormat(_ style: TextFormatStyle)
+    /// Cut the current selection to the clipboard (⌘X). Spoken "cut that".
+    func cutSelection()
     /// Copy `text` to the system pasteboard (spoken "copy that").
     func copyToClipboard(_ text: String)
     /// Paste from the system pasteboard into the focused app (spoken "paste that").
@@ -71,6 +82,8 @@ extension TextInserting {
     func moveWord(direction: MoveDirection) {}
     func moveToLineStart() {}
     func moveToLineEnd() {}
+    func applyFormat(_ style: TextFormatStyle) {}
+    func cutSelection() {}
     func copyToClipboard(_ text: String) {}
     func pasteFromClipboard() {}
     func clipboardString() -> String? { nil }

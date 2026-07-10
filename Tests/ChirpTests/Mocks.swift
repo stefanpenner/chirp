@@ -142,6 +142,8 @@ final class MockTextInserter: TextInserting {
     var moveWordDirections: [MoveDirection] = []
     var moveToLineStartCalled = false
     var moveToLineEndCalled = false
+    var appliedFormats: [TextFormatStyle] = []
+    var cutCallCount = 0
     var clipboard: String = ""
     var pasteCallCount = 0
     var copyCallCount = 0
@@ -195,6 +197,14 @@ final class MockTextInserter: TextInserting {
 
     func moveToLineEnd() {
         moveToLineEndCalled = true
+    }
+
+    func applyFormat(_ style: TextFormatStyle) {
+        appliedFormats.append(style)
+    }
+
+    func cutSelection() {
+        cutCallCount += 1
     }
 }
 

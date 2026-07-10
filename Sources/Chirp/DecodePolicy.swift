@@ -103,4 +103,13 @@ enum DecodePolicy {
     static func peekSleepNs(idleMisses: Int) -> UInt64 {
         idleMisses >= peekIdleThreshold ? peekIntervalIdleNs : peekIntervalActiveNs
     }
+
+    // MARK: - Peek decode cache (skip ASR when pending length unchanged)
+
+    /// Whether a prior peek decode can be reused for the current pending count.
+    /// True when we have a cached count and it equals `currentCount`.
+    /// Dual: `specs/PeekCache.tla`. Empty prior text still reuses (skip silence ASR).
+    static func shouldReusePeek(lastCount: Int?, currentCount: Int) -> Bool {
+        lastCount != nil && lastCount == currentCount
+    }
 }

@@ -147,6 +147,33 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("highlight all") == .selectAll)
     }
 
+    @Test("recognizes bold / italic / underline that")
+    func formatThatCommands() {
+        #expect(DictationCommand.parse("bold that") == .boldThat)
+        #expect(DictationCommand.parse("Bold that.") == .boldThat)
+        #expect(DictationCommand.parse("bold it") == .boldThat)
+        #expect(DictationCommand.parse("make that bold") == .boldThat)
+        #expect(DictationCommand.parse("please bold that") == .boldThat)
+
+        #expect(DictationCommand.parse("italic that") == .italicThat)
+        #expect(DictationCommand.parse("italicize that") == .italicThat)
+        #expect(DictationCommand.parse("italics that") == .italicThat)
+        #expect(DictationCommand.parse("please italic that") == .italicThat)
+
+        #expect(DictationCommand.parse("underline that") == .underlineThat)
+        #expect(DictationCommand.parse("underline it") == .underlineThat)
+        #expect(DictationCommand.parse("please underline that") == .underlineThat)
+    }
+
+    @Test("recognizes cut that")
+    func cutThatCommand() {
+        #expect(DictationCommand.parse("cut that") == .cutThat)
+        #expect(DictationCommand.parse("Cut that.") == .cutThat)
+        #expect(DictationCommand.parse("cut it") == .cutThat)
+        #expect(DictationCommand.parse("cut selection") == .cutThat)
+        #expect(DictationCommand.parse("please cut that") == .cutThat)
+    }
+
     @Test("recognizes move left/right word navigation")
     func moveWordCommands() {
         #expect(DictationCommand.parse("move left") == .moveLeftWord)
@@ -196,6 +223,10 @@ struct DictationCommandTests {
         #expect(says.contains(where: { $0.lowercased().contains("backspace") }))
         #expect(says.contains(where: { $0.lowercased().contains("move left") }))
         #expect(says.contains(where: { $0.lowercased().contains("move right") }))
+        #expect(says.contains(where: { $0.lowercased().contains("bold") }))
+        #expect(says.contains(where: { $0.lowercased().contains("italic") }))
+        #expect(says.contains(where: { $0.lowercased().contains("underline") }))
+        #expect(says.contains(where: { $0.lowercased().contains("cut that") }))
     }
 
     @Test("spell as is content not a sticky command")

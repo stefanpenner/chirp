@@ -689,6 +689,14 @@ public final class AppState {
                         self.performSelectLastWord(typesIncrementally: false)
                     case .selectAll:
                         self.performSelectAll(typesIncrementally: false)
+                    case .boldThat:
+                        self.performFormatThat(.bold, typesIncrementally: false)
+                    case .italicThat:
+                        self.performFormatThat(.italic, typesIncrementally: false)
+                    case .underlineThat:
+                        self.performFormatThat(.underline, typesIncrementally: false)
+                    case .cutThat:
+                        self.performCutThat(typesIncrementally: false)
                     case .moveLeftWord:
                         self.performMoveWord(direction: .left)
                     case .moveRightWord:
@@ -777,6 +785,14 @@ public final class AppState {
             performSelectLastWord(typesIncrementally: typesIncrementally)
         case .selectAll:
             performSelectAll(typesIncrementally: typesIncrementally)
+        case .boldThat:
+            performFormatThat(.bold, typesIncrementally: typesIncrementally)
+        case .italicThat:
+            performFormatThat(.italic, typesIncrementally: typesIncrementally)
+        case .underlineThat:
+            performFormatThat(.underline, typesIncrementally: typesIncrementally)
+        case .cutThat:
+            performCutThat(typesIncrementally: typesIncrementally)
         case .moveLeftWord:
             performMoveWord(direction: .left)
         case .moveRightWord:
@@ -1071,6 +1087,39 @@ public final class AppState {
         guard typesIncrementally else { return }
         guard let delta = editStack.lastDelta, !delta.isEmpty else { return }
         textInserter.selectBackward(count: delta.count)
+    }
+
+    /// Select last phrase (when available) then apply bold/italic/underline.
+    /// If nothing to select, still format current app selection.
+    private func performFormatThat(_ style: TextFormatStyle, typesIncrementally: Bool) {
+        if typesIncrementally, let delta = editStack.lastDelta, !delta.isEmpty {
+            textInserter.selectBackward(count: delta.count)
+        }
+        textInserter.applyFormat(style)
+    }
+
+    /// Select last phrase, cut (⌘X), drop buffer delta without re-deleting.
+    /// Cut already removes text from the app; buffer tracks session only.
+    private func performCutThat(typesIncrementally: Bool) {
+        guard let delta = editStack.lastDelta, !delta.isEmpty else {
+            // No stack delta — still try cut on whatever the app has selected.
+            if typesIncrementally {
+                textInserter.cutSelection()
+            }
+            return
+        }
+        if typesIncrementally {
+            textInserter.selectBackward(count: delta.count)
+            textInserter.cutSelection()
+        }
+        // Scratch-like buffer update; never deleteBackward (cut already removed).
+        if let removed = editStack.undo() {
+            let remove = min(removed.count, transcribedText.count)
+            if remove > 0 {
+                transcribedText = String(transcribedText.dropLast(remove))
+            }
+            lastCommittedNormalized = ""
+        }
     }
 
     /// Enter spell mode and select last phrase (Dragon-style "spell that").

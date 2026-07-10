@@ -99,7 +99,7 @@ works mid-segment (`hello period next` → `hello. Next`) with content-word
 guards.
 Spoken `new line` / `new paragraph` rewrite in `TextPostProcessor`;
 newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
-(built-in tech phrases + UserDefaults `chirp.dictationDictionary`).
+(built-in tech ASR seeds + UserDefaults `chirp.dictationDictionary`).
 Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** / **correct that** — multi-level undo (`EditStack`)
 - **replace that** — next phrase replaces last (text stays until then; HUD “Replace…”)
@@ -119,6 +119,10 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select that** / **highlight that** — select last phrase (shift+left)
 - **select last word** — select trailing word only
 - **select all** — select all (⌘A)
+- **bold that** / **make that bold** — select last phrase + bold (⌘B)
+- **italic that** / **italicize that** — select last phrase + italic (⌘I)
+- **underline that** — select last phrase + underline (⌘U)
+- **cut that** / **cut it** — select last phrase + cut (⌘X); drop buffer delta
 - **move left** / **previous word** — cursor left one word (⌥←)
 - **move right** / **next word** — cursor right one word (⌥→)
 - **go to start** / **beginning of line** — cursor to line start (⌘←)
@@ -131,10 +135,11 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **copy that** / **paste that** — clipboard
 First segment auto-capitalizes. Consecutive duplicate segments skipped.
 When sherpa provides token log-probs, `ConfidenceGate` rejects extreme
-low-confidence dumps (`ConfidenceGate.tla`). When scores are nil (Parakeet),
+low-confidence dumps with length-aware thresholds (short hyps stricter;
+`ConfidenceGate.tla`). When scores are nil (Parakeet),
 `DecodeReject` still drops non-empty hyps on pure silence / low-energy
 filler frames (`DecodeReject.tla`). Spoken `dot com` / `at sign`.
-Edit custom phrases in Settings → Audio. Speculative preview peeks every
+Custom vocab seeds cover common tech ASR confusions; edit in Settings → Audio. Speculative preview peeks every
 ~250ms while speaking, ~500ms when idle (`AdaptivePeek.tla`). Full command
 list: Settings → Audio → Voice Commands.
 
@@ -251,6 +256,7 @@ The recognizer hallucinates from silence (e.g. "Yeah"). Three guards:
 - **VAD.Detected gate** — skip peek when no speech active
 - **Min 4800 samples** (~0.3s) — too short = unreliable
 - **Cap 5s** — bounds inference time on long utterances
+- **Count cache** — skip ASR when `pendingAudio.count` is unchanged since the last peek (`DecodePolicy.shouldReusePeek` / `PeekCache.tla`); cleared on commit, flush, reset
 
 
 ## Concurrency Safety

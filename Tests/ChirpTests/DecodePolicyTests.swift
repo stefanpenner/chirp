@@ -47,6 +47,28 @@ struct DecodePolicyTests {
         #expect(DecodePolicy.peekIntervalActiveNs < DecodePolicy.peekIntervalIdleNs)
     }
 
+    // MARK: - Peek cache reuse (PeekCache.tla)
+
+    @Test("shouldReusePeek: first peek has no cache")
+    func shouldReusePeekFirst() {
+        #expect(!DecodePolicy.shouldReusePeek(lastCount: nil, currentCount: 4800))
+        #expect(!DecodePolicy.shouldReusePeek(lastCount: nil, currentCount: 0))
+    }
+
+    @Test("shouldReusePeek: same count reuses")
+    func shouldReusePeekSameCount() {
+        #expect(DecodePolicy.shouldReusePeek(lastCount: 4800, currentCount: 4800))
+        #expect(DecodePolicy.shouldReusePeek(lastCount: 16_000, currentCount: 16_000))
+        #expect(DecodePolicy.shouldReusePeek(lastCount: 0, currentCount: 0))
+    }
+
+    @Test("shouldReusePeek: count change does not reuse")
+    func shouldReusePeekCountChanged() {
+        #expect(!DecodePolicy.shouldReusePeek(lastCount: 4800, currentCount: 4801))
+        #expect(!DecodePolicy.shouldReusePeek(lastCount: 4800, currentCount: 4799))
+        #expect(!DecodePolicy.shouldReusePeek(lastCount: 100, currentCount: 0))
+    }
+
     // MARK: - Adaptive energy noise floor
 
     @Test("noiseFloor tracks low RMS values (≈20th percentile)")

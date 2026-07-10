@@ -17,6 +17,9 @@ enum DictationDictionary {
         // Common tech / product ASR confusions
         "get hub": "GitHub",
         "git hub": "GitHub",
+        "get lab": "GitLab",
+        "git lab": "GitLab",
+        "bit bucket": "Bitbucket",
         "vs code": "VS Code",
         "x code": "Xcode",
         "swift ui": "SwiftUI",
@@ -26,11 +29,28 @@ enum DictationDictionary {
         "i cloud": "iCloud",
         "type script": "TypeScript",
         "java script": "JavaScript",
+        "node j s": "Node.js",
+        "react native": "React Native",
+        "j query": "jQuery",
         "name space": "namespace",
         "k eight s": "k8s",
+        "cube control": "kubectl",
+        "kube control": "kubectl",
+        "cube net ease": "Kubernetes",
         "graph ql": "GraphQL",
         "post gres": "PostgreSQL",
         "postgres ql": "PostgreSQL",
+        "mongo d b": "MongoDB",
+        "elastic search": "Elasticsearch",
+        "open a i": "OpenAI",
+        "chat g p t": "ChatGPT",
+        "hugging face": "Hugging Face",
+        "data dog": "Datadog",
+        "c i c d": "CI/CD",
+        "docker": "Docker",
+        "redis": "Redis",
+        // Claude Code ASR: "cloud code" only (avoid bare "claude" — common name)
+        "cloud code": "Claude Code",
     ]
 
     /// Load user replacements from UserDefaults (keys stored lowercase).

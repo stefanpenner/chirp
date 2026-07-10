@@ -24,10 +24,11 @@ tlc specs/PipelineRebuild.tla
 | `ListCounter` | session numbered-list index for next number | `SpokenListITN` |
 | `ScratchUndo` | **legacy / no bait** single-level scratch (superseded by `EditStack`) | — |
 | `EditCommands` | coarse length model of edit commands (see `EditStack` for stack) | `DictationCommand` |
-| `ConfidenceGate` | accept/reject ASR when token log-probs exist | `ConfidenceGate` |
+| `ConfidenceGate` | length-aware accept/reject when token log-probs exist | `ConfidenceGate` |
 | `DecodeReject` | energy/silence + log-prob composite reject (Parakeet nil scores) | `DecodeReject` |
 | `ClipboardCommands` | copy that / paste that vs session buffer | `DictationCommand` |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
+| `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |
 
 Bait configs (`*_bait.cfg`) must **fail** — they prove the real invariants are checked.
 
@@ -36,6 +37,7 @@ Config path is relative to the **spec directory** (TLC’s cwd), not the repo ro
 ```bash
 # real Inv must pass
 tlc specs/AdaptivePeek.tla
+tlc specs/PeekCache.tla
 tlc specs/CancelVoid.tla
 tlc specs/CapsMode.tla
 tlc specs/ClipboardCommands.tla
@@ -54,6 +56,7 @@ tlc specs/TranscriberBuffer.tla
 
 # bait Inv must fail (error expected)
 tlc -c AdaptivePeek_bait.cfg specs/AdaptivePeek.tla
+tlc -c PeekCache_bait.cfg specs/PeekCache.tla
 tlc -c CancelVoid_bait.cfg specs/CancelVoid.tla
 tlc -c CapsMode_bait.cfg specs/CapsMode.tla
 tlc -c ClipboardCommands_bait.cfg specs/ClipboardCommands.tla
@@ -74,6 +77,7 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | Bait config | Weakened claim | Real property negated |
 |-------------|----------------|------------------------|
 | `AdaptivePeek_bait` | idle interval may appear before threshold misses | `IdleImpliesMisses` |
+| `PeekCache_bait` | reuse may leave lastCount ≠ currentCount | `ReuseImpliesEqual` |
 | `CancelVoid_bait` | ready may keep session text | `ReadyIsVoided` |
 | `CapsMode_bait` | reset may leave non-normal mode | `ResetYieldsNormal` |
 | `ClipboardCommands_bait` | copy may leave clip ≠ transcript | `CopyMirrors` |

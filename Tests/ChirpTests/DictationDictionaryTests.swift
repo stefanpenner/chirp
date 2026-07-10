@@ -28,6 +28,36 @@ struct DictationDictionaryTests {
             #expect(DictationDictionary.apply("query graph ql") == "query GraphQL")
             #expect(DictationDictionary.apply("run post gres") == "run PostgreSQL")
             #expect(DictationDictionary.apply("use postgres ql") == "use PostgreSQL")
+            #expect(DictationDictionary.apply("run docker compose") == "run Docker compose")
+            #expect(DictationDictionary.apply("use cube control apply") == "use kubectl apply")
+            #expect(DictationDictionary.apply("kube control get pods") == "kubectl get pods")
+            #expect(DictationDictionary.apply("deploy cube net ease") == "deploy Kubernetes")
+            #expect(DictationDictionary.apply("build react native app") == "build React Native app")
+            #expect(DictationDictionary.apply("install node j s") == "install Node.js")
+            #expect(DictationDictionary.apply("ask chat g p t") == "ask ChatGPT")
+            #expect(DictationDictionary.apply("open cloud code") == "open Claude Code")
+            #expect(DictationDictionary.apply("push to get lab") == "push to GitLab")
+            #expect(DictationDictionary.apply("clone bit bucket repo") == "clone Bitbucket repo")
+            #expect(DictationDictionary.apply("load j query") == "load jQuery")
+            #expect(DictationDictionary.apply("query mongo d b") == "query MongoDB")
+            #expect(DictationDictionary.apply("cache in redis") == "cache in Redis")
+            #expect(DictationDictionary.apply("index elastic search") == "index Elasticsearch")
+            #expect(DictationDictionary.apply("call open a i") == "call OpenAI")
+            #expect(DictationDictionary.apply("from hugging face") == "from Hugging Face")
+            #expect(DictationDictionary.apply("metrics in data dog") == "metrics in Datadog")
+            #expect(DictationDictionary.apply("setup c i c d") == "setup CI/CD")
+        }
+    }
+
+    @Test("longest multi-word seeds win over shorter keys")
+    func builtInLongestKey() {
+        withCleanOverrides {
+            // Longer keys applied first; multi-word phrases stay intact
+            #expect(DictationDictionary.apply("cube net ease cluster") == "Kubernetes cluster")
+            #expect(DictationDictionary.apply("chat g p t please") == "ChatGPT please")
+            #expect(DictationDictionary.apply("elastic search index") == "Elasticsearch index")
+            #expect(DictationDictionary.apply("hugging face model") == "Hugging Face model")
+            #expect(DictationDictionary.apply("react native and type script") == "React Native and TypeScript")
         }
     }
 

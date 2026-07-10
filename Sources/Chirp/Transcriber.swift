@@ -14,6 +14,10 @@ actor Transcriber: TranscriberProtocol {
     nonisolated(unsafe) private var recognizer: OpaquePointer?
     nonisolated(unsafe) private var vad: OpaquePointer?
     private var pendingAudio: [Float] = []
+    /// Peek ASR cache: skip re-decode when pending sample count is unchanged.
+    /// Cleared when pending is cleared (commit / flush / resetVAD).
+    private var lastPeekPendingCount: Int?
+    private var lastPeekText: String?
 
     private func toCString(_ s: String) -> UnsafeMutablePointer<CChar> {
         return strdup(s)!
@@ -205,6 +209,7 @@ actor Transcriber: TranscriberProtocol {
         }
 
         pendingAudio.removeAll()
+        clearPeekCache()
         Log.transcription.debug("feedAudio: committed pendingAudio text=\(text)")
         return [text]
     }
@@ -213,6 +218,8 @@ actor Transcriber: TranscriberProtocol {
     /// capped to the last 5 seconds so inference time stays constant.
     /// Only transcribes when the VAD detects active speech to avoid
     /// hallucinated words (e.g. "Yeah", "hm..") from silence/noise.
+    /// Reuses the last decode when `pendingAudio.count` is unchanged
+    /// (`DecodePolicy.shouldReusePeek` / `PeekCache.tla`).
     func peekTranscription() -> String? {
         guard let vad else { return nil }
         let speechDetected = SherpaOnnxVoiceActivityDetectorDetected(vad) != 0
@@ -220,17 +227,27 @@ actor Transcriber: TranscriberProtocol {
             Log.transcription.debug("peek: pendingAudio=\(self.pendingAudio.count) speechDetected=false")
             return nil
         }
-        guard DecodePolicy.canPeek(pendingSampleCount: pendingAudio.count, speechDetected: true) else {
+        let count = pendingAudio.count
+        guard DecodePolicy.canPeek(pendingSampleCount: count, speechDetected: true) else {
             return nil
         }
-        let windowCount = DecodePolicy.peekWindowCount(pendingSampleCount: pendingAudio.count)
-        let samples = pendingAudio.count > windowCount
+        if DecodePolicy.shouldReusePeek(lastCount: lastPeekPendingCount, currentCount: count) {
+            Log.transcription.debug(
+                "peek: reuse cache pendingAudio=\(count) text=\(self.lastPeekText ?? "")"
+            )
+            return lastPeekText
+        }
+        let windowCount = DecodePolicy.peekWindowCount(pendingSampleCount: count)
+        let samples = count > windowCount
             ? Array(pendingAudio.suffix(windowCount))
             : pendingAudio
         let window = Self.withSpeechWindow(samples)
         let text = transcribeSamples(window.samples, speechFrameCount: window.speechFrameCount)
-        Log.transcription.debug("peek: pendingAudio=\(self.pendingAudio.count) speechDetected=true text=\(text)")
-        return text.isEmpty ? nil : text
+        let result = text.isEmpty ? nil : text
+        lastPeekPendingCount = count
+        lastPeekText = result
+        Log.transcription.debug("peek: pendingAudio=\(count) speechDetected=true text=\(text)")
+        return result
     }
 
     /// Flushes the VAD and transcribes any remaining pending audio.
@@ -254,6 +271,7 @@ actor Transcriber: TranscriberProtocol {
         guard hasPendingSpeech, DecodePolicy.canCommit(pendingSampleCount: pendingAudio.count) else {
             Log.transcription.debug("flush: pendingAudio=\(self.pendingAudio.count) hasPendingSpeech=\(hasPendingSpeech) — skipped")
             pendingAudio.removeAll()
+            clearPeekCache()
             return ""
         }
 
@@ -261,14 +279,21 @@ actor Transcriber: TranscriberProtocol {
         let text = transcribeSamples(window.samples, speechFrameCount: window.speechFrameCount)
         Log.transcription.debug("flush: pendingAudio=\(self.pendingAudio.count) hasPendingSpeech=true text=\(text)")
         pendingAudio.removeAll()
+        clearPeekCache()
         return text
     }
 
     func resetVAD() {
         pendingAudio.removeAll()
+        clearPeekCache()
         if let vad = vad {
             SherpaOnnxVoiceActivityDetectorReset(vad)
         }
+    }
+
+    private func clearPeekCache() {
+        lastPeekPendingCount = nil
+        lastPeekText = nil
     }
 
     // MARK: - Decode window

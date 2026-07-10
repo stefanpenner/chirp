@@ -1131,6 +1131,205 @@ struct AppStateTests {
         #expect(inserter.typedTexts.count == 1)
     }
 
+    @Test("bold that selects last phrase then applies bold")
+    func boldThatCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["bold that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.appliedFormats.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.selectBackwardCounts.last == "Hello world".count)
+        #expect(inserter.appliedFormats == [.bold])
+        #expect(!inserter.typedTexts.contains("bold that"))
+    }
+
+    @Test("italic that selects last phrase then applies italic")
+    func italicThatCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello" { break }
+        }
+
+        await mock.setFeedAudioResult(["italic that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.appliedFormats.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello")
+        #expect(inserter.selectBackwardCounts.last == "Hello".count)
+        #expect(inserter.appliedFormats == [.italic])
+    }
+
+    @Test("underline that selects last phrase then applies underline")
+    func underlineThatCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello" { break }
+        }
+
+        await mock.setFeedAudioResult(["underline that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.appliedFormats.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello")
+        #expect(inserter.selectBackwardCounts.last == "Hello".count)
+        #expect(inserter.appliedFormats == [.underline])
+    }
+
+    @Test("bold that with empty stack still applies format")
+    func boldThatEmptyStackStillFormats() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["bold that"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.appliedFormats.isEmpty { break }
+        }
+
+        #expect(state.transcribedText.isEmpty)
+        #expect(inserter.selectBackwardCounts.isEmpty)
+        #expect(inserter.appliedFormats == [.bold])
+    }
+
+    @Test("cut that selects last phrase, cuts, and drops buffer delta")
+    func cutThatCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["cut that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.cutCallCount > 0 { break }
+        }
+
+        #expect(state.transcribedText.isEmpty)
+        #expect(inserter.selectBackwardCounts.last == "Hello world".count)
+        #expect(inserter.cutCallCount == 1)
+        // Cut already removed text — no second deleteBackward
+        #expect(inserter.deletedCounts.isEmpty)
+        #expect(!inserter.typedTexts.contains("cut that"))
+    }
+
+    @Test("cut that after two phrases only cuts last delta")
+    func cutThatLastDeltaOnly() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello" { break }
+        }
+
+        await mock.setFeedAudioResult(["world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("world") { break }
+        }
+        let beforeCut = state.transcribedText
+        #expect(beforeCut.hasPrefix("Hello"))
+
+        await mock.setFeedAudioResult(["cut that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.cutCallCount > 0 { break }
+        }
+
+        #expect(state.transcribedText == "Hello")
+        #expect(inserter.cutCallCount == 1)
+        #expect(inserter.deletedCounts.isEmpty)
+        #expect(inserter.selectBackwardCounts.last != nil)
+    }
+
     @Test("copy that puts transcript on clipboard")
     func copyThatCommand() async throws {
         let mock = MockTranscriber()

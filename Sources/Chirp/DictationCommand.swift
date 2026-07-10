@@ -50,6 +50,14 @@ enum DictationCommand: Equatable, Sendable {
     case selectLastWord
     /// Select all in the focused app (⌘A).
     case selectAll
+    /// Select last phrase and bold (⌘B).
+    case boldThat
+    /// Select last phrase and italicize (⌘I).
+    case italicThat
+    /// Select last phrase and underline (⌘U).
+    case underlineThat
+    /// Select last phrase, cut to clipboard (⌘X), drop buffer delta.
+    case cutThat
     /// Move cursor one word left (⌥←). Buffer unchanged.
     case moveLeftWord
     /// Move cursor one word right (⌥→). Buffer unchanged.
@@ -192,6 +200,15 @@ enum DictationCommand: Equatable, Sendable {
             return .selectLastWord
         case "select all", "highlight all", "select everything":
             return .selectAll
+        case "bold that", "bold it", "make that bold", "make it bold":
+            return .boldThat
+        case "italic that", "italicize that", "italics that",
+             "italic it", "make that italic", "make it italic":
+            return .italicThat
+        case "underline that", "underline it", "make that underlined":
+            return .underlineThat
+        case "cut that", "cut it", "cut selection":
+            return .cutThat
         case "move left", "left word", "previous word", "go left",
              "back one word":
             return .moveLeftWord
@@ -234,6 +251,10 @@ enum DictationCommand: Equatable, Sendable {
         ("select that", "Select last phrase"),
         ("select last word", "Select last word"),
         ("select all", "Select all (⌘A)"),
+        ("bold that", "Select last phrase + bold (⌘B)"),
+        ("italic that", "Select last phrase + italic (⌘I)"),
+        ("underline that", "Select last phrase + underline (⌘U)"),
+        ("cut that", "Select last phrase + cut (⌘X)"),
         ("move left / previous word", "Cursor left one word (⌥←)"),
         ("move right / next word", "Cursor right one word (⌥→)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),

@@ -179,13 +179,33 @@ final class TextInserter: TextInserting {
 
     /// Paste via ⌘V so the target app's native paste path runs.
     func pasteFromClipboard() {
+        postCommandKey(0x09) // kVK_ANSI_V
+    }
+
+    /// Apply bold / italic / underline via ⌘B (0x0B) / ⌘I (0x22) / ⌘U (0x20).
+    func applyFormat(_ style: TextFormatStyle) {
+        let key: CGKeyCode
+        switch style {
+        case .bold: key = 0x0B // kVK_ANSI_B
+        case .italic: key = 0x22 // kVK_ANSI_I
+        case .underline: key = 0x20 // kVK_ANSI_U
+        }
+        postCommandKey(key)
+    }
+
+    /// Cut selection via ⌘X (0x07 / kVK_ANSI_X).
+    func cutSelection() {
+        postCommandKey(0x07) // kVK_ANSI_X
+    }
+
+    /// Post a ⌘+key keystroke (down then up with command flag).
+    private func postCommandKey(_ key: CGKeyCode) {
         let source = CGEventSource(stateID: .combinedSessionState)
-        let vKey: CGKeyCode = 0x09 // kVK_ANSI_V
-        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true) {
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true) {
             keyDown.flags = .maskCommand
             keyDown.post(tap: .cgAnnotatedSessionEventTap)
         }
-        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false) {
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) {
             keyUp.flags = .maskCommand
             keyUp.post(tap: .cgAnnotatedSessionEventTap)
         }
