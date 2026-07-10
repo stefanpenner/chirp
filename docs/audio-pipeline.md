@@ -36,7 +36,9 @@ for Parakeet int8 via sherpa). Override with `CHIRP_ASR_PROVIDER=coreml`.
 VAD stays on CPU.
 Multi-utterance joins use `SegmentJoiner` (insert ". " when a new
 capitalized segment follows bare text). Spoken `new line` / `new
-paragraph` rewrite in `TextPostProcessor`.
+paragraph` rewrite in `TextPostProcessor`; newlines type as Return
+keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
+(built-in tech phrases + UserDefaults `chirp.dictationDictionary`).
 
 
 ## Components

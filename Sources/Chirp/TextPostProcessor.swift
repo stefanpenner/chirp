@@ -17,10 +17,12 @@ enum TextPostProcessor {
         var result = text
         result = removeFillersAndRepetitions(result)
         result = applyPhraseFixes(result)
+        result = DictationDictionary.apply(result)
         result = applyLightITN(result)
         result = cleanWhitespace(result)
         result = capitalizeI(result)
-        result = result.trimmingCharacters(in: .whitespaces)
+        // Trim spaces but keep leading/trailing newlines from spoken commands
+        result = result.trimmingCharacters(in: CharacterSet.whitespaces)
         if isSilenceHallucination(result) {
             return ""
         }

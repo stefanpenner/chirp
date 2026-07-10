@@ -151,7 +151,7 @@ API keys are stored in the macOS **Keychain** via `KeychainHelper`, never in Use
 
 6. **Post-processing** — `TextPostProcessor.process()` strips fillers ("um", "uh"), deduplicates stutters ("the the" → "the"), normalizes whitespace, and capitalizes "I". Pure function, sub-millisecond. When LLM post-processing is enabled, this runs first (within the pipeline), then the LLM refines the full text on flush.
 
-7. **Insertion** — `TextInserter` posts `CGEvent` keystrokes via `CGEventKeyboardSetUnicodeString`, chunked to 20 UniChars per event. Requires Accessibility permission. In non-incremental mode (cloud/LLM), text is typed once after flush completes.
+7. **Insertion** — `TextInserter` posts `CGEvent` keystrokes via `CGEventKeyboardSetUnicodeString`, chunked to 20 UniChars per event. Newlines become Return (`0x24`) so spoken line-break commands work in target apps. Requires Accessibility permission. In non-incremental mode (cloud/LLM), text is typed once after flush completes. Custom vocabulary via `DictationDictionary` (UserDefaults + built-ins) runs in `TextPostProcessor`.
 
 ## Model System
 

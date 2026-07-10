@@ -32,4 +32,15 @@ struct TextInserterTests {
         inserter.deleteBackward(count: 3)
         #expect(inserter.deletedCounts == [3])
     }
+
+    @Test("steps maps newlines to return keys")
+    func newlineSteps() {
+        #expect(TextInserter.steps(for: "") == [])
+        #expect(TextInserter.steps(for: "hello") == [.text("hello")])
+        #expect(TextInserter.steps(for: "a\nb") == [.text("a"), .returnKey, .text("b")])
+        #expect(TextInserter.steps(for: "a\n\nb") == [
+            .text("a"), .returnKey, .returnKey, .text("b")
+        ])
+        #expect(TextInserter.steps(for: "\n") == [.returnKey])
+    }
 }
