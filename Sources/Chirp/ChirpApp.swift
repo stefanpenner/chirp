@@ -645,7 +645,9 @@ public final class AppState {
     }
 
     func stopRecording() {
-        guard case .recording = status else { return }
+        // Guard matches specs/SessionMachine.tla StopRecording / SessionDecision
+        guard let phase = SessionDecision.phase(from: status),
+              SessionDecision.canStopRecording(phase) else { return }
 
         peekTask?.cancel()
         peekTask = nil
@@ -664,10 +666,9 @@ public final class AppState {
     }
 
     func cancelSession() {
-        switch status {
-        case .recording, .transcribing: break
-        default: return
-        }
+        // Guard matches specs/SessionMachine.tla Cancel / SessionDecision
+        guard let phase = SessionDecision.phase(from: status),
+              SessionDecision.canCancel(phase) else { return }
 
         audioConsumerTask?.cancel()
         audioConsumerTask = nil

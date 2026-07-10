@@ -92,4 +92,26 @@ struct TranscriptionScoringTests {
         #expect(s.wer == 0)
         #expect(TranscriptionScoring.normalize("three pm") == "3 pm")
     }
+
+    @Test("majorWER ignores a/the article substitutions")
+    func majorWERIgnoresArticles() {
+        let s = TranscriptionScoring.score(
+            id: "art",
+            reference: "please send the report by friday",
+            hypothesis: "please send a report by friday"
+        )
+        #expect(s.wer > 0)
+        #expect(s.majorWER == 0)
+    }
+
+    @Test("majorWER still counts content-word errors")
+    func majorWERCountsContent() {
+        let s = TranscriptionScoring.score(
+            id: "c",
+            reference: "hello world",
+            hypothesis: "hello moon"
+        )
+        #expect(s.majorWER > 0)
+        #expect(abs(s.majorWER - 0.5) < 1e-9)
+    }
 }

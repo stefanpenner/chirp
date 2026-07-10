@@ -26,8 +26,9 @@ bazel test //:TranscriberIntegrationTests --test_output=all
 
 Scoring helpers live in `Tests/ChirpTests/TranscriptionScoring.swift`
 (always-on unit tests via `//:TextTests`). Generation is
-`SpeechAudioGenerator` (`say` + `afconvert`). Budgets: mean WER ≤ 10%,
-median ≤ 5% on clean TTS; silence must not hallucinate.
+`SpeechAudioGenerator` (`say` + `afconvert`). Budgets: mean majorWER ≤ 8%,
+mean raw WER ≤ 12%, median ≤ 5% on clean TTS; silence must not hallucinate.
+Decode uses `withSpeechWindow` (lead+trail energy trim with 200ms rolls).
 
 
 ## Components

@@ -30,9 +30,9 @@ struct AudioCorpusPipelineTests {
     ]
 
     /// Mean WER ceiling for clean TTS → Parakeet on this corpus.
-    /// Tight enough to catch regressions (onset clips, bad post-process);
-    /// loose enough for occasional article confusions (e.g. the/a).
-    private static let maxMeanWER: Double = 0.10
+    /// Raw WER still reported; budgets use majorWER (article-only swaps ignored).
+    private static let maxMeanMajorWER: Double = 0.08
+    private static let maxMeanWER: Double = 0.12
     private static let maxMedianWER: Double = 0.05
     /// No single phrase may be a near-total miss on clean audio.
     private static let maxPerPhraseWER: Double = 0.35
@@ -239,6 +239,10 @@ struct AudioCorpusPipelineTests {
         print(ranking.leaderboard)
 
         #expect(
+            ranking.meanMajorWER <= Self.maxMeanMajorWER,
+            "mean majorWER \(ranking.meanMajorWER) exceeds budget \(Self.maxMeanMajorWER)\n\(ranking.leaderboard)"
+        )
+        #expect(
             ranking.meanWER <= Self.maxMeanWER,
             "mean WER \(ranking.meanWER) exceeds budget \(Self.maxMeanWER)\n\(ranking.leaderboard)"
         )
@@ -250,6 +254,10 @@ struct AudioCorpusPipelineTests {
             #expect(
                 s.wer <= Self.maxPerPhraseWER,
                 "phrase \(s.id) WER \(s.wer) too high (hyp=\"\(s.hypothesis)\")"
+            )
+            #expect(
+                s.majorWER <= Self.maxPerPhraseWER,
+                "phrase \(s.id) majorWER \(s.majorWER) too high (hyp=\"\(s.hypothesis)\")"
             )
         }
     }

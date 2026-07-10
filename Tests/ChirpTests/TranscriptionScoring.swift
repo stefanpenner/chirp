@@ -12,22 +12,26 @@ struct TranscriptionScore: Sendable, Comparable {
     let wer: Double
     /// Character error rate in [0, ∞).
     let cer: Double
+    /// Humanized WER: ignores pure a/an/the article substitutions (readability-minor).
+    let majorWER: Double
     let wordEdits: Int
     let wordCount: Int
     let charEdits: Int
     let charCount: Int
 
     static func < (lhs: TranscriptionScore, rhs: TranscriptionScore) -> Bool {
-        // Lower WER ranks better; tie-break on CER then id for stability.
+        // Lower WER ranks better; tie-break on majorWER, CER, then id.
         if lhs.wer != rhs.wer { return lhs.wer < rhs.wer }
+        if lhs.majorWER != rhs.majorWER { return lhs.majorWER < rhs.majorWER }
         if lhs.cer != rhs.cer { return lhs.cer < rhs.cer }
         return lhs.id < rhs.id
     }
 
     var summaryLine: String {
         let werPct = String(format: "%.1f%%", wer * 100)
+        let majorPct = String(format: "%.1f%%", majorWER * 100)
         let cerPct = String(format: "%.1f%%", cer * 100)
-        return "[\(id)] WER=\(werPct) CER=\(cerPct) ref=\"\(reference)\" hyp=\"\(hypothesis)\""
+        return "[\(id)] WER=\(werPct) major=\(majorPct) CER=\(cerPct) ref=\"\(reference)\" hyp=\"\(hypothesis)\""
     }
 }
 
@@ -38,6 +42,11 @@ struct TranscriptionRanking: Sendable {
     var meanWER: Double {
         guard !scores.isEmpty else { return 0 }
         return scores.map(\.wer).reduce(0, +) / Double(scores.count)
+    }
+
+    var meanMajorWER: Double {
+        guard !scores.isEmpty else { return 0 }
+        return scores.map(\.majorWER).reduce(0, +) / Double(scores.count)
     }
 
     var medianWER: Double {
@@ -62,8 +71,9 @@ struct TranscriptionRanking: Sendable {
     var leaderboard: String {
         var lines: [String] = []
         lines.append("=== ASR Ranking (best → worst) n=\(scores.count) ===")
-        lines.append(String(format: "mean WER=%.1f%%  median WER=%.1f%%  mean CER=%.1f%%",
-                            meanWER * 100, medianWER * 100, meanCER * 100))
+        lines.append(String(format:
+            "mean WER=%.1f%%  mean major=%.1f%%  median WER=%.1f%%  mean CER=%.1f%%",
+            meanWER * 100, meanMajorWER * 100, medianWER * 100, meanCER * 100))
         for (i, s) in scores.enumerated() {
             lines.append(String(format: "  #%d %@", i + 1, s.summaryLine))
         }
@@ -160,6 +170,69 @@ enum TranscriptionScoring {
         return (Double(edits) / Double(refW.count), edits, refW.count)
     }
 
+    private static let minorArticles: Set<String> = ["a", "an", "the"]
+
+    /// Alignment-based major-error count: article↔article substitutions cost 0.
+    /// Insertions/deletions of content words and non-article substitutions still count.
+    static func majorWordEdits(reference: [String], hypothesis: [String]) -> Int {
+        let n = reference.count
+        let m = hypothesis.count
+        if n == 0 { return m == 0 ? 0 : hypothesis.filter { !minorArticles.contains($0) }.count }
+        if m == 0 { return reference.filter { !minorArticles.contains($0) }.count }
+
+        // DP with operation kinds reconstructed via backpointers
+        var dist = Array(repeating: Array(repeating: 0, count: m + 1), count: n + 1)
+        for i in 0...n { dist[i][0] = i }
+        for j in 0...m { dist[0][j] = j }
+
+        for i in 1...n {
+            for j in 1...m {
+                let cost = reference[i - 1] == hypothesis[j - 1] ? 0 : 1
+                dist[i][j] = min(
+                    dist[i - 1][j] + 1,
+                    dist[i][j - 1] + 1,
+                    dist[i - 1][j - 1] + cost
+                )
+            }
+        }
+
+        // Backtrace and count major edits only
+        var i = n, j = m
+        var major = 0
+        while i > 0 || j > 0 {
+            if i > 0, j > 0, reference[i - 1] == hypothesis[j - 1], dist[i][j] == dist[i - 1][j - 1] {
+                i -= 1; j -= 1
+            } else if i > 0, j > 0, dist[i][j] == dist[i - 1][j - 1] + 1 {
+                // substitution
+                let r = reference[i - 1], h = hypothesis[j - 1]
+                if !(minorArticles.contains(r) && minorArticles.contains(h)) {
+                    major += 1
+                }
+                i -= 1; j -= 1
+            } else if i > 0, dist[i][j] == dist[i - 1][j] + 1 {
+                if !minorArticles.contains(reference[i - 1]) { major += 1 }
+                i -= 1
+            } else if j > 0, dist[i][j] == dist[i][j - 1] + 1 {
+                if !minorArticles.contains(hypothesis[j - 1]) { major += 1 }
+                j -= 1
+            } else {
+                break
+            }
+        }
+        return major
+    }
+
+    /// Humanized WER focusing on meaning-changing errors (Apple HEWER-inspired).
+    static func majorWordErrorRate(reference: String, hypothesis: String) -> Double {
+        let refW = words(reference)
+        let hypW = words(hypothesis)
+        if refW.isEmpty {
+            return hypW.filter { !minorArticles.contains($0) }.isEmpty ? 0 : 1
+        }
+        let edits = majorWordEdits(reference: refW, hypothesis: hypW)
+        return Double(edits) / Double(refW.count)
+    }
+
     /// Character Error Rate over normalized strings (spaces kept).
     static func charErrorRate(reference: String, hypothesis: String) -> (cer: Double, edits: Int, count: Int) {
         let refC = Array(normalize(reference))
@@ -174,12 +247,14 @@ enum TranscriptionScoring {
     static func score(id: String, reference: String, hypothesis: String) -> TranscriptionScore {
         let w = wordErrorRate(reference: reference, hypothesis: hypothesis)
         let c = charErrorRate(reference: reference, hypothesis: hypothesis)
+        let major = majorWordErrorRate(reference: reference, hypothesis: hypothesis)
         return TranscriptionScore(
             id: id,
             reference: reference,
             hypothesis: hypothesis,
             wer: w.wer,
             cer: c.cer,
+            majorWER: major,
             wordEdits: w.edits,
             wordCount: w.count,
             charEdits: c.edits,

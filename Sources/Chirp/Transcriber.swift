@@ -179,7 +179,7 @@ actor Transcriber: TranscriberProtocol {
             return []
         }
 
-        let text = transcribeSamples(Self.withLeadingPreRoll(pendingAudio))
+        let text = transcribeSamples(Self.withSpeechWindow(pendingAudio))
         // Empty ASR on a VAD endpoint is usually a false end (noise / mid-pause).
         // Keep pendingAudio so the next commit/flush still sees the full utterance.
         guard !text.isEmpty else {
@@ -208,7 +208,7 @@ actor Transcriber: TranscriberProtocol {
         let samples = pendingAudio.count > maxSamples
             ? Array(pendingAudio.suffix(maxSamples))
             : pendingAudio
-        let text = transcribeSamples(Self.withLeadingPreRoll(samples))
+        let text = transcribeSamples(Self.withSpeechWindow(samples))
         Log.transcription.debug("peek: pendingAudio=\(self.pendingAudio.count) speechDetected=true text=\(text)")
         return text.isEmpty ? nil : text
     }
@@ -237,7 +237,7 @@ actor Transcriber: TranscriberProtocol {
             return ""
         }
 
-        let text = transcribeSamples(Self.withLeadingPreRoll(pendingAudio))
+        let text = transcribeSamples(Self.withSpeechWindow(pendingAudio))
         Log.transcription.debug("flush: pendingAudio=\(self.pendingAudio.count) hasPendingSpeech=true text=\(text)")
         pendingAudio.removeAll()
         return text
@@ -252,20 +252,24 @@ actor Transcriber: TranscriberProtocol {
 
     // MARK: - Decode window
 
-    /// Drop long leading near-silence before ASR, but keep ~200ms pre-roll
-    /// so true speech onset is not clipped (Silero/VAD lag compensation).
+    /// Drop long leading *and* trailing near-silence before ASR, but keep
+    /// ~200ms pre-roll / post-roll so true speech edges are not clipped.
+    /// Reduces decode on pure silence padding while preserving onset/offset.
     /// Internal for tests.
-    static func withLeadingPreRoll(
+    static func withSpeechWindow(
         _ samples: [Float],
         preRollSamples: Int = 3200,   // 200ms @ 16kHz
+        postRollSamples: Int = 3200,  // 200ms @ 16kHz
         frameSamples: Int = 320,      // 20ms
         energyThreshold: Float = 0.01
     ) -> [Float] {
-        guard samples.count > preRollSamples + frameSamples else { return samples }
+        guard samples.count > preRollSamples + postRollSamples + frameSamples else {
+            return samples
+        }
 
-        var firstSpeech = 0
+        var firstSpeech: Int?
+        var lastSpeech: Int?
         var i = 0
-        var found = false
         while i + frameSamples <= samples.count {
             var sum: Float = 0
             let end = i + frameSamples
@@ -275,17 +279,36 @@ actor Transcriber: TranscriberProtocol {
             }
             let rms = sqrtf(sum / Float(frameSamples))
             if rms >= energyThreshold {
-                firstSpeech = i
-                found = true
-                break
+                if firstSpeech == nil { firstSpeech = i }
+                lastSpeech = end
             }
             i += frameSamples
         }
 
-        guard found else { return samples }
-        let start = max(0, firstSpeech - preRollSamples)
-        if start == 0 { return samples }
-        return Array(samples[start...])
+        guard let first = firstSpeech, let last = lastSpeech else {
+            return samples // all near-silent — leave unchanged for caller guards
+        }
+
+        let start = max(0, first - preRollSamples)
+        let end = min(samples.count, last + postRollSamples)
+        if start == 0 && end == samples.count { return samples }
+        return Array(samples[start..<end])
+    }
+
+    /// Back-compat alias used by older tests/call sites.
+    static func withLeadingPreRoll(
+        _ samples: [Float],
+        preRollSamples: Int = 3200,
+        frameSamples: Int = 320,
+        energyThreshold: Float = 0.01
+    ) -> [Float] {
+        withSpeechWindow(
+            samples,
+            preRollSamples: preRollSamples,
+            postRollSamples: 0,
+            frameSamples: frameSamples,
+            energyThreshold: energyThreshold
+        )
     }
 
     // MARK: - Inference

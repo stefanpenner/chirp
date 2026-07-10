@@ -11,36 +11,47 @@ struct TranscriberTests {
         #expect(result.isEmpty)
     }
 
-    @Test("withLeadingPreRoll keeps short buffers unchanged")
-    func preRollShortUnchanged() {
+    @Test("withSpeechWindow keeps short buffers unchanged")
+    func speechWindowShortUnchanged() {
         let samples = [Float](repeating: 0.1, count: 1000)
-        let out = Transcriber.withLeadingPreRoll(samples)
+        let out = Transcriber.withSpeechWindow(samples)
         #expect(out.count == samples.count)
     }
 
-    @Test("withLeadingPreRoll drops long leading silence but keeps pre-roll")
-    func preRollDropsLeadingSilence() {
-        // 1s silence + 0.5s speech-like energy
+    @Test("withSpeechWindow trims leading and trailing silence with rolls")
+    func speechWindowTrimsBothEnds() {
+        // 1s silence + 0.5s speech + 1s silence
         var samples = [Float](repeating: 0, count: 16000)
         samples += [Float](repeating: 0.2, count: 8000)
-        let out = Transcriber.withLeadingPreRoll(
+        samples += [Float](repeating: 0, count: 16000)
+        let out = Transcriber.withSpeechWindow(
             samples,
             preRollSamples: 3200,
+            postRollSamples: 3200,
             frameSamples: 320,
             energyThreshold: 0.01
         )
-        // Should start ~200ms before speech, not at sample 0
         #expect(out.count < samples.count)
-        #expect(out.count >= 8000 + 3200 - 320) // speech + pre-roll - one frame slack
-        // Peak energy preserved
+        // speech + pre + post - frame slack
+        #expect(out.count >= 8000 + 3200 + 3200 - 640)
+        #expect(out.count <= 8000 + 3200 + 3200 + 640)
         #expect((out.map { abs($0) }.max() ?? 0) >= 0.2)
     }
 
-    @Test("withLeadingPreRoll keeps full buffer when all silent")
-    func preRollAllSilentKeepsAll() {
+    @Test("withSpeechWindow keeps full buffer when all silent")
+    func speechWindowAllSilentKeepsAll() {
         let samples = [Float](repeating: 0, count: 16000)
-        let out = Transcriber.withLeadingPreRoll(samples)
+        let out = Transcriber.withSpeechWindow(samples)
         #expect(out.count == samples.count)
+    }
+
+    @Test("withLeadingPreRoll alias still trims leading silence")
+    func leadingPreRollAlias() {
+        var samples = [Float](repeating: 0, count: 16000)
+        samples += [Float](repeating: 0.2, count: 8000)
+        let out = Transcriber.withLeadingPreRoll(samples, preRollSamples: 3200)
+        #expect(out.count < samples.count)
+        #expect(out.count >= 8000)
     }
 
     @Test("peekTranscription returns nil with insufficient audio")

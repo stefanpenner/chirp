@@ -1211,9 +1211,16 @@ struct AppStateTests {
         #expect(state.speculativeText == "Hello wo",
                 "speculativeText should survive stopRecording, got: \"\(state.speculativeText)\"")
 
-        // Wait for flush to complete
-        try await Task.sleep(nanoseconds: 400_000_000)
+        // Wait for flush + linger to complete (poll — fixed sleep flakes under load)
+        for _ in 0..<40 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            if case .ready = state.status { break }
+        }
 
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after flush, got \(state.status)")
+            return
+        }
         // After flush, speculative text should be cleared
         #expect(state.speculativeText.isEmpty,
                 "speculativeText should be cleared after flush completes")

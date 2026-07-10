@@ -116,6 +116,9 @@ Inv ==
   /\ CommitUsesPending
   /\ SuccessImpliesEmpty
 
+\* Bait (must FAIL under TLC when used as sole invariant)
+BaitInv == lastCommitSrc = "none"
+
 StateConstraint == pending <= MaxPending
 
 ====
