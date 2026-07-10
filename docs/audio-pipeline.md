@@ -48,7 +48,9 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 First segment auto-capitalizes. Consecutive duplicate segments skipped.
 When sherpa provides token log-probs, `ConfidenceGate` rejects extreme
 low-confidence dumps (`ConfidenceGate.tla`). Spoken `dot com` / `at sign`.
-Edit custom phrases in Settings → Audio.
+Edit custom phrases in Settings → Audio. Speculative preview peeks every
+~250ms while speaking, ~500ms when idle (`AdaptivePeek.tla`). Full command
+list: Settings → Audio → Voice Commands.
 
 
 ## Components
@@ -143,7 +145,7 @@ end-of-recording flush needs complete audio (pendingAudio).
 | | Audio source | When | Why |
 |---|---|---|---|
 | **feedAudio** | pendingAudio (all) | VAD silence end mid-recording | VAD only endpoints; raw buffer avoids onset lag |
-| **peek** | pendingAudio (last 5s) | every 400ms | show user everything since last commit |
+| **peek** | pendingAudio (last 5s) | ~250ms active / ~500ms idle | show user everything since last commit |
 | **flush** | pendingAudio (all) | recording ends | match what peek showed; same source as commit |
 
 **pendingAudio** — all samples since last commit. Cleared on commit.

@@ -51,4 +51,20 @@ enum DecodePolicy {
     static func peekWindowCount(pendingSampleCount: Int) -> Int {
         min(pendingSampleCount, peekMaxSamples)
     }
+
+    // MARK: - Speculative preview cadence (SOTA: low time-to-first-partial)
+
+    /// Peek interval while speech is active (~250ms).
+    static let peekIntervalActiveNs: UInt64 = 250_000_000
+
+    /// Peek interval after consecutive idle (no-speech) peeks — save CPU.
+    static let peekIntervalIdleNs: UInt64 = 500_000_000
+
+    /// Idle peeks before switching to the slower interval.
+    static let peekIdleThreshold = 2
+
+    /// Next sleep duration given consecutive idle miss count.
+    static func peekSleepNs(idleMisses: Int) -> UInt64 {
+        idleMisses >= peekIdleThreshold ? peekIntervalIdleNs : peekIntervalActiveNs
+    }
 }

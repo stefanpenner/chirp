@@ -37,4 +37,13 @@ struct DecodePolicyTests {
                 == DecodePolicy.peekMaxSamples
         )
     }
+
+    @Test("adaptive peek sleep: active then idle")
+    func adaptivePeekSleep() {
+        #expect(DecodePolicy.peekSleepNs(idleMisses: 0) == DecodePolicy.peekIntervalActiveNs)
+        #expect(DecodePolicy.peekSleepNs(idleMisses: 1) == DecodePolicy.peekIntervalActiveNs)
+        #expect(DecodePolicy.peekSleepNs(idleMisses: 2) == DecodePolicy.peekIntervalIdleNs)
+        #expect(DecodePolicy.peekSleepNs(idleMisses: 5) == DecodePolicy.peekIntervalIdleNs)
+        #expect(DecodePolicy.peekIntervalActiveNs < DecodePolicy.peekIntervalIdleNs)
+    }
 }

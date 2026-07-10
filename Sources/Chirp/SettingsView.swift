@@ -128,9 +128,21 @@ struct AudioSettingsTab: View {
 
             Section("Dictation Dictionary") {
                 DictationDictionaryEditor()
-                Text("Replace misheard phrases (e.g. “get hub” → “GitHub”). Voice: scratch that, delete last word, clear all, press enter, copy that, paste that.")
+                Text("Replace misheard phrases (e.g. “get hub” → “GitHub”). Built-in tech terms included.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("Voice Commands") {
+                ForEach(DictationCommand.helpCatalog, id: \.say) { row in
+                    LabeledContent {
+                        Text(row.effect)
+                            .foregroundStyle(.secondary)
+                    } label: {
+                        Text("“\(row.say)”")
+                            .font(.body.monospaced())
+                    }
+                }
             }
 
             Section("Speaker Verification") {

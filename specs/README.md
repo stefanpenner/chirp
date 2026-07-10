@@ -20,6 +20,7 @@ tlc specs/PipelineRebuild.tla
 | `EditCommands` | scratch / delete-word / clear-all over transcript | `DictationCommand` |
 | `ConfidenceGate` | accept/reject ASR when token log-probs exist | `ConfidenceGate` |
 | `ClipboardCommands` | copy that / paste that vs session buffer | `DictationCommand` |
+| `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 
 Bait configs (`*_bait.cfg`) must **fail** — they prove the real invariants are checked.
 

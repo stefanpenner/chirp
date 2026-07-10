@@ -764,16 +764,18 @@ public final class AppState {
         lastCommittedNormalized = ""
     }
 
-    /// Polls the pipeline every 400 ms for a speculative preview of
-    /// the current (uncommitted) audio. Discarded if a committed segment
-    /// arrives in the meantime (checked via commitGen and recordingSession).
+    /// Polls the pipeline for a speculative preview of uncommitted audio.
+    /// Active speech: ~250ms (snappier partials). Idle: ~500ms to save CPU.
+    /// Discarded if a committed segment arrives mid-peek (commitGen).
     private func startPeeking() {
         guard pipelineSupportsPreview else { return }
         let pipeline = self.pipeline
         let session = recordingSession
         peekTask = Task { [weak self] in
+            var idleMisses = 0
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 400_000_000)
+                let sleepNs = DecodePolicy.peekSleepNs(idleMisses: idleMisses)
+                try? await Task.sleep(nanoseconds: sleepNs)
                 guard !Task.isCancelled else { break }
                 guard let self, self.recordingSession == session else { break }
                 guard case .recording = self.status else { break }
@@ -781,11 +783,17 @@ public final class AppState {
                 let preview = await pipeline.peekTranscription()
                 guard self.recordingSession == session else { break }
                 guard case .recording = self.status else { break }
-                guard self.commitGen == gen else { continue }
+                guard self.commitGen == gen else {
+                    idleMisses = 0
+                    continue
+                }
                 // Only update when we have a new preview — keep existing
                 // speculative text visible when VAD flickers to non-detected.
                 if let preview {
+                    idleMisses = 0
                     self.speculativeText = preview
+                } else {
+                    idleMisses += 1
                 }
             }
         }

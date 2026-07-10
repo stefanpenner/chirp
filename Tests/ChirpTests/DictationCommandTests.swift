@@ -51,4 +51,11 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("scratch the surface") == .none)
         #expect(DictationCommand.parse("") == .none)
     }
+
+    @Test("help catalog is non-empty and unique")
+    func helpCatalog() {
+        #expect(DictationCommand.helpCatalog.count >= 8)
+        let says = DictationCommand.helpCatalog.map(\.say)
+        #expect(Set(says).count == says.count)
+    }
 }

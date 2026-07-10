@@ -56,4 +56,18 @@ enum DictationCommand: Equatable, Sendable {
     }
 
     var isCommand: Bool { self != .none }
+
+    /// User-facing command catalog for Settings / help (say → effect).
+    static let helpCatalog: [(say: String, effect: String)] = [
+        ("scratch that", "Undo last phrase"),
+        ("delete last word", "Remove last word"),
+        ("clear all", "Wipe session text"),
+        ("press enter", "Insert Return"),
+        ("press tab", "Insert Tab"),
+        ("copy that", "Copy session to clipboard"),
+        ("paste that", "Paste clipboard (⌘V)"),
+        ("period / comma / …", "Spoken punctuation"),
+        ("new line / new paragraph", "Line breaks"),
+        ("dot com / at sign", "Domain & email bits"),
+    ]
 }
