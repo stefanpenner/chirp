@@ -34,6 +34,15 @@ struct CapsModeTests {
         #expect(CapsTransform.capitalizeWord("") == "")
     }
 
+    @Test("capitalizeFirstWord only first word (cap next)")
+    func capitalizeFirstWord() {
+        #expect(CapsTransform.capitalizeFirstWord("hello world") == "Hello world")
+        #expect(CapsTransform.capitalizeFirstWord("HELLO world") == "Hello world")
+        #expect(CapsTransform.capitalizeFirstWord("  hello") == "  Hello")
+        #expect(CapsTransform.capitalizeFirstWord("hello") == "Hello")
+        #expect(CapsTransform.capitalizeFirstWord("") == "")
+    }
+
     @Test("empty text stays empty under any mode")
     func empty() {
         #expect(CapsTransform.apply("", mode: .allCaps).isEmpty)

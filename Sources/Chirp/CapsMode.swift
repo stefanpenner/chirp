@@ -48,6 +48,24 @@ enum CapsTransform {
         return first.uppercased() + word.dropFirst().lowercased()
     }
 
+    /// Capitalize only the first whitespace-delimited word (cap next one-shot).
+    /// Leading whitespace preserved; rest of the segment unchanged.
+    static func capitalizeFirstWord(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+        var i = text.startIndex
+        while i < text.endIndex, text[i].isWhitespace || text[i].isNewline {
+            i = text.index(after: i)
+        }
+        guard i < text.endIndex else { return text }
+        let wordStart = i
+        while i < text.endIndex, !text[i].isWhitespace, !text[i].isNewline {
+            i = text.index(after: i)
+        }
+        let word = String(text[wordStart..<i])
+        let capped = capitalizeWord(word)
+        return String(text[..<wordStart]) + capped + String(text[i...])
+    }
+
     /// Title-case each whitespace-delimited word; preserve newlines and spacing.
     static func titleCaseWords(_ text: String) -> String {
         var result = ""

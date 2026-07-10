@@ -6,7 +6,7 @@
 // - Needs compound (twenty five), teen, magnitude (hundred/thousand), or "point"
 // - Digit runs: ≥3 consecutive single-digit units → concatenate ("five five five" → "555")
 //   Short pure runs ("one two") stay words; "oh" → 0 (leading zeros kept)
-//   Exception: after suite/room/floor/apt/unit/extension cues, digit runs of ≥1 convert
+//   Exception: after suite/room/floor/apt/unit/extension/version cues, digit runs of ≥1 convert
 // - Negatives: "minus"/"negative" + number phrase → "-N" (not bare "minus" / "minus sign")
 // - Ordinals: "first" blocked before of/all/class; "twenty first" → 21st always
 // Dual-tested via SpokenNumberITNTests (no TLA — pure String→String).
@@ -14,9 +14,10 @@
 import Foundation
 
 enum SpokenNumberITN {
-    /// Address / phone-extension cues that force short digit-run conversion.
-    private static let addressNumberCues: Set<String> = [
+    /// Cues that force bare-unit + short digit-run conversion (address / version).
+    private static let forceNumberCues: Set<String> = [
         "suite", "apartment", "apt", "unit", "room", "floor", "extension", "ext",
+        "version",
     ]
     private static let units: [String: Int] = [
         "zero": 0, "oh": 0,
@@ -126,12 +127,12 @@ enum SpokenNumberITN {
             // Cardinal multi-token / teen / decade / digit-run
             if numberWords.contains(core) {
                 let prevCore = i > 0 ? normalizeToken(parts[i - 1]) : ""
-                let afterCue = addressNumberCues.contains(prevCore)
+                let afterCue = forceNumberCues.contains(prevCore)
                 if let rewritten = tryConsumeCardinal(
                     parts: parts,
                     start: i,
                     forceConvert: afterCue,
-                    // After suite/room/floor/ext: bare "five" → "5"; runs "five five" → "55"
+                    // After suite/room/floor/ext/version: bare "five" → "5"; runs "five five" → "55"
                     digitRunMinLength: afterCue ? 1 : 3
                 ) {
                     out.append(rewritten.text)
@@ -160,8 +161,8 @@ enum SpokenNumberITN {
     }
 
     /// Scan a run of number words from `start` and convert when allowed.
-    /// `forceConvert` allows bare units (signed / after address cues).
-    /// `digitRunMinLength` is 3 by default (phone), 1 after suite/room/floor/ext, 1 when signed.
+    /// `forceConvert` allows bare units (signed / after address or version cues).
+    /// `digitRunMinLength` is 3 by default (phone), 1 after suite/room/floor/ext/version, 1 when signed.
     private static func tryConsumeCardinal(
         parts: [String],
         start: Int,

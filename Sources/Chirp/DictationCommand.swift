@@ -28,6 +28,12 @@ enum DictationCommand: Equatable, Sendable {
     case pressSpace
     /// Press Backspace / Delete once. Keyboard-only; buffer unchanged.
     case pressBackspace
+    /// Press Escape once. Keyboard-only; buffer unchanged; does not cancel session.
+    case pressEscape
+    /// Insert today's date (e.g. "July 10, 2026").
+    case insertDate
+    /// Insert current local time (e.g. "3:45 p.m.").
+    case insertTime
     /// Copy session transcript to the clipboard.
     case copyThat
     /// Paste from the clipboard into the focused app.
@@ -44,6 +50,8 @@ enum DictationCommand: Equatable, Sendable {
     case spellThat
     /// Capitalize the last word (one-shot).
     case capThat
+    /// Capitalize the next content word / first word of next commit (one-shot arm).
+    case capNext
     /// UPPERCASE the last word (one-shot).
     case allCapsThat
     /// lowercase the last word (one-shot).
@@ -199,6 +207,15 @@ enum DictationCommand: Equatable, Sendable {
         case "press backspace", "hit backspace", "backspace",
              "press delete", "hit delete", "delete key":
             return .pressBackspace
+        // Escape requires press/hit/key — bare "escape" is not a command.
+        case "press escape", "press esc", "hit escape", "hit esc",
+             "escape key", "esc key", "press the escape key", "hit the escape key":
+            return .pressEscape
+        case "insert date", "insert today's date", "today's date", "insert the date",
+             "insert todays date", "todays date":
+            return .insertDate
+        case "insert time", "insert the time", "current time":
+            return .insertTime
         case "copy that", "copy all", "copy it", "copy this", "copy the text":
             return .copyThat
         case "paste that", "paste it", "paste this", "paste here":
@@ -231,6 +248,9 @@ enum DictationCommand: Equatable, Sendable {
         // One-shot last-word transforms
         case "cap that", "capitalize that", "caps that", "capital that":
             return .capThat
+        // One-shot next-word arm (do not steal "cap that" / "caps on")
+        case "cap next", "capitalize next", "caps next", "capital next":
+            return .capNext
         case "all caps that", "uppercase that", "upper case that":
             return .allCapsThat
         case "no caps that", "lowercase that", "lower case that":
@@ -334,6 +354,9 @@ enum DictationCommand: Equatable, Sendable {
         ("press tab", "Insert Tab"),
         ("press space / hit space", "Insert Space"),
         ("press backspace / delete key", "Press Backspace once (keyboard only)"),
+        ("press escape / escape key", "Press Escape once (keyboard only; does not cancel)"),
+        ("insert date / today's date", "Type today's date (e.g. July 10, 2026)"),
+        ("insert time / current time", "Type current time (e.g. 3:45 p.m.)"),
         ("copy that", "Copy session to clipboard"),
         ("paste that", "Paste clipboard (⌘V)"),
         ("duplicate that / dupe that", "Copy last phrase and paste again"),
@@ -344,6 +367,7 @@ enum DictationCommand: Equatable, Sendable {
         ("spell that", "Select last phrase + enter spell mode"),
         ("spell as a b c", "Pack letters once (no sticky mode)"),
         ("cap that / all caps that", "Transform last word"),
+        ("cap next / capitalize next", "Capitalize first word of next phrase"),
         ("title case that", "Title-case last phrase"),
         ("sentence case that", "Sentence-case last phrase"),
         ("no space that", "Join last word without space"),
@@ -401,23 +425,29 @@ enum TranscriptSelection {
     }
 
     /// Last paragraph: segment after final `\n\n` or `\n`, else whole buffer.
+    /// Trailing blank paragraph (`…\n\n` / `…\n`) returns the separator so
+    /// delete peels it instead of no-op on empty content.
     static func lastParagraph(_ text: String) -> String {
         guard !text.isEmpty else { return "" }
         if let r = text.range(of: "\n\n", options: .backwards) {
-            return String(text[r.upperBound...])
+            let after = String(text[r.upperBound...])
+            return after.isEmpty ? "\n\n" : after
         }
         if let r = text.range(of: "\n", options: .backwards) {
-            return String(text[r.upperBound...])
+            let after = String(text[r.upperBound...])
+            return after.isEmpty ? "\n" : after
         }
         return text
     }
 
     /// Last line: segment after final `\n` (content only, no leading separator).
-    /// Whole buffer if no newline. Trailing `\n` → empty string.
+    /// Whole buffer if no newline. Trailing empty line (`…\n`) returns `"\n"`
+    /// so delete peels the newline instead of no-op.
     static func lastLine(_ text: String) -> String {
         guard !text.isEmpty else { return "" }
         if let r = text.range(of: "\n", options: .backwards) {
-            return String(text[r.upperBound...])
+            let after = String(text[r.upperBound...])
+            return after.isEmpty ? "\n" : after
         }
         return text
     }

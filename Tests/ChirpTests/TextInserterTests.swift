@@ -126,6 +126,14 @@ struct TextInserterTests {
         #expect(inserter.cutCallCount == 1)
     }
 
+    @Test("pressEscape records call")
+    func pressEscape() {
+        let inserter = MockTextInserter()
+        #expect(inserter.pressEscapeCallCount == 0)
+        inserter.pressEscape()
+        #expect(inserter.pressEscapeCallCount == 1)
+    }
+
     @Test("steps maps newlines to return keys")
     func newlineSteps() {
         #expect(TextInserter.steps(for: "") == [])

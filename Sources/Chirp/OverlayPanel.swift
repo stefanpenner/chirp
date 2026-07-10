@@ -242,6 +242,17 @@ struct IslandView: View {
                             )
                             .accessibilityLabel("Capitalization mode: \(capsLabel)")
                     }
+                    if appState.capitalizeNextWord {
+                        Text("cap next")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.primary.opacity(0.55))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule().fill(.primary.opacity(0.08))
+                            )
+                            .accessibilityLabel("Capitalize next word armed")
+                    }
                     if let spellLabel = appState.spellMode.overlayLabel {
                         Text(spellLabel)
                             .font(.system(size: 10, weight: .semibold, design: .rounded))

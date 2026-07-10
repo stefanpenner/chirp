@@ -19,6 +19,8 @@ tlc specs/PipelineRebuild.tla
 | `SegmentJoin` | multi-utterance separators (space vs ". ") | `SegmentJoiner` |
 | `EditStack` | multi-level undo/redo + DropSuffix (delete-last-word) | `EditStack` |
 | `CapsMode` | sticky caps mode + one-shot cap that | `CapsMode` / `CapsTransform` |
+| `CapNext` | one-shot arm: next content capitalizes first word then clears | `AppState.capitalizeNextWord` + `DictationCommand.capNext` |
+| `InsertStamp` | formatDate/formatTime always non-empty (clock injectable) | `InsertStamp` |
 | `SpellMode` | sticky spell mode (letter packing) | `SpellMode` / `SpellTransform` |
 | `PackAcronyms` | safer auto-pack of single-letter runs (≥3 or allowlisted pairs) | `SpellTransform.packAcronyms` |
 | `ReplaceThat` | multi-step replace: arm then next content swaps last | `ReplaceDecision` |
@@ -46,6 +48,8 @@ tlc specs/AdaptivePeek.tla
 tlc specs/PeekCache.tla
 tlc specs/CancelVoid.tla
 tlc specs/CapsMode.tla
+tlc specs/CapNext.tla
+tlc specs/InsertStamp.tla
 tlc specs/ClipboardCommands.tla
 tlc specs/DuplicateCommand.tla
 tlc specs/SpellMode.tla
@@ -71,6 +75,8 @@ tlc -c AdaptivePeek_bait.cfg specs/AdaptivePeek.tla
 tlc -c PeekCache_bait.cfg specs/PeekCache.tla
 tlc -c CancelVoid_bait.cfg specs/CancelVoid.tla
 tlc -c CapsMode_bait.cfg specs/CapsMode.tla
+tlc -c CapNext_bait.cfg specs/CapNext.tla
+tlc -c InsertStamp_bait.cfg specs/InsertStamp.tla
 tlc -c ClipboardCommands_bait.cfg specs/ClipboardCommands.tla
 tlc -c DuplicateCommand_bait.cfg specs/DuplicateCommand.tla
 tlc -c SpellMode_bait.cfg specs/SpellMode.tla
@@ -99,6 +105,8 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | `PeekCache_bait` | reuse may leave lastCount ≠ currentCount | `ReuseImpliesEqual` |
 | `CancelVoid_bait` | ready may keep session text | `ReadyIsVoided` |
 | `CapsMode_bait` | reset may leave non-normal mode | `ResetYieldsNormal` |
+| `CapNext_bait` | after cap-commit may remain armed | `CommitArmedClears` |
+| `InsertStamp_bait` | format may leave lastLen = 0 | `FormatNonEmpty` |
 | `ClipboardCommands_bait` | copy may leave clip ≠ transcript | `CopyMirrors` |
 | `DuplicateCommand_bait` | after duplicate, clip may ≠ lastDelta | `DuplicateHoldsDelta` |
 | `SpellMode_bait` | reset may leave spell on | `ResetYieldsOff` |

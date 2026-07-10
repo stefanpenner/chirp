@@ -154,9 +154,14 @@ final class MockTextInserter: TextInserting {
     var clipboard: String = ""
     var pasteCallCount = 0
     var copyCallCount = 0
+    var pressEscapeCallCount = 0
 
     func checkAccessibilityPermission() {
         accessibilityChecked = true
+    }
+
+    func pressEscape() {
+        pressEscapeCallCount += 1
     }
 
     func typeText(_ text: String) {

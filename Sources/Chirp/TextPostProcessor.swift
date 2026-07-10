@@ -536,6 +536,10 @@ enum TextPostProcessor {
         // ("suite 12" → "Suite 12", "floor 5" → "Floor 5", "extension 55" → "ext. 55").
         // Spoken digit runs (min 1) after these cues are forced in SpokenNumberITN.
         result = applySuiteRoomExtITN(result)
+        // Version numbers: "version 2" / "version 1.5" → "v2" / "v1.5"
+        // (spoken "version two" force-converted in SpokenNumberITN first).
+        // Prose "the version is fine" has no digits after version → unchanged.
+        result = applyVersionITN(result)
         // US states + ZIP after street suffixes so "… avenue california" → "… Ave. CA"
         // and "zip code 90210" → "90210". Multi-word states always rewrite; single-word
         // only with address cue left of match (street abbrev, ZIP, or "state of").
@@ -1038,6 +1042,32 @@ enum TextPostProcessor {
             options: .caseInsensitive
         )
     }()
+
+    // MARK: - Version ITN
+
+    /// "version 2" / "version 1.5" → "v2" / "v1.5" after SpokenNumberITN.
+    /// Cue word "version" only (bare "v two" avoided — false positives).
+    private static let versionITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bversion\s+(\d+(?:\.\d+)?)\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static func applyVersionITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = versionITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let digits = String(result[numRange])
+            result.replaceSubrange(fullRange, with: "v\(digits)")
+        }
+        return result
+    }
 
     /// Canonical labels: suite→Suite, apt→Apt., unit→Unit, room→Room, floor→Floor, ext→ext.
     private static func suiteRoomExtLabel(for raw: String) -> String? {

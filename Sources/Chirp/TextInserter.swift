@@ -93,6 +93,19 @@ final class TextInserter: TextInserting {
         }
     }
 
+    /// Press Escape (0x35 / kVK_Escape). Posted at annotated tap so the session
+    /// event tap that cancels on physical ESC does not re-intercept.
+    func pressEscape() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let escapeKey: CGKeyCode = 0x35 // kVK_Escape
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: escapeKey, keyDown: true) {
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: escapeKey, keyDown: false) {
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
     /// Select characters backward by holding shift and pressing left arrow (0x7B).
     func selectBackward(count: Int) {
         guard count > 0 else { return }

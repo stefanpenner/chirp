@@ -133,6 +133,10 @@ public final class AppState {
     /// Observable for overlay badge when non-normal.
     private(set) var capsMode: CapsMode = .normal
 
+    /// One-shot "cap next": capitalize first word of the next content commit, then clear.
+    /// Observable for overlay badge. Dual of specs/CapNext.tla.
+    private(set) var capitalizeNextWord = false
+
     /// Sticky spell mode for new commits (Dragon/Mac letter packing).
     /// Observable for overlay badge when on. Dual of specs/SpellMode.tla.
     private(set) var spellMode: SpellMode = .off
@@ -538,6 +542,7 @@ public final class AppState {
         commitGen = 0
         editStack.clear()
         capsMode = .normal
+        capitalizeNextWord = false
         spellMode = .off
         awaitingReplace = false
         lastCommittedNormalized = ""
@@ -664,6 +669,12 @@ public final class AppState {
                         self.performKeyInsert(" ", typesIncrementally: false)
                     case .pressBackspace:
                         self.performPressBackspace()
+                    case .pressEscape:
+                        self.performPressEscape()
+                    case .insertDate:
+                        self.performKeyInsert(InsertStamp.formatDate(), typesIncrementally: false)
+                    case .insertTime:
+                        self.performKeyInsert(InsertStamp.formatTime(), typesIncrementally: false)
                     case .copyThat:
                         self.performCopyThat()
                     case .pasteThat:
@@ -683,6 +694,8 @@ public final class AppState {
                             CapsTransform.capitalizeWord,
                             typesIncrementally: false
                         )
+                    case .capNext:
+                        self.capitalizeNextWord = true
                     case .allCapsThat:
                         self.performTransformLastWord(
                             CapsTransform.upperWord,
@@ -821,6 +834,12 @@ public final class AppState {
             performKeyInsert(" ", typesIncrementally: typesIncrementally)
         case .pressBackspace:
             performPressBackspace()
+        case .pressEscape:
+            performPressEscape()
+        case .insertDate:
+            performKeyInsert(InsertStamp.formatDate(), typesIncrementally: typesIncrementally)
+        case .insertTime:
+            performKeyInsert(InsertStamp.formatTime(), typesIncrementally: typesIncrementally)
         case .copyThat:
             performCopyThat()
         case .pasteThat:
@@ -837,6 +856,8 @@ public final class AppState {
             performSpellThat(typesIncrementally: typesIncrementally)
         case .capThat:
             performTransformLastWord(CapsTransform.capitalizeWord, typesIncrementally: typesIncrementally)
+        case .capNext:
+            capitalizeNextWord = true
         case .allCapsThat:
             performTransformLastWord(CapsTransform.upperWord, typesIncrementally: typesIncrementally)
         case .noCapsThat:
@@ -923,15 +944,31 @@ public final class AppState {
     }
 
     /// Shape a content segment: one-shot "spell as …", sticky spell mode, or caps.
-    /// One-shot does not change `spellMode`.
+    /// One-shot does not change `spellMode`. Cap-next arms first word after sticky caps.
     private func shapeContent(_ text: String) -> (text: String, preserveLeadingCase: Bool) {
         if let packed = SpellTransform.oneShot(text) {
+            // Cap-next still consumes on any content commit (including one-shot spell).
+            if capitalizeNextWord {
+                capitalizeNextWord = false
+                return (CapsTransform.capitalizeFirstWord(packed), true)
+            }
             return (packed, true)
         }
         if spellMode == .on {
-            return (SpellTransform.apply(text, mode: .on), true)
+            let packed = SpellTransform.apply(text, mode: .on)
+            if capitalizeNextWord {
+                capitalizeNextWord = false
+                return (CapsTransform.capitalizeFirstWord(packed), true)
+            }
+            return (packed, true)
         }
-        return (CapsTransform.apply(text, mode: capsMode), false)
+        // Sticky caps first, then one-shot cap next on first word (overrides noCaps).
+        var shaped = CapsTransform.apply(text, mode: capsMode)
+        if capitalizeNextWord {
+            shaped = CapsTransform.capitalizeFirstWord(shaped)
+            capitalizeNextWord = false
+        }
+        return (shaped, false)
     }
 
     /// Arm multi-step replace; text stays until the next content phrase arrives.
@@ -1136,14 +1173,25 @@ public final class AppState {
     /// session transcript. `selected` must be a suffix of `transcribedText`
     /// (as returned by `TranscriptSelection`); if not exact, drop only when
     /// the buffer ends with that suffix after best-effort match.
+    /// Empty selection + trailing newlines: peel `\n\n` (para) or `\n` (line)
+    /// so "delete last line" on `"Hello.\n"` is not a no-op.
     /// Stack-aware via `dropTrailingSuffix` so "redo that" can restore.
     private func performDeleteTrailingSelection(selected: String, typesIncrementally: Bool) {
-        guard !selected.isEmpty else { return }
+        let resolved: String
+        if !selected.isEmpty {
+            resolved = selected
+        } else if transcribedText.hasSuffix("\n\n") {
+            resolved = "\n\n"
+        } else if transcribedText.hasSuffix("\n") {
+            resolved = "\n"
+        } else {
+            return
+        }
 
         let removed: String
-        if transcribedText.hasSuffix(selected) {
-            removed = selected
-        } else if let range = transcribedText.range(of: selected, options: .backwards),
+        if transcribedText.hasSuffix(resolved) {
+            removed = resolved
+        } else if let range = transcribedText.range(of: resolved, options: .backwards),
                   range.upperBound == transcribedText.endIndex {
             removed = String(transcribedText[range])
         } else {
@@ -1278,6 +1326,12 @@ public final class AppState {
     /// Press Backspace once. Keyboard-only; session buffer / edit stack unchanged.
     private func performPressBackspace() {
         textInserter.deleteBackward(count: 1)
+    }
+
+    /// Press Escape once. Keyboard-only; buffer / stack unchanged.
+    /// Does not cancel the Chirp session (physical ESC hotkey still does).
+    private func performPressEscape() {
+        textInserter.pressEscape()
     }
 
     /// Select the last whitespace-delimited word. Buffer unchanged.
@@ -1479,6 +1533,7 @@ public final class AppState {
         speculativeText = ""
         editStack.clear()
         capsMode = .normal
+        capitalizeNextWord = false
         spellMode = .off
         awaitingReplace = false
         lastCommittedNormalized = ""

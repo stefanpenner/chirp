@@ -498,6 +498,130 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("press backspace"))
     }
 
+    @Test("press escape sends key without changing buffer or leaving recording")
+    func pressEscapeCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+        guard case .recording = state.status else {
+            Issue.record("Expected .recording before escape, got \(state.status)")
+            return
+        }
+
+        await mock.setFeedAudioResult(["press escape"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.pressEscapeCallCount >= 1 { break }
+        }
+
+        #expect(inserter.pressEscapeCallCount >= 1)
+        #expect(state.transcribedText == "Hello world", "keyboard-only; buffer unchanged")
+        guard case .recording = state.status else {
+            Issue.record("voice press escape must not cancel session; got \(state.status)")
+            return
+        }
+        #expect(!inserter.typedTexts.contains("press escape"))
+    }
+
+    @Test("insert date types formatted date into buffer and stack")
+    func insertDateCommand() async throws {
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 7; comps.day = 10
+        comps.hour = 15; comps.minute = 45
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let pinned = cal.date(from: comps)!
+        InsertStamp.nowProvider = { pinned }
+        InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
+        defer { InsertStamp.resetClock() }
+
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["insert date"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("July 10, 2026") { break }
+        }
+
+        #expect(state.transcribedText == "HelloJuly 10, 2026")
+        #expect(inserter.typedTexts.contains("July 10, 2026"))
+        #expect(!inserter.typedTexts.contains("insert date"))
+    }
+
+    @Test("insert time types formatted local time into buffer and stack")
+    func insertTimeCommand() async throws {
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 7; comps.day = 10
+        comps.hour = 15; comps.minute = 45
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let pinned = cal.date(from: comps)!
+        InsertStamp.nowProvider = { pinned }
+        InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
+        defer { InsertStamp.resetClock() }
+
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["insert time"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("3:45 p.m.") { break }
+        }
+
+        #expect(state.transcribedText == "Hello3:45 p.m.")
+        #expect(inserter.typedTexts.contains("3:45 p.m."))
+        #expect(!inserter.typedTexts.contains("insert time"))
+    }
+
     @Test("sentence case that transforms last phrase")
     func sentenceCaseThatLastPhrase() async throws {
         let mock = MockTranscriber()
@@ -634,6 +758,84 @@ struct AppStateTests {
             state.transcribedText.hasSuffix("World"),
             "cap that should title-case last word, got \"\(state.transcribedText)\""
         )
+    }
+
+    @Test("cap next capitalizes first word of next content and clears arm")
+    func capNextOneShot() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["cap next"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.capitalizeNextWord { break }
+        }
+        #expect(state.capitalizeNextWord, "cap next should arm one-shot flag")
+        #expect(state.transcribedText.isEmpty, "cap next is a command — no text")
+
+        await mock.setFeedAudioResult(["hello world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.hasPrefix("Hello") { break }
+        }
+        #expect(
+            state.transcribedText.hasPrefix("Hello"),
+            "cap next should capitalize first word, got \"\(state.transcribedText)\""
+        )
+        #expect(
+            state.transcribedText.contains("world") || state.transcribedText.contains("World"),
+            "rest of phrase kept, got \"\(state.transcribedText)\""
+        )
+        #expect(!state.capitalizeNextWord, "arm clears after content commit")
+
+        // Second content is not auto-capped
+        await mock.setFeedAudioResult(["again"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("again") { break }
+        }
+        #expect(
+            !state.transcribedText.hasSuffix("Again"),
+            "cap next is one-shot only, got \"\(state.transcribedText)\""
+        )
+        #expect(!state.capitalizeNextWord)
+    }
+
+    @Test("cancelSession resets capitalizeNextWord")
+    func cancelSessionResetsCapNext() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["cap next"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.capitalizeNextWord { break }
+        }
+        #expect(state.capitalizeNextWord)
+
+        state.cancelSession()
+        #expect(!state.capitalizeNextWord)
+        #expect(state.capsMode == .normal)
     }
 
     @Test("non-incremental batch flush types once with joined content")
@@ -935,6 +1137,101 @@ struct AppStateTests {
         #expect(state.transcribedText == "Line one\n" || state.transcribedText.hasPrefix("Line one"))
         #expect(inserter.deletedCounts.last == "Line two".count)
         #expect(!inserter.typedTexts.contains("delete last line"))
+    }
+
+    @Test("delete last line peels trailing empty line (Hello + newline → Hello)")
+    func deleteLastLineTrailingEmptyNewline() async throws {
+        let mock = MockTranscriber()
+        // Content then press enter (ASR does not keep raw "\n" through post-process)
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello" { break }
+        }
+        #expect(state.transcribedText == "Hello",
+                "precondition: content landed, got \(state.transcribedText.debugDescription)")
+
+        await mock.setFeedAudioResult(["press enter"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello\n" { break }
+        }
+        #expect(state.transcribedText == "Hello\n",
+                "precondition: trailing empty line, got \(state.transcribedText.debugDescription)")
+
+        let before = state.transcribedText
+        await mock.setFeedAudioResult(["delete last line"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText != before { break }
+        }
+
+        #expect(state.transcribedText == "Hello")
+        #expect(inserter.deletedCounts.last == 1) // peeled "\n"
+        #expect(!inserter.typedTexts.contains("delete last line"))
+    }
+
+    @Test("delete last paragraph peels trailing blank paragraph (\\n\\n)")
+    func deleteLastParagraphTrailingBlank() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Only"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("Only") { break }
+        }
+
+        // Two enters → trailing blank paragraph ("Only\n\n")
+        await mock.setFeedAudioResult(["press enter"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.hasSuffix("\n") { break }
+        }
+        await mock.setFeedAudioResult(["press enter"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.hasSuffix("\n\n") { break }
+        }
+
+        let before = state.transcribedText
+        #expect(before.hasSuffix("\n\n"),
+                "precondition: trailing blank paragraph, got \(before.debugDescription)")
+
+        await mock.setFeedAudioResult(["delete last paragraph"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText != before { break }
+        }
+
+        #expect(state.transcribedText == "Only")
+        #expect(inserter.deletedCounts.last == 2) // peeled "\n\n"
+        #expect(!inserter.typedTexts.contains("delete last paragraph"))
     }
 
     @Test("select that selects last stack delta without changing buffer")
@@ -2733,6 +3030,7 @@ struct AppStateTests {
             return
         }
         #expect(state.capsMode == .normal)
+        #expect(!state.capitalizeNextWord)
         #expect(state.spellMode == .off)
         #expect(!state.awaitingReplace)
     }

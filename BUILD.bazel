@@ -150,6 +150,7 @@ swift_test(
         "Tests/ChirpTests/SpellModeTests.swift",
         "Tests/ChirpTests/SpokenNumberITNTests.swift",
         "Tests/ChirpTests/SpokenDateITNTests.swift",
+        "Tests/ChirpTests/InsertStampTests.swift",
         "Tests/ChirpTests/SpokenListITNTests.swift",
         "Tests/ChirpTests/FormatSettingsTests.swift",
         "Tests/ChirpTests/ReplaceDecisionTests.swift",

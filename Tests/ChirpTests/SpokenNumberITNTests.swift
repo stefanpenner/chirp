@@ -96,6 +96,19 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("one two") == "one two")
     }
 
+    @Test("force-converts bare units and decimals after version cue")
+    func forceConvertAfterVersionCue() {
+        #expect(SpokenNumberITN.apply("version two") == "version 2")
+        #expect(SpokenNumberITN.apply("version three") == "version 3")
+        #expect(SpokenNumberITN.apply("version one point two") == "version 1.2")
+        #expect(SpokenNumberITN.apply("version one point five") == "version 1.5")
+        // Already digits stay digits after cue
+        #expect(SpokenNumberITN.apply("version 3") == "version 3")
+        // Prose without a number after "version" is untouched
+        #expect(SpokenNumberITN.apply("the version is fine") == "the version is fine")
+        #expect(SpokenNumberITN.apply("version of the product") == "version of the product")
+    }
+
     @Test("formats phone-length digit runs with dashes")
     func phoneDashFormatting() {
         // 7 digits: XXX-XXXX

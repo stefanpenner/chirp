@@ -90,6 +90,8 @@ enum TextFormatStyle: Equatable, Sendable {
     func pasteFromClipboard()
     /// Current pasteboard string, if any.
     func clipboardString() -> String?
+    /// Press Escape (0x35). Keyboard-only; does not cancel Chirp session.
+    func pressEscape()
 }
 
 extension TextInserting {
@@ -110,6 +112,7 @@ extension TextInserting {
     func copyToClipboard(_ text: String) {}
     func pasteFromClipboard() {}
     func clipboardString() -> String? { nil }
+    func pressEscape() {}
 }
 
 protocol SpeakerVerifying: Sendable {

@@ -525,6 +525,20 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("zip code 90210") == "90210")
     }
 
+    @Test("Light ITN version cue → vN / vN.M")
+    func lightITNVersionNumbers() {
+        #expect(TextPostProcessor.process("version two") == "v2")
+        #expect(TextPostProcessor.process("version 3") == "v3")
+        #expect(TextPostProcessor.process("version one point two") == "v1.2")
+        #expect(TextPostProcessor.process("version one point five") == "v1.5")
+        #expect(TextPostProcessor.process("ship version two soon") == "ship v2 soon")
+        // Prose: no number after "version" stays unchanged
+        #expect(TextPostProcessor.process("the version is fine") == "the version is fine")
+        #expect(TextPostProcessor.process("version of the product") == "version of the product")
+        // Suite path still works (must not steal "version")
+        #expect(TextPostProcessor.process("suite five") == "Suite 5")
+    }
+
     @Test("PackAcronyms min length via full process")
     func packAcronymsMinLengthInProcess() {
         #expect(TextPostProcessor.process("a b") == "a b")

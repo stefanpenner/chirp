@@ -98,6 +98,35 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("delete it") == .scratchThat)
     }
 
+    @Test("recognizes press escape without bare escape")
+    func pressEscape() {
+        #expect(DictationCommand.parse("press escape") == .pressEscape)
+        #expect(DictationCommand.parse("press esc") == .pressEscape)
+        #expect(DictationCommand.parse("hit escape") == .pressEscape)
+        #expect(DictationCommand.parse("escape key") == .pressEscape)
+        #expect(DictationCommand.parse("Press Escape.") == .pressEscape)
+        #expect(DictationCommand.parse("please press escape") == .pressEscape)
+        // Bare "escape" is too aggressive — content / unclear intent
+        #expect(DictationCommand.parse("escape") == .none)
+        #expect(DictationCommand.parse("esc") == .none)
+    }
+
+    @Test("recognizes insert date / insert time")
+    func insertDateTime() {
+        #expect(DictationCommand.parse("insert date") == .insertDate)
+        #expect(DictationCommand.parse("insert today's date") == .insertDate)
+        #expect(DictationCommand.parse("today's date") == .insertDate)
+        #expect(DictationCommand.parse("insert the date") == .insertDate)
+        #expect(DictationCommand.parse("Insert Date.") == .insertDate)
+        #expect(DictationCommand.parse("please insert the date") == .insertDate)
+
+        #expect(DictationCommand.parse("insert time") == .insertTime)
+        #expect(DictationCommand.parse("insert the time") == .insertTime)
+        #expect(DictationCommand.parse("current time") == .insertTime)
+        #expect(DictationCommand.parse("Insert Time.") == .insertTime)
+        #expect(DictationCommand.parse("please insert time") == .insertTime)
+    }
+
     @Test("recognizes spell that")
     func spellThat() {
         #expect(DictationCommand.parse("spell that") == .spellThat)
@@ -133,6 +162,11 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("normal caps") == .setCapsMode(.normal))
         #expect(DictationCommand.parse("cap that") == .capThat)
         #expect(DictationCommand.parse("capitalize that") == .capThat)
+        #expect(DictationCommand.parse("cap next") == .capNext)
+        #expect(DictationCommand.parse("capitalize next") == .capNext)
+        #expect(DictationCommand.parse("caps next") == .capNext)
+        #expect(DictationCommand.parse("capital next") == .capNext)
+        #expect(DictationCommand.parse("Cap Next.") == .capNext)
         #expect(DictationCommand.parse("all caps that") == .allCapsThat)
         #expect(DictationCommand.parse("no caps that") == .noCapsThat)
         #expect(DictationCommand.parse("title case that") == .titleCaseThat)
@@ -140,6 +174,9 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("sentence case that") == .sentenceCaseThat)
         #expect(DictationCommand.parse("no space that") == .noSpaceThat)
         #expect(DictationCommand.parse("please all caps on") == .setCapsMode(.allCaps))
+        // Must not steal sticky / last-word commands
+        #expect(DictationCommand.parse("caps on") == .setCapsMode(.capsOn))
+        #expect(DictationCommand.parse("cap that") != .capNext)
     }
 
     @Test("recognizes spell mode on and off")
@@ -229,8 +266,9 @@ struct DictationCommandTests {
         #expect(TranscriptSelection.lastParagraph("Para one\n\nPara two") == "Para two")
         #expect(TranscriptSelection.lastParagraph("Line one\nLine two") == "Line two")
         #expect(TranscriptSelection.lastParagraph("A\n\nB\n\nC") == "C")
-        // Prefer last break; blank trailing paragraph → empty after last \n\n
-        #expect(TranscriptSelection.lastParagraph("Only\n\n") == "")
+        // Blank trailing paragraph: peel separator so delete is not a no-op
+        #expect(TranscriptSelection.lastParagraph("Only\n\n") == "\n\n")
+        #expect(TranscriptSelection.lastParagraph("Only\n") == "\n")
     }
 
     @Test("last line selection boundaries (content after last \\n, no leading separator)")
@@ -240,9 +278,10 @@ struct DictationCommandTests {
         #expect(TranscriptSelection.lastLine("Line one\nLine two") == "Line two")
         #expect(TranscriptSelection.lastLine("A\nB\nC") == "C")
         #expect(TranscriptSelection.lastLine("Para one\n\nPara two") == "Para two")
-        // Trailing newline → empty last line
-        #expect(TranscriptSelection.lastLine("Only\n") == "")
-        #expect(TranscriptSelection.lastLine("Only\n\n") == "")
+        // Trailing empty line: include the newline so delete peels it
+        #expect(TranscriptSelection.lastLine("Only\n") == "\n")
+        #expect(TranscriptSelection.lastLine("Only\n\n") == "\n")
+        #expect(TranscriptSelection.lastLine("Hello.\n") == "\n")
     }
 
     @Test("recognizes select last line (not move previous line)")
@@ -448,6 +487,9 @@ struct DictationCommandTests {
         #expect(says.contains(where: { $0.lowercased().contains("document") }))
         #expect(says.contains(where: { $0.lowercased().contains("page up") || $0.lowercased().contains("scroll up") }))
         #expect(says.contains(where: { $0.lowercased().contains("page down") || $0.lowercased().contains("scroll down") }))
+        #expect(says.contains(where: { $0.lowercased().contains("insert date") }))
+        #expect(says.contains(where: { $0.lowercased().contains("insert time") }))
+        #expect(says.contains(where: { $0.lowercased().contains("escape") || $0.lowercased().contains("esc") }))
     }
 
     @Test("spell as is content not a sticky command")

@@ -88,7 +88,9 @@ floor/apt/unit/extension (`suite 12`→`Suite 12`, `room 101`→`Room 101`,
 `floor 5`→`Floor 5`, `extension 55` / `ext 55`→`ext. 55`, `apt 4`→`Apt. 4`;
 spoken digit runs after these cues (min length 1): `suite five`→`Suite 5`,
 `suite five five`→`Suite 55`, `floor five five`→`Floor 55`; `hit the room` stays;
-v1 still rewrites when more words follow — `room 5 people`→`Room 5 people`), US states →
+v1 still rewrites when more words follow — `room 5 people`→`Room 5 people`),
+version numbers (`version two`→`v2`, `version 3`→`v3`,
+`version one point two`→`v1.2`; prose `the version is fine` stays — cue needs a number), US states →
 USPS codes (multi-word always: `new york`→`NY`; single-word only with address
 cue left of match — street abbrev, ZIP, or `state of` — so `I love california`
 stays, `35 Lexington avenue california`→`35 Lexington Ave. CA`,
@@ -124,7 +126,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **delete last word** — drop trailing word (stack-aware; redo restores)
 - **delete last sentence** / **delete previous sentence** / **delete sentence** — drop trailing sentence (stack-aware; redo restores). Does **not** steal **delete last word** or **delete that**
 - **delete last paragraph** / **delete previous paragraph** / **delete paragraph** — drop trailing paragraph (stack-aware; redo restores)
-- **delete last line** / **delete previous line** / **delete line** — drop trailing line content after last `\n` (stack-aware; redo restores)
+- **delete last line** / **delete previous line** / **delete line** — drop trailing line content after last `\n` (stack-aware; redo restores). Trailing empty line (`…\n`) peels the newline (not a no-op)
 - **caps on / all caps on / no caps on** — sticky casing (`CapsMode`)
 - **caps off** — back to normal casing
 - **spell mode** / **start spelling** / **spell on** — sticky spell mode (`SpellMode`); packs letters / NATO / digits
@@ -134,6 +136,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
   (e.g. `spell as capital j o h n` → `John`)
 - Spoken single-letter runs pack to uppercase acronyms without sticky spell (`a p i` → `API` via `SpellTransform.packAcronyms`; min run 3, plus common 2-letter allowlist `i d`→`ID` / `u i`→`UI` / `a i`→`AI`; unlisted pairs like `a b` stay; `I a` stays)
 - **cap that / all caps that / no caps that** — transform last word
+- **cap next** / **capitalize next** / **caps next** — arm one-shot: next content’s first word is capitalized, then arm clears (`CapNext.tla`; HUD “cap next”)
 - **title case that** — title-case last phrase (stack delta)
 - **sentence case that** — sentence-case last phrase
 - **no space that** — join last word without leading space
@@ -165,6 +168,9 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **clear all** — wipe session transcript
 - **press enter** / **press tab** / **press space** — key inserts
 - **press backspace** / **delete key** — Backspace once (keyboard only; buffer unchanged)
+- **press escape** / **press esc** / **hit escape** / **escape key** — Escape once (keyboard only; buffer unchanged; does **not** cancel session). Bare **escape** is not a command
+- **insert date** / **today's date** / **insert the date** — type today's date (e.g. `July 10, 2026`)
+- **insert time** / **current time** / **insert the time** — type current local time (e.g. `3:45 p.m.`)
 - **copy that** / **paste that** — clipboard
 - **duplicate that** / **dupe that** / **copy paste that** — copy last phrase (or whole buffer) and append again
 First segment auto-capitalizes. Consecutive duplicate segments skipped.
