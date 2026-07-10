@@ -230,6 +230,51 @@ struct AppStateTests {
         #expect(inserter.typedTexts == ["Hello", " world"])
     }
 
+    @Test("non-incremental batch flush types once with joined content")
+    func nonIncrementalBatchFlushTypesOnce() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello", "world"])
+        await mock.setFlushResult("done")
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+
+        struct BatchPP: TextPostProcessing {
+            func process(_ text: String) async throws -> String { text }
+        }
+        let batchPipeline = OfflineTranscriptionPipeline(
+            transcriber: mock,
+            postProcessor: BatchPP()
+        )
+        state.installPipelineForTesting(batchPipeline, typesIncrementally: false)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        // Mid-session audio: batch path must not type yet
+        recorder.lastOnSamples?([0.1])
+        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(inserter.typedTexts.isEmpty, "batch mode must not type mid-session")
+        #expect(state.transcribedText.isEmpty, "batch mode must not fill buffer mid-session")
+
+        state.stopRecording()
+        for _ in 0..<50 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if case .ready = state.status { break }
+        }
+
+        #expect(!state.transcribedText.isEmpty)
+        #expect(inserter.typedTexts.count == 1, "batch flush should type exactly once")
+        let typed = inserter.typedTexts[0]
+        #expect(typed.contains("Hello") || typed.contains("hello"))
+        // Joined batch should match buffer (single stack entry typed as one delta)
+        #expect(state.transcribedText == typed)
+    }
+
     @Test("scratch that undoes the last typed segment")
     func scratchThatUndoesLastSegment() async throws {
         let mock = MockTranscriber()
@@ -1755,12 +1800,5 @@ struct AppStateTests {
                 "Preview should include committed segment, got: \"\(preview ?? "nil")\"")
         #expect(preview?.contains("world") == true,
                 "Preview should include current peek, got: \"\(preview ?? "nil")\"")
-    }
-}
-
-// Helper extension for setting mock values
-extension MockTranscriber {
-    func setFlushResult(_ value: String) {
-        flushResult = value
     }
 }

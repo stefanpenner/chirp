@@ -23,8 +23,9 @@ VARIABLES
 vars == <<undo, redo, textLen, typedToApp>>
 
 TypeOK ==
-  /\ undo \in Seq(1..MaxItem)
-  /\ redo \in Seq(1..MaxItem)
+  \* Entries are usually ≤ MaxItem (Commit); FlushReplace may push one batch ≤ MaxLen.
+  /\ undo \in Seq(1..MaxLen)
+  /\ redo \in Seq(1..MaxLen)
   /\ Len(undo) <= MaxDepth
   /\ textLen \in 0..MaxLen
   /\ typedToApp \in 0..MaxLen
@@ -92,6 +93,15 @@ Wipe ==
   /\ undo' = <<>>
   /\ redo' = <<>>
 
+\* Non-incremental flush: replace session with a single typed batch.
+\* Mid-session content was not typed; stack must be one entry (or empty).
+FlushReplace(n) ==
+  /\ n \in 0..MaxLen
+  /\ textLen' = n
+  /\ typedToApp' = n
+  /\ undo' = IF n = 0 THEN <<>> ELSE <<n>>
+  /\ redo' = <<>>
+
 \* delete last word: drop a positive suffix length from text + undo stack.
 \* Models the happy path where the top delta fully covers the suffix
 \* (top >= k and we shrink or pop). redo becomes <<k>>.
@@ -123,6 +133,7 @@ Next ==
   \/ RedoEmpty
   \/ Wipe
   \/ \E k \in 1..MaxItem: DropSuffix(k)
+  \/ \E n \in 0..MaxLen: FlushReplace(n)
   \/ Reset
 
 Spec == Init /\ [][Next]_vars

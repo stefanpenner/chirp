@@ -260,6 +260,16 @@ public final class AppState {
 
     // MARK: - Pipeline management
 
+    /// Test / injection hook: install a pipeline and typing policy.
+    func installPipelineForTesting(
+        _ pipeline: any TranscriptionPipeline,
+        typesIncrementally: Bool
+    ) {
+        self.pipeline = pipeline
+        self.pipelineTypesIncrementally = typesIncrementally
+        self.pipelineSupportsPreview = typesIncrementally
+    }
+
     /// Rebuild the transcription pipeline from the active AI mode.
     /// Called when AI settings change in the Settings UI.
     public func rebuildPipeline() {
@@ -278,7 +288,7 @@ public final class AppState {
         }
 
         let postProcessor = buildPostProcessor(for: mode)
-        let actuallyUsesLLM = !(postProcessor is RegexPostProcessor || postProcessor is PassthroughPostProcessor)
+        let actuallyUsesLLM = TextPostProcessingPolicy.defersTypingUntilFlush(postProcessor)
 
         // Speaker verification: pass verifier to pipeline when enabled + enrolled
         let verifier: (any SpeakerVerifying)? = (speakerEnrollment.isEnabled && speakerEnrollment.isEnrolled) ? speakerVerifier : nil
@@ -619,9 +629,14 @@ public final class AppState {
                     case .redoThat:
                         self.performRedoThat(typesIncrementally: false)
                     case .none:
+                        // One-shot type: replace buffer + stack so scratch undoes the
+                        // whole batch (mid-session segments were not typed/pushed).
+                        self.editStack.clear()
                         self.transcribedText = remaining
-                        self.textInserter.typeText(remaining)
-                        self.editStack.push(remaining)
+                        if !remaining.isEmpty {
+                            self.textInserter.typeText(remaining)
+                            self.editStack.push(remaining)
+                        }
                         self.lastCommittedNormalized = TranscriptNormalize.key(remaining)
                     }
                 }

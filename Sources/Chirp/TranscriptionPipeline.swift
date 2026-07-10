@@ -40,9 +40,10 @@ extension TranscriptionPipeline {
 /// Wraps the existing local Transcriber + regex post-processing.
 /// Preserves all existing behavior: streaming segments, speculative peek, etc.
 ///
-/// When `usesLLM` is true, feedAudio accumulates segments internally and
-/// flush returns the LLM-processed full text. This prevents incremental
-/// typing during recording when LLM post-processing is enabled.
+/// When `usesLLM` is true (batch post-process: T5/LLM/chained), feedAudio
+/// accumulates content segments and returns `[]` mid-session — same contract
+/// as CloudTranscriptionPipeline. flush joins + post-processes once.
+/// Passthrough and regex stay incremental (usesLLM = false).
 actor OfflineTranscriptionPipeline: TranscriptionPipeline {
     let transcriber: any TranscriberProtocol
     let postProcessor: any TextPostProcessing
@@ -61,7 +62,7 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
     ) {
         self.transcriber = transcriber
         self.postProcessor = postProcessor
-        self.usesLLM = !(postProcessor is RegexPostProcessor)
+        self.usesLLM = TextPostProcessingPolicy.defersTypingUntilFlush(postProcessor)
         self.speakerVerifier = speakerVerifier
         self.speakerThreshold = speakerThreshold
     }
@@ -97,8 +98,15 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
                 }
             }
 
-            if usesLLM { accumulatedText.append(text) }
-            results.append(text)
+            if usesLLM {
+                // Batch until flush: do not surface content for mid-session typing.
+                // Skip pure commands so they are not re-injected into the batch join.
+                if !DictationCommand.parse(text).isCommand {
+                    accumulatedText.append(text)
+                }
+            } else {
+                results.append(text)
+            }
         }
         return results
     }
@@ -113,12 +121,20 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
         let remaining = TextPostProcessor.process(raw)
 
         if usesLLM {
-            if !remaining.isEmpty { accumulatedText.append(remaining) }
-            let fullText = accumulatedText.joined(separator: " ")
+            let remainingIsCommand = !remaining.isEmpty && DictationCommand.parse(remaining).isCommand
+            if !remaining.isEmpty, !remainingIsCommand {
+                accumulatedText.append(remaining)
+            }
+            let fullText = Self.joinAccumulated(accumulatedText)
             accumulatedText.removeAll()
-            guard !fullText.isEmpty else { return "" }
+
+            // Session was only a spoken command (e.g. "scratch that") — surface it.
+            if fullText.isEmpty {
+                return remainingIsCommand ? remaining : ""
+            }
+
             onPostProcessing?()
-            // Run LLM post-processing on full text with retry, fallback to regex-cleaned text
+            // Run LLM post-processing on full text with retry, fallback to joined text
             let processor = postProcessor
             do {
                 return try await RetryHelper.withRetry {
@@ -131,6 +147,15 @@ actor OfflineTranscriptionPipeline: TranscriptionPipeline {
         } else {
             return remaining
         }
+    }
+
+    /// Join VAD segments with the same policy as live incremental typing.
+    private static func joinAccumulated(_ parts: [String]) -> String {
+        var full = ""
+        for part in parts {
+            full = SegmentJoiner.append(existing: full, next: part).full
+        }
+        return full
     }
 
     func resetVAD() async {

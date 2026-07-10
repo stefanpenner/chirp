@@ -14,6 +14,16 @@ protocol TextPostProcessing: Sendable {
     func process(_ text: String) async throws -> String
 }
 
+/// Policy for when post-processing requires batching (no mid-session typing).
+enum TextPostProcessingPolicy {
+    /// True for LLM/T5/chained processors. False for regex and passthrough.
+    /// When true, OfflineTranscriptionPipeline accumulates until flush and
+    /// AppState sets `pipelineTypesIncrementally = false`.
+    static func defersTypingUntilFlush(_ processor: any TextPostProcessing) -> Bool {
+        !(processor is RegexPostProcessor || processor is PassthroughPostProcessor)
+    }
+}
+
 // MARK: - Passthrough (no-op)
 
 struct PassthroughPostProcessor: TextPostProcessing {

@@ -51,6 +51,9 @@ Pipeline rebuild deferral: `PipelineRebuildDecision` + `PipelineRebuild.tla`.
 ASR EP selection: `InferenceProvider` defaults to CPU (CoreML often slower
 for Parakeet int8 via sherpa). Override with `CHIRP_ASR_PROVIDER=coreml`.
 VAD stays on CPU.
+Batch post-process (T5/LLM / Offline+Fixup): mid-session feed returns no
+typed segments; flush joins with `SegmentJoiner`, post-processes once, and
+AppState types a single delta (`EditStack.FlushReplace`).
 Multi-utterance joins use `SegmentJoiner` (insert ". " when a new
 capitalized clause follows bare text; suppress before proper nouns /
 dict products like GitHub). Light ITN: times, `50 percent`→`50%`,

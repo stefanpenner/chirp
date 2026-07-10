@@ -33,6 +33,7 @@ actor MockTranscriber: TranscriberProtocol {
 
     func setInitializeResult(_ value: Bool) { initializeResult = value }
     func setFeedAudioResult(_ value: [String]) { feedAudioResult = value }
+    func setFlushResult(_ value: String) { flushResult = value }
     func setFeedAudioDelay(_ value: UInt64) { feedAudioDelay = value }
     func setFlushDelay(_ value: UInt64) { flushDelay = value }
     func setPeekResult(_ value: String?) { peekResult = value }
