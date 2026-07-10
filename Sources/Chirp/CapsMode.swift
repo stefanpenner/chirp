@@ -77,4 +77,23 @@ enum CapsTransform {
     static func lowerWord(_ word: String) -> String {
         word.lowercased()
     }
+
+    /// Sentence case a phrase: first letter capital, rest lower, recap after .?!…
+    /// "HELLO WORLD. NEXT" → "Hello world. Next"
+    static func sentenceCase(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+        var s = text.lowercased()
+        // Capitalize first letter in the string
+        if let idx = s.firstIndex(where: { $0.isLetter }) {
+            s.replaceSubrange(idx...idx, with: String(s[idx]).uppercased())
+        }
+        // Re-capitalize after terminal punct (shared truecase rule)
+        return TextPostProcessor.capitalizeAfterTerminalPunct(s)
+    }
+
+    /// Strip leading whitespace from a delta (no-space that).
+    /// " world" → "world" so "Hello world" becomes "Helloworld".
+    static func stripLeadingSpace(_ text: String) -> String {
+        String(text.drop(while: { $0.isWhitespace }))
+    }
 }

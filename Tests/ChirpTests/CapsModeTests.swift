@@ -47,4 +47,18 @@ struct CapsModeTests {
         #expect(CapsMode.allCaps.overlayLabel == "ALL CAPS")
         #expect(CapsMode.capsOn.overlayLabel == "Title Case")
     }
+
+    @Test("sentenceCase lowers and recaps after periods")
+    func sentenceCase() {
+        #expect(CapsTransform.sentenceCase("HELLO WORLD") == "Hello world")
+        #expect(CapsTransform.sentenceCase("HELLO. WORLD") == "Hello. World")
+        #expect(CapsTransform.sentenceCase("") == "")
+    }
+
+    @Test("stripLeadingSpace removes only leading whitespace")
+    func stripLeadingSpace() {
+        #expect(CapsTransform.stripLeadingSpace(" world") == "world")
+        #expect(CapsTransform.stripLeadingSpace("world") == "world")
+        #expect(CapsTransform.stripLeadingSpace("  a b") == "a b")
+    }
 }

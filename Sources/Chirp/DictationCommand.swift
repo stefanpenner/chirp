@@ -32,6 +32,10 @@ enum DictationCommand: Equatable, Sendable {
     case noCapsThat
     /// Title-case the last phrase / stack delta (one-shot).
     case titleCaseThat
+    /// Sentence-case the last phrase (one-shot).
+    case sentenceCaseThat
+    /// Remove the space before the last word / phrase (one-shot).
+    case noSpaceThat
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -131,6 +135,12 @@ enum DictationCommand: Equatable, Sendable {
         case "title case that", "title case that phrase", "titlecase that",
              "title case phrase":
             return .titleCaseThat
+        case "sentence case that", "sentence case that phrase",
+             "sentencecase that":
+            return .sentenceCaseThat
+        case "no space that", "nospace that", "no spaces that",
+             "delete the space", "remove the space":
+            return .noSpaceThat
         default:
             return nil
         }
@@ -152,6 +162,8 @@ enum DictationCommand: Equatable, Sendable {
         ("caps off", "Back to normal casing"),
         ("cap that / all caps that", "Transform last word"),
         ("title case that", "Title-case last phrase"),
+        ("sentence case that", "Sentence-case last phrase"),
+        ("no space that", "Join last word without space"),
         ("period / comma / …", "Spoken punctuation"),
         ("new line / new paragraph", "Line breaks"),
         ("dot com / at sign", "Domain & email bits"),

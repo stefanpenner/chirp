@@ -259,6 +259,78 @@ struct AppStateTests {
         #expect(inserter.typedTexts.contains("HELLO WORLD"))
     }
 
+    @Test("sentence case that transforms last phrase")
+    func sentenceCaseThatLastPhrase() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["HELLO WORLD STOP"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["sentence case that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world stop" { break }
+        }
+        #expect(
+            state.transcribedText == "Hello world stop",
+            "sentence case that failed: \"\(state.transcribedText)\""
+        )
+    }
+
+    @Test("no space that joins last word without space")
+    func noSpaceThatJoins() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Peyton"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Peyton" { break }
+        }
+
+        await mock.setFeedAudioResult(["Davis"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("Davis") { break }
+        }
+        #expect(state.transcribedText == "Peyton Davis" || state.transcribedText.hasSuffix("Davis"))
+
+        await mock.setFeedAudioResult(["no space that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "PeytonDavis" { break }
+        }
+        #expect(
+            state.transcribedText == "PeytonDavis",
+            "no space that failed: \"\(state.transcribedText)\""
+        )
+    }
+
     @Test("title case that transforms last phrase")
     func titleCaseThatLastPhrase() async throws {
         let mock = MockTranscriber()

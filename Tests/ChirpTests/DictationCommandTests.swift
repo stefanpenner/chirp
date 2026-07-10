@@ -68,6 +68,8 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("no caps that") == .noCapsThat)
         #expect(DictationCommand.parse("title case that") == .titleCaseThat)
         #expect(DictationCommand.parse("title case that phrase") == .titleCaseThat)
+        #expect(DictationCommand.parse("sentence case that") == .sentenceCaseThat)
+        #expect(DictationCommand.parse("no space that") == .noSpaceThat)
         #expect(DictationCommand.parse("please all caps on") == .setCapsMode(.allCaps))
     }
 

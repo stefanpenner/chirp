@@ -655,6 +655,13 @@ public final class AppState {
                             CapsTransform.titleCaseWords,
                             typesIncrementally: false
                         )
+                    case .sentenceCaseThat:
+                        self.performTransformLastPhrase(
+                            CapsTransform.sentenceCase,
+                            typesIncrementally: false
+                        )
+                    case .noSpaceThat:
+                        self.performNoSpaceThat(typesIncrementally: false)
                     case .none:
                         // One-shot type: replace buffer + stack so scratch undoes the
                         // whole batch (mid-session segments were not typed/pushed).
@@ -713,6 +720,10 @@ public final class AppState {
             performTransformLastWord(CapsTransform.lowerWord, typesIncrementally: typesIncrementally)
         case .titleCaseThat:
             performTransformLastPhrase(CapsTransform.titleCaseWords, typesIncrementally: typesIncrementally)
+        case .sentenceCaseThat:
+            performTransformLastPhrase(CapsTransform.sentenceCase, typesIncrementally: typesIncrementally)
+        case .noSpaceThat:
+            performNoSpaceThat(typesIncrementally: typesIncrementally)
         case .none:
             // Skip consecutive identical segments (VAD/ASR echo under noise)
             let shaped = CapsTransform.apply(text, mode: capsMode)
@@ -749,6 +760,47 @@ public final class AppState {
         guard newSuffix != oldSuffix else { return }
 
         transcribedText = String(transcribedText.dropLast(oldSuffix.count)) + newSuffix
+        if typesIncrementally {
+            textInserter.deleteBackward(count: oldSuffix.count)
+            textInserter.typeText(newSuffix)
+        }
+        if editStack.dropTrailingSuffix(oldSuffix) {
+            editStack.push(newSuffix)
+        } else {
+            editStack.clear()
+            editStack.push(newSuffix)
+        }
+        lastCommittedNormalized = ""
+    }
+
+    /// Remove the space before the last word ("no space that" → PeytonDavis).
+    private func performNoSpaceThat(typesIncrementally: Bool) {
+        // Prefer last stack delta if it has a leading space (joiner delta).
+        if let last = editStack.lastDelta, last.first?.isWhitespace == true {
+            performTransformLastPhrase(CapsTransform.stripLeadingSpace, typesIncrementally: typesIncrementally)
+            return
+        }
+        // Otherwise strip space before the last word in the buffer.
+        let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var buffer = transcribedText
+        while buffer.last?.isWhitespace == true {
+            buffer.removeLast()
+        }
+        guard let lastSpace = buffer.lastIndex(where: { $0.isWhitespace }) else { return }
+        let wordStart = buffer.index(after: lastSpace)
+        var start = wordStart
+        if start > transcribedText.startIndex {
+            let before = transcribedText.index(before: start)
+            if transcribedText[before].isWhitespace {
+                start = before
+            }
+        }
+        let oldSuffix = String(transcribedText[start...])
+        let newSuffix = CapsTransform.stripLeadingSpace(oldSuffix)
+        guard newSuffix != oldSuffix else { return }
+
+        transcribedText = String(transcribedText[..<start]) + newSuffix
         if typesIncrementally {
             textInserter.deleteBackward(count: oldSuffix.count)
             textInserter.typeText(newSuffix)
