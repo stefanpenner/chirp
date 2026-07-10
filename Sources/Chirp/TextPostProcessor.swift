@@ -293,6 +293,8 @@ enum TextPostProcessor {
 
     private static func applyLightITN(_ text: String) -> String {
         var result = applyTimeITN(text)
+        // Cardinals before %/$ so "one hundred dollars" → "100 dollars" → "$100"
+        result = SpokenNumberITN.apply(result)
         result = applyPercentITN(result)
         result = applyCurrencyITN(result)
         return result
@@ -317,10 +319,10 @@ enum TextPostProcessor {
         return result
     }
 
-    /// "50 percent" / "fifty percent" → "50%" (digits or small spoken numbers only).
+    /// "50 percent" / "fifty percent" / "100 percent" → "50%" / "100%".
     private static let percentITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|\d{1,3})\s+percent\b"#,
+            pattern: #"\b(\d{1,6}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\s+percent\b"#,
             options: .caseInsensitive
         )
     }()
@@ -349,10 +351,10 @@ enum TextPostProcessor {
         return result
     }
 
-    /// "20 dollars" / "twenty dollars" → "$20". Avoids bare "one" without dollars.
+    /// "20 dollars" / "twenty dollars" / "100 dollars" → "$20" / "$100".
     private static let currencyITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|\d{1,6})\s+dollars?\b"#,
+            pattern: #"\b(\d{1,9}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\s+dollars?\b"#,
             options: .caseInsensitive
         )
     }()
