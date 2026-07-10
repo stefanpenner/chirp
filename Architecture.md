@@ -143,7 +143,7 @@ API keys are stored in the macOS **Keychain** via `KeychainHelper`, never in Use
 
 2. **VAD** — `Transcriber.feedAudio()` pushes samples into Silero VAD and appends them to `pendingAudio`. When the VAD detects a speech-end boundary (≥0.5s silence), the VAD segment is discarded as audio — VAD only endpoints. Decode uses `pendingAudio` (full raw buffer since last commit), then clears it. This avoids Silero onset-lag clipping leading words. Formal model: `specs/TranscriberBuffer.tla`.
 
-3. **Transcription** — Offline recognizer (Parakeet TDT 0.6b v3 int8, multilingual) runs greedy-search decoding. The `Transcriber` actor serializes all C API access.
+3. **Transcription** — Offline recognizer (Parakeet TDT 0.6b v3 int8, multilingual) runs greedy-search decoding on CPU by default (`InferenceProvider`; optional `CHIRP_ASR_PROVIDER=coreml`). The `Transcriber` actor serializes all C API access.
 
 4. **Speculative preview** — Every 400ms, `peekTranscription()` runs inference on `pendingAudio` (last 5 seconds, gated on VAD speech detection). A generation counter (`commitGen`) discards stale previews when a real segment commits. Disabled when `pipelineSupportsPreview` is false (cloud or LLM modes).
 

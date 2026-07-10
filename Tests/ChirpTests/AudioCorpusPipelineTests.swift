@@ -111,16 +111,20 @@ struct AudioCorpusPipelineTests {
 
     // MARK: - Pipeline runner
 
-    /// Feed samples in ~85 ms chunks through Transcriber; return combined text.
-    private static func transcribe(samples: [Float], paths: ModelPaths) async throws -> String {
+    /// Feed samples in ~85 ms chunks through Transcriber; return text + wall time.
+    private static func transcribe(
+        samples: [Float],
+        paths: ModelPaths
+    ) async throws -> (text: String, elapsed: TimeInterval) {
         let transcriber = Transcriber()
         let ok = await transcriber.initialize(paths: paths)
         guard ok else {
             Issue.record("Transcriber failed to initialize")
-            return ""
+            return ("", 0)
         }
 
-        let chunkSize = 1360 // ~85ms @ 16 kHz
+        let t0 = Date()
+        let chunkSize = DecodePolicy.streamChunkSamples
         var segments: [String] = []
         for start in stride(from: 0, to: samples.count, by: chunkSize) {
             let end = min(start + chunkSize, samples.count)
@@ -130,10 +134,11 @@ struct AudioCorpusPipelineTests {
         }
         let flushed = await transcriber.flush()
         if !flushed.isEmpty { segments.append(flushed) }
+        let elapsed = Date().timeIntervalSince(t0)
 
         // Apply same light post-process the product uses
         let raw = segments.joined(separator: " ")
-        return TextPostProcessor.process(raw)
+        return (TextPostProcessor.process(raw), elapsed)
     }
 
     /// Full AppState path: MockAudioRecorder → pipeline → typed text.
@@ -228,9 +233,13 @@ struct AudioCorpusPipelineTests {
             let samples = SpeechAudioGenerator.withTrailingSilence(speech, seconds: 0.8)
             #expect(samples.count > 1600, "Generated audio too short for \(item.id)")
 
-            let hyp = try await Self.transcribe(samples: samples, paths: paths)
+            let (hyp, elapsed) = try await Self.transcribe(samples: samples, paths: paths)
             pairs.append((id: item.id, reference: item.text, hypothesis: hyp))
-            print("corpus[\(item.id)] ref=\"\(item.text)\" hyp=\"\(hyp)\" samples=\(samples.count)")
+            let audioSec = Double(samples.count) / Double(DecodePolicy.sampleRate)
+            let rtf = audioSec > 0 ? elapsed / audioSec : 0
+            print(String(format:
+                "corpus[%@] ref=\"%@\" hyp=\"%@\" samples=%d audio=%.2fs decode=%.2fs RTF=%.2f",
+                item.id, item.text, hyp, samples.count, audioSec, elapsed, rtf))
         }
 
         #expect(pairs.count >= 5, "Too few corpus items transcribed (TTS or model failure)")
@@ -314,7 +323,7 @@ struct AudioCorpusPipelineTests {
 
         // 1.5s pure silence + trailing silence buffer
         let samples = SpeechAudioGenerator.silence(seconds: 1.5)
-        let hyp = try await Self.transcribe(samples: samples, paths: paths)
+        let (hyp, _) = try await Self.transcribe(samples: samples, paths: paths)
         let score = TranscriptionScoring.score(
             id: "silence",
             reference: "",
@@ -352,9 +361,9 @@ struct AudioCorpusPipelineTests {
             }
             let noisy = SpeechAudioGenerator.addNoise(to: speech, snrDB: 15, seed: 7)
             let samples = SpeechAudioGenerator.withTrailingSilence(noisy, seconds: 0.8)
-            let hyp = try await Self.transcribe(samples: samples, paths: paths)
+            let (hyp, elapsed) = try await Self.transcribe(samples: samples, paths: paths)
             pairs.append((id: item.0, reference: item.1, hypothesis: hyp))
-            print("noisy[\(item.0)] hyp=\"\(hyp)\"")
+            print(String(format: "noisy[%@] hyp=\"%@\" decode=%.2fs", item.0, hyp, elapsed))
         }
 
         let ranking = TranscriptionScoring.rank(pairs)
@@ -385,7 +394,7 @@ struct AudioCorpusPipelineTests {
         }
 
         let samples = try SpeechAudioGenerator.loadWAV(path: wavPath)
-        let hyp = try await Self.transcribe(
+        let (hyp, elapsed) = try await Self.transcribe(
             samples: SpeechAudioGenerator.withTrailingSilence(samples, seconds: 0.5),
             paths: paths
         )
@@ -395,6 +404,7 @@ struct AudioCorpusPipelineTests {
             hypothesis: hyp
         )
         print(score.summaryLine)
+        print(String(format: "fixture decode=%.2fs", elapsed))
 
         // Fixture is committed TTS of "hello world" — require low WER.
         #expect(

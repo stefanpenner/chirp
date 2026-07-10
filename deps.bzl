@@ -25,7 +25,7 @@ def _deps_impl(module_ctx):
             version = _SHERPA_ONNX_VERSION,
             ort = _ONNXRUNTIME_VERSION,
         ),
-        # TODO: pin sha256 for reproducibility (omit to let Bazel print it on first fetch)
+        sha256 = "12bb5965c63946f2514dfbd3e2b8f0ee21ad28d46f38a4db4f2180677aed04ad",
         build_file_content = """
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
@@ -67,7 +67,7 @@ cc_library(
                 version = _SPARKLE_VERSION,
             ),
         ],
-        # TODO: pin sha256
+        sha256 = "5cddb7695674ef7704268f38eccaee80e3accbf19e61c1689efff5b6116d85be",
         build_file_content = """
 load("@rules_apple//apple:apple.bzl", "apple_dynamic_framework_import")
 
