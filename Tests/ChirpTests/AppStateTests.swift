@@ -259,6 +259,40 @@ struct AppStateTests {
         #expect(inserter.typedTexts.contains("HELLO WORLD"))
     }
 
+    @Test("title case that transforms last phrase")
+    func titleCaseThatLastPhrase() async throws {
+        let mock = MockTranscriber()
+        // One segment so last stack delta is the full phrase
+        await mock.setFeedAudioResult(["hello world from chirp"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+        #expect(!state.transcribedText.isEmpty)
+
+        await mock.setFeedAudioResult(["title case that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello World From Chirp" { break }
+        }
+        #expect(
+            state.transcribedText == "Hello World From Chirp",
+            "title case that should title-case last phrase, got \"\(state.transcribedText)\""
+        )
+    }
+
     @Test("cap that capitalizes last word")
     func capThatLastWord() async throws {
         let mock = MockTranscriber()

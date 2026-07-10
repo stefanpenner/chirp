@@ -227,11 +227,24 @@ struct IslandView: View {
     var body: some View {
         VStack(spacing: 0) {
             if isActive {
-                Text(appState.aiSettings.activeMode?.name ?? "Offline")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(.primary.opacity(0.25))
-                    .padding(.top, 10)
-                    .transition(.opacity)
+                HStack(spacing: 6) {
+                    Text(appState.aiSettings.activeMode?.name ?? "Offline")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(.primary.opacity(0.25))
+                    if let capsLabel = appState.capsMode.overlayLabel {
+                        Text(capsLabel)
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.primary.opacity(0.55))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule().fill(.primary.opacity(0.08))
+                            )
+                            .accessibilityLabel("Capitalization mode: \(capsLabel)")
+                    }
+                }
+                .padding(.top, 10)
+                .transition(.opacity)
             }
 
             if isDownloading && downloadProgress >= 0.9 {

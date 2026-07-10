@@ -30,6 +30,8 @@ enum DictationCommand: Equatable, Sendable {
     case allCapsThat
     /// lowercase the last word (one-shot).
     case noCapsThat
+    /// Title-case the last phrase / stack delta (one-shot).
+    case titleCaseThat
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -126,6 +128,9 @@ enum DictationCommand: Equatable, Sendable {
             return .allCapsThat
         case "no caps that", "lowercase that", "lower case that":
             return .noCapsThat
+        case "title case that", "title case that phrase", "titlecase that",
+             "title case phrase":
+            return .titleCaseThat
         default:
             return nil
         }
@@ -146,6 +151,7 @@ enum DictationCommand: Equatable, Sendable {
         ("caps on / all caps on / no caps on", "Sticky capitalization mode"),
         ("caps off", "Back to normal casing"),
         ("cap that / all caps that", "Transform last word"),
+        ("title case that", "Title-case last phrase"),
         ("period / comma / …", "Spoken punctuation"),
         ("new line / new paragraph", "Line breaks"),
         ("dot com / at sign", "Domain & email bits"),

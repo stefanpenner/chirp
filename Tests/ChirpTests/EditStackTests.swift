@@ -15,6 +15,15 @@ struct EditStackTests {
         #expect(s.redo() == nil)
     }
 
+    @Test("lastDelta is the newest push")
+    func lastDelta() {
+        var s = EditStack()
+        #expect(s.lastDelta == nil)
+        s.push("Hello")
+        s.push(" world")
+        #expect(s.lastDelta == " world")
+    }
+
     @Test("push then undo returns delta and enables redo")
     func pushUndoRedo() {
         var s = EditStack()

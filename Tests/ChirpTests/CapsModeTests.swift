@@ -39,4 +39,12 @@ struct CapsModeTests {
         #expect(CapsTransform.apply("", mode: .allCaps).isEmpty)
         #expect(CapsTransform.apply("", mode: .capsOn).isEmpty)
     }
+
+    @Test("overlay labels only for non-normal modes")
+    func overlayLabels() {
+        #expect(CapsMode.normal.overlayLabel == nil)
+        #expect(CapsMode.noCaps.overlayLabel == "no caps")
+        #expect(CapsMode.allCaps.overlayLabel == "ALL CAPS")
+        #expect(CapsMode.capsOn.overlayLabel == "Title Case")
+    }
 }

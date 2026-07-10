@@ -14,6 +14,9 @@ struct EditStack: Equatable, Sendable {
     var canUndo: Bool { !undoItems.isEmpty }
     var canRedo: Bool { !redoItems.isEmpty }
 
+    /// Most recent typed delta (last phrase), if any.
+    var lastDelta: String? { undoItems.last }
+
     /// Record a newly typed delta. Clears the redo branch.
     mutating func push(_ delta: String) {
         guard !delta.isEmpty else { return }

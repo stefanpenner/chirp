@@ -130,7 +130,8 @@ public final class AppState {
     private var editStack = EditStack()
 
     /// Sticky capitalization mode for new commits (Dragon-style caps on / all caps / no caps).
-    private var capsMode: CapsMode = .normal
+    /// Observable for overlay badge when non-normal.
+    private(set) var capsMode: CapsMode = .normal
 
     /// Normalized form of the last committed non-command segment (dedup echoes).
     private var lastCommittedNormalized = ""
@@ -649,6 +650,11 @@ public final class AppState {
                             CapsTransform.lowerWord,
                             typesIncrementally: false
                         )
+                    case .titleCaseThat:
+                        self.performTransformLastPhrase(
+                            CapsTransform.titleCaseWords,
+                            typesIncrementally: false
+                        )
                     case .none:
                         // One-shot type: replace buffer + stack so scratch undoes the
                         // whole batch (mid-session segments were not typed/pushed).
@@ -705,6 +711,8 @@ public final class AppState {
             performTransformLastWord(CapsTransform.upperWord, typesIncrementally: typesIncrementally)
         case .noCapsThat:
             performTransformLastWord(CapsTransform.lowerWord, typesIncrementally: typesIncrementally)
+        case .titleCaseThat:
+            performTransformLastPhrase(CapsTransform.titleCaseWords, typesIncrementally: typesIncrementally)
         case .none:
             // Skip consecutive identical segments (VAD/ASR echo under noise)
             let shaped = CapsTransform.apply(text, mode: capsMode)
@@ -721,6 +729,37 @@ public final class AppState {
             editStack.push(joined.delta)
             lastCommittedNormalized = norm
         }
+    }
+
+    /// One-shot transform of the last typed phrase (EditStack top delta).
+    /// Falls back to last word when the stack is empty.
+    private func performTransformLastPhrase(
+        _ transform: (String) -> String,
+        typesIncrementally: Bool
+    ) {
+        guard let oldSuffix = editStack.lastDelta, !oldSuffix.isEmpty else {
+            performTransformLastWord(transform, typesIncrementally: typesIncrementally)
+            return
+        }
+        guard transcribedText.hasSuffix(oldSuffix) else {
+            performTransformLastWord(transform, typesIncrementally: typesIncrementally)
+            return
+        }
+        let newSuffix = transform(oldSuffix)
+        guard newSuffix != oldSuffix else { return }
+
+        transcribedText = String(transcribedText.dropLast(oldSuffix.count)) + newSuffix
+        if typesIncrementally {
+            textInserter.deleteBackward(count: oldSuffix.count)
+            textInserter.typeText(newSuffix)
+        }
+        if editStack.dropTrailingSuffix(oldSuffix) {
+            editStack.push(newSuffix)
+        } else {
+            editStack.clear()
+            editStack.push(newSuffix)
+        }
+        lastCommittedNormalized = ""
     }
 
     /// One-shot transform of the last whitespace-delimited word (cap that / all caps that).

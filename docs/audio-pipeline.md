@@ -69,6 +69,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **caps on / all caps on / no caps on** — sticky casing (`CapsMode`)
 - **caps off** — back to normal casing
 - **cap that / all caps that / no caps that** — transform last word
+- **title case that** — title-case last phrase (stack delta)
+- Overlay badge shows sticky caps mode when not normal
 - **clear all** — wipe session transcript
 - **press enter** / **press tab** — key inserts
 - **copy that** / **paste that** — clipboard

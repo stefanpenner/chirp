@@ -44,7 +44,8 @@ Commit ==
   /\ lastOp' = "commit"
   /\ UNCHANGED mode
 
-\* One-shot transform of already-committed text; requires prior content
+\* One-shot transform of already-committed text (cap that / title case that);
+\* requires prior content. Mode unchanged.
 CapThat ==
   /\ commits > 0
   /\ lastOp' = "capThat"

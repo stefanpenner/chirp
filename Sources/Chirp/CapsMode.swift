@@ -14,6 +14,16 @@ enum CapsMode: Equatable, Sendable {
     case allCaps
     /// Title-Case Each Word ("caps on").
     case capsOn
+
+    /// Short HUD label when mode is active; nil for normal (hide badge).
+    var overlayLabel: String? {
+        switch self {
+        case .normal: return nil
+        case .noCaps: return "no caps"
+        case .allCaps: return "ALL CAPS"
+        case .capsOn: return "Title Case"
+        }
+    }
 }
 
 enum CapsTransform {
