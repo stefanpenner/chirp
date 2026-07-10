@@ -126,9 +126,24 @@ struct TextPostProcessorTests {
 
     @Test("Spoken new line and paragraph commands")
     func spokenNewlines() {
-        #expect(TextPostProcessor.process("Hello new line world") == "Hello\nworld")
+        #expect(TextPostProcessor.process("Hello new line world") == "Hello\nWorld")
         #expect(TextPostProcessor.process("One new paragraph Two") == "One\n\nTwo")
-        #expect(TextPostProcessor.process("line newline break") == "line\nbreak")
+        #expect(TextPostProcessor.process("line newline break") == "line\nBreak")
+    }
+
+    @Test("Capitalizes after terminal punct and newlines")
+    func capitalizeAfterPunct() {
+        #expect(TextPostProcessor.process("hello. world") == "hello. World")
+        #expect(TextPostProcessor.process("wait? next") == "wait? Next")
+        #expect(TextPostProcessor.process("wow! yes") == "wow! Yes")
+        #expect(TextPostProcessor.capitalizeAfterTerminalPunct("a… b") == "a… B")
+        // Decimals without space stay put
+        #expect(TextPostProcessor.process("pi is 3.14 exactly").contains("3.14"))
+        // Content word "period" mid-sentence unchanged
+        #expect(TextPostProcessor.process("the period is over") == "the period is over")
+        // Trailing spoken period only
+        let trailing = TextPostProcessor.process("Hello world period")
+        #expect(trailing == "Hello world." || trailing == "hello world.")
     }
 
     @Test("Spoken domain and at-sign fragments")
@@ -148,8 +163,8 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("a and b ampersand c").contains("&"))
         #expect(TextPostProcessor.process("done ellipsis") == "done…")
         #expect(TextPostProcessor.process("word em dash word").contains("—"))
-        #expect(TextPostProcessor.process("done full stop") == "Done." ||
-                TextPostProcessor.process("done full stop") == "done.")
+        let fullStop = TextPostProcessor.process("done full stop")
+        #expect(fullStop == "done." || fullStop == "Done.")
     }
 
     @Test("Light ITN formats spoken times")

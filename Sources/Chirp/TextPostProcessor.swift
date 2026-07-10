@@ -1,14 +1,15 @@
 // TextPostProcessor.swift — Light cleanup of raw transcription output.
 // Removes filler words (um, uh, er…), deduplicates stuttered words,
 // collapses whitespace, capitalizes standalone "I", applies high-confidence
-// dictation phrase fixes, light inverse text normalization (times), and
-// drops common silence-hallucination-only utterances.
+// dictation phrase fixes, light inverse text normalization (times/%/$),
+// capitalizes after terminal punct / newlines, and drops silence hallucinations.
 // Pure String→String transform, no state, sub-millisecond.
 // Applied by AppState at all three text insertion points.
 //
-// Does NOT force sentence-start capitalization: process() runs per VAD
+// Does NOT force whole-segment-start capitalization: process() runs per VAD
 // segment, so capitalizing each chunk would mangle mid-sentence joins
 // ("hello" + " world" → "Hello World"). Parakeet already emits casing.
+// Mid-segment capitalize-after `.`/`?`/`!`/newline is safe and expected.
 
 import Foundation
 
@@ -21,6 +22,7 @@ enum TextPostProcessor {
         result = applyLightITN(result)
         result = cleanWhitespace(result)
         result = capitalizeI(result)
+        result = capitalizeAfterTerminalPunct(result)
         // Trim spaces but keep leading/trailing newlines from spoken commands
         result = result.trimmingCharacters(in: CharacterSet.whitespaces)
         if isSilenceHallucination(result) {
@@ -259,6 +261,35 @@ enum TextPostProcessor {
     private static func capitalizeI(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         return lowercaseIPattern.stringByReplacingMatches(in: text, range: range, withTemplate: "I")
+    }
+
+    /// Capitalize the first letter after terminal punctuation or a newline.
+    /// Covers spoken-punctuation rewrites ("wait? next" → "wait? Next") and
+    /// "new line" / "new paragraph" ("Hello\nworld" → "Hello\nWorld").
+    ///
+    /// Requires **whitespace after** `.`/`?`/`!`/`…` so we do not touch:
+    /// - domains: `example.com`
+    /// - times: `3 p.m.`
+    /// - decimals: `3.14`
+    /// Newlines may have zero spaces before the next letter.
+    private static let afterTerminalPunctPattern: NSRegularExpression = {
+        // Group 1 = letter to capitalize
+        try! NSRegularExpression(pattern: #"(?:[.!?…]\s+|\n\s*)([a-z])"#)
+    }()
+
+    static func capitalizeAfterTerminalPunct(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = afterTerminalPunctPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let letterRange = Range(match.range(at: 1), in: result) else { continue }
+            let letter = String(result[letterRange])
+            result.replaceSubrange(letterRange, with: letter.uppercased())
+        }
+        return result
     }
 
     /// True when cleaned text is only a known silence-hallucination token.

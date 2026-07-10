@@ -41,6 +41,13 @@ struct SegmentJoinerTests {
         #expect(j.delta == " Create a note.")
     }
 
+    @Test("lowercase after terminal punct is capitalized")
+    func capitalizeAfterTerminalPunct() {
+        let j = SegmentJoiner.append(existing: "Hello world.", next: "create a note")
+        #expect(j.full == "Hello world. Create a note")
+        #expect(j.delta == " Create a note")
+    }
+
     @Test("dict product name does not invent a period")
     func dictProductNoFalsePeriod() {
         let j = SegmentJoiner.append(existing: "please open", next: "GitHub")

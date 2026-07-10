@@ -377,10 +377,14 @@ struct AudioCorpusPipelineTests {
             return
         }
 
+        // Broader subset of clean corpus under additive noise (15 dB SNR).
         let phrases = [
             ("noise_hello", "hello world"),
             ("noise_fox", "the quick brown fox"),
             ("noise_note", "create a new note"),
+            ("noise_meet", "schedule a meeting for three pm"),
+            ("noise_email", "send an email to the team"),
+            ("noise_ok", "okay"),
         ]
 
         var pairs: [(id: String, reference: String, hypothesis: String)] = []
@@ -401,11 +405,22 @@ struct AudioCorpusPipelineTests {
         let ranking = TranscriptionScoring.rank(pairs)
         print(ranking.leaderboard)
 
-        // Relaxed budget under 15 dB SNR
+        // Relaxed budgets under 15 dB SNR (majorWER ignores a/the swaps).
+        #expect(pairs.count >= 4, "too few noisy phrases transcribed")
+        #expect(
+            ranking.meanMajorWER <= 0.40,
+            "noisy mean majorWER \(ranking.meanMajorWER) exceeds 0.40\n\(ranking.leaderboard)"
+        )
         #expect(
             ranking.meanWER <= 0.55,
             "noisy mean WER \(ranking.meanWER) exceeds 0.55\n\(ranking.leaderboard)"
         )
+        for s in ranking.scores {
+            #expect(
+                s.majorWER <= 0.75,
+                "noisy phrase \(s.id) majorWER \(s.majorWER) too high (hyp=\"\(s.hypothesis)\")"
+            )
+        }
     }
 
     @Test("Fixture WAV hello_world scores against expected phrase")

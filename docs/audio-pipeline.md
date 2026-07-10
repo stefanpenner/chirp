@@ -35,7 +35,7 @@ Coverage:
 - **Clean corpus** — 16 golden phrases, mean majorWER ≤ 8%, WER ≤ 12%, CER ≤ 8%, median ≤ 5%, RTF ≤ 0.5
 - **AppState E2E** — MockAudioRecorder → typed text, ranked subset
 - **Silence** — no hallucination (WER 0 against empty ref)
-- **Noisy** — 15 dB SNR, relaxed WER budget
+- **Noisy** — 15 dB SNR, 6 phrases, mean majorWER ≤ 40%, WER ≤ 55%
 - **Fixture WAV** — committed `hello_world.wav`
 - **Multi-utterance** — two phrases + silence via AppState + SegmentJoiner
 - **Spoken punctuation** — “period” / “question mark” / … rewrite hits

@@ -20,6 +20,12 @@ enum SegmentJoiner {
         }
 
         let separator = separator(between: existing, and: piece)
+        // After terminal punct, next clause should start capitalized (SOTA truecase).
+        if let last = existing.last, ".!?…".contains(last) {
+            piece = capitalizeFirstLetter(piece)
+        } else if separator == ". " {
+            piece = capitalizeFirstLetter(piece)
+        }
         let delta = separator + piece
         return (existing + delta, delta)
     }
