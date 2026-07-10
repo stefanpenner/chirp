@@ -55,9 +55,16 @@ Next ==
 Spec == Init /\ [][Next]_vars
 
 ----
+\* end list / reset always leave counter at 1
+EndOrResetYieldsOne ==
+  lastOp \in {"reset", "end"} => n = 1
+
 Inv ==
   /\ TypeOK
   /\ n >= 1
-  /\ lastOp \in {"reset", "end"} => n = 1
+  /\ EndOrResetYieldsOne
+
+\* Bait: negation of a real safety property (must FAIL under TLC)
+BaitInv == ~EndOrResetYieldsOne
 
 ====

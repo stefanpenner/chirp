@@ -124,6 +124,48 @@ final class TextInserter: TextInserting {
         }
     }
 
+    /// Move cursor one word via ⌥← / ⌥→ (0x7B / 0x7C).
+    func moveWord(direction: MoveDirection) {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let arrow: CGKeyCode = direction == .left ? 0x7B : 0x7C // kVK_LeftArrow / kVK_RightArrow
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: arrow, keyDown: true) {
+            keyDown.flags = .maskAlternate
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: arrow, keyDown: false) {
+            keyUp.flags = .maskAlternate
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
+    /// Move cursor to line start via ⌘←.
+    func moveToLineStart() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let leftArrow: CGKeyCode = 0x7B // kVK_LeftArrow
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: leftArrow, keyDown: true) {
+            keyDown.flags = .maskCommand
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: leftArrow, keyDown: false) {
+            keyUp.flags = .maskCommand
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
+    /// Move cursor to line end via ⌘→.
+    func moveToLineEnd() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let rightArrow: CGKeyCode = 0x7C // kVK_RightArrow
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: rightArrow, keyDown: true) {
+            keyDown.flags = .maskCommand
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: rightArrow, keyDown: false) {
+            keyUp.flags = .maskCommand
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
     func copyToClipboard(_ text: String) {
         guard !text.isEmpty else { return }
         let pb = NSPasteboard.general

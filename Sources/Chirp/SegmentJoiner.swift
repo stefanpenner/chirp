@@ -8,23 +8,33 @@ import Foundation
 
 enum SegmentJoiner {
     /// Join `next` onto `existing`. Returns the full text and the delta to type.
-    static func append(existing: String, next: String) -> (full: String, delta: String) {
+    /// - Parameter preserveLeadingCase: when true (spell mode), skip first-letter
+    ///   truecase so packed letters keep explicit casing ("abc", "Ab").
+    static func append(
+        existing: String,
+        next: String,
+        preserveLeadingCase: Bool = false
+    ) -> (full: String, delta: String) {
         var piece = next.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !piece.isEmpty else {
             return (existing, "")
         }
         if existing.isEmpty {
             // First segment of a session: capitalize leading letter if ASR left it lower.
-            piece = capitalizeFirstLetter(piece)
+            if !preserveLeadingCase {
+                piece = capitalizeFirstLetter(piece)
+            }
             return (piece, piece)
         }
 
         let separator = separator(between: existing, and: piece)
         // After terminal punct, next clause should start capitalized (SOTA truecase).
-        if let last = existing.last, ".!?…".contains(last) {
-            piece = capitalizeFirstLetter(piece)
-        } else if separator == ". " {
-            piece = capitalizeFirstLetter(piece)
+        if !preserveLeadingCase {
+            if let last = existing.last, ".!?…".contains(last) {
+                piece = capitalizeFirstLetter(piece)
+            } else if separator == ". " {
+                piece = capitalizeFirstLetter(piece)
+            }
         }
         let delta = separator + piece
         return (existing + delta, delta)

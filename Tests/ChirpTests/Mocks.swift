@@ -139,6 +139,9 @@ final class MockTextInserter: TextInserting {
     var deletedCounts: [Int] = []
     var selectBackwardCounts: [Int] = []
     var selectAllCalled = false
+    var moveWordDirections: [MoveDirection] = []
+    var moveToLineStartCalled = false
+    var moveToLineEndCalled = false
     var clipboard: String = ""
     var pasteCallCount = 0
     var copyCallCount = 0
@@ -180,6 +183,18 @@ final class MockTextInserter: TextInserting {
 
     func selectAll() {
         selectAllCalled = true
+    }
+
+    func moveWord(direction: MoveDirection) {
+        moveWordDirections.append(direction)
+    }
+
+    func moveToLineStart() {
+        moveToLineStartCalled = true
+    }
+
+    func moveToLineEnd() {
+        moveToLineEndCalled = true
     }
 }
 

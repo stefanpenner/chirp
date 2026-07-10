@@ -20,6 +20,25 @@ struct SegmentJoinerTests {
         #expect(j.delta == "Hello world")
     }
 
+    @Test("preserveLeadingCase skips first-letter truecase (spell mode)")
+    func preserveLeadingCase() {
+        let j = SegmentJoiner.append(
+            existing: "",
+            next: "abc",
+            preserveLeadingCase: true
+        )
+        #expect(j.full == "abc")
+        #expect(j.delta == "abc")
+
+        let afterPeriod = SegmentJoiner.append(
+            existing: "x.",
+            next: "yz",
+            preserveLeadingCase: true
+        )
+        #expect(afterPeriod.full == "x. yz")
+        #expect(afterPeriod.delta == " yz")
+    }
+
     @Test("lowercase continuation gets a single space")
     func lowercaseContinuation() {
         let j = SegmentJoiner.append(existing: "Hello", next: "world")

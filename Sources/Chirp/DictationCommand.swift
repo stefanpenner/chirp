@@ -26,6 +26,8 @@ enum DictationCommand: Equatable, Sendable {
     case redoThat
     /// Set sticky capitalization mode for following commits.
     case setCapsMode(CapsMode)
+    /// Set sticky spell mode for following commits (letter packing).
+    case setSpellMode(SpellMode)
     /// Capitalize the last word (one-shot).
     case capThat
     /// UPPERCASE the last word (one-shot).
@@ -44,6 +46,14 @@ enum DictationCommand: Equatable, Sendable {
     case selectLastWord
     /// Select all in the focused app (⌘A).
     case selectAll
+    /// Move cursor one word left (⌥←). Buffer unchanged.
+    case moveLeftWord
+    /// Move cursor one word right (⌥→). Buffer unchanged.
+    case moveRightWord
+    /// Move cursor to line start (⌘←). Buffer unchanged.
+    case moveToStart
+    /// Move cursor to line end (⌘→). Buffer unchanged.
+    case moveToEnd
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -139,6 +149,13 @@ enum DictationCommand: Equatable, Sendable {
         case "caps off", "cap off", "no caps off", "all caps off",
              "normal caps", "normal case", "default caps":
             return .setCapsMode(.normal)
+        // Sticky spell mode (Dragon / Mac-style letter packing)
+        // Off phrases listed before bare "spell mode" so exact match wins.
+        case "spell mode off", "spell off", "end spell", "end spelling",
+             "dictation mode":
+            return .setSpellMode(.off)
+        case "spell mode", "spelling mode", "start spelling", "spell on":
+            return .setSpellMode(.on)
         // One-shot last-word transforms
         case "cap that", "capitalize that", "caps that", "capital that":
             return .capThat
@@ -163,6 +180,16 @@ enum DictationCommand: Equatable, Sendable {
             return .selectLastWord
         case "select all", "highlight all", "select everything":
             return .selectAll
+        case "move left", "left word", "previous word", "go left",
+             "back one word":
+            return .moveLeftWord
+        case "move right", "right word", "next word", "go right",
+             "forward one word":
+            return .moveRightWord
+        case "go to start", "go to beginning", "beginning of line":
+            return .moveToStart
+        case "go to end", "end of line":
+            return .moveToEnd
         default:
             return nil
         }
@@ -183,6 +210,8 @@ enum DictationCommand: Equatable, Sendable {
         ("paste that", "Paste clipboard (⌘V)"),
         ("caps on / all caps on / no caps on", "Sticky capitalization mode"),
         ("caps off", "Back to normal casing"),
+        ("spell mode / start spelling", "Sticky spell mode (letter packing)"),
+        ("spell off / end spelling / dictation mode", "Exit spell mode"),
         ("cap that / all caps that", "Transform last word"),
         ("title case that", "Title-case last phrase"),
         ("sentence case that", "Sentence-case last phrase"),
@@ -190,6 +219,10 @@ enum DictationCommand: Equatable, Sendable {
         ("select that", "Select last phrase"),
         ("select last word", "Select last word"),
         ("select all", "Select all (⌘A)"),
+        ("move left / previous word", "Cursor left one word (⌥←)"),
+        ("move right / next word", "Cursor right one word (⌥→)"),
+        ("go to start / beginning of line", "Cursor to line start (⌘←)"),
+        ("go to end / end of line", "Cursor to line end (⌘→)"),
         ("period / comma / …", "Spoken punctuation"),
         ("new line / new paragraph", "Line breaks"),
         ("bullet point / next bullet", "Bulleted list item"),

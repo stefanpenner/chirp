@@ -67,8 +67,10 @@ dict products like GitHub). Light ITN: times (`three pm`→`3 p.m.`,
 (`twenty first`→`21st`, `first of all` stays), dates (`march fifth twenty
 twenty four`→`March 5, 2024`, `tomorrow`/`next monday` → absolute dates,
 weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
-(`20 dollars`→`$20`, `20 euros`→`€20`, `20 pounds`→`£20`, `20 yen`→`¥20`,
-`50 cents`→`50¢`, `20 dollars and 50 cents`→`$20.50`).
+(`20 dollars`→`$20`, `20 euros`→`€20`, `20 yen`→`¥20`, `50 cents`→`50¢`,
+`20 dollars and 50 cents`→`$20.50`; bare `20 pounds`→`20 lb` weight;
+`20 pounds sterling` / `20 quid`→`£20`), street suffixes after a house number
+(`35 Lexington avenue`→`35 Lexington Ave.`; `hit the road` stays).
 Bare `one`/`two` stay words. Digit runs (≥3 single digits) concatenate for
 phones (`five five five one two one two`→`555-1212`; 10-digit `XXX-XXX-XXXX`;
 11-digit leading-1 `1-XXX-XXX-XXXX`; `oh`→`0`). Negatives: `minus twenty` /
@@ -95,6 +97,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **delete last word** — drop trailing word (stack-aware; redo restores)
 - **caps on / all caps on / no caps on** — sticky casing (`CapsMode`)
 - **caps off** — back to normal casing
+- **spell mode** / **start spelling** / **spell on** — sticky spell mode (`SpellMode`); packs letters / NATO / digits
+- **spell off** / **end spelling** / **dictation mode** — exit spell mode
 - **cap that / all caps that / no caps that** — transform last word
 - **title case that** — title-case last phrase (stack delta)
 - **sentence case that** — sentence-case last phrase
@@ -102,7 +106,12 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select that** / **highlight that** — select last phrase (shift+left)
 - **select last word** — select trailing word only
 - **select all** — select all (⌘A)
-- Overlay badge shows sticky caps mode when not normal
+- **move left** / **previous word** — cursor left one word (⌥←)
+- **move right** / **next word** — cursor right one word (⌥→)
+- **go to start** / **beginning of line** — cursor to line start (⌘←)
+- **go to end** / **end of line** — cursor to line end (⌘→)
+- Overlay badge shows sticky caps / spell mode when active
+- When spell mode is on, caps transform is skipped for that segment
 - **clear all** — wipe session transcript
 - **press enter** / **press tab** — key inserts
 - **copy that** / **paste that** — clipboard

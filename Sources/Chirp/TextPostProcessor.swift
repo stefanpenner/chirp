@@ -463,13 +463,18 @@ enum TextPostProcessor {
         result = SpokenDateITN.apply(result)
         // Digit clock form after numbers: "3 30 pm" → "3:30 p.m."
         result = applyTimeITN(result)
-        // Units before currency so "5 pounds" → "5 lb" (weight) not "£5".
+        // Sterling/quid before units so "20 pounds sterling" → "£20" not "20 lb sterling".
+        // Bare "pounds" stays weight via units; currency needs "sterling" or "quid".
+        result = applySterlingCurrencyITN(result)
+        // Units before simple currency so "5 pounds" → "5 lb" (weight) not "£5".
         // Spoken bare units ("ten feet") need number+unit here — SpokenNumberITN
         // leaves bare one…twelve alone ("one more thing").
         result = applyUnitsITN(result)
         // %/$ after numbers so "one hundred dollars" → "100 dollars" → "$100"
         result = applyPercentITN(result)
         result = applyCurrencyITN(result)
+        // Street suffixes after numbers: "35 Lexington avenue" → "35 Lexington Ave."
+        result = applyStreetSuffixITN(result)
         return result
     }
 
@@ -700,10 +705,26 @@ enum TextPostProcessor {
         )
     }()
 
-    /// "20 dollars|euros|pounds|yen" → currency symbol + digits.
+    /// "20 dollars|euros|yen" → currency symbol + digits.
+    /// Bare pounds are weight (lb); use pounds sterling / quid via applySterlingCurrencyITN.
     private static let simpleCurrencyPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b"# + currencyNumberToken + #"\s+(dollars?|euros?|pounds?|yen)\b"#,
+            pattern: #"\b"# + currencyNumberToken + #"\s+(dollars?|euros?|yen)\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "20 pounds sterling" / "20 pound sterling" / "20 quid" → "£20".
+    private static let poundsSterlingPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + currencyNumberToken + #"\s+pounds?\s+sterling\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let quidPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + currencyNumberToken + #"\s+quid\b"#,
             options: .caseInsensitive
         )
     }()
@@ -716,15 +737,83 @@ enum TextPostProcessor {
         )
     }()
 
+    /// USPS-style street suffixes only after a street number + name
+    /// ("35 Lexington avenue" → "35 Lexington Ave."; not "hit the road").
+    private static let streetSuffixPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(\d{1,6})\s+(\w+)\s+(street|avenue|road|drive|boulevard|lane|court|place|circle|highway)s?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let streetSuffixAbbreviations: [String: String] = [
+        "street": "St.", "streets": "St.",
+        "avenue": "Ave.", "avenues": "Ave.",
+        "road": "Rd.", "roads": "Rd.",
+        "drive": "Dr.", "drives": "Dr.",
+        "boulevard": "Blvd.", "boulevards": "Blvd.",
+        "lane": "Ln.", "lanes": "Ln.",
+        "court": "Ct.", "courts": "Ct.",
+        "place": "Pl.", "places": "Pl.",
+        "circle": "Cir.", "circles": "Cir.",
+        "highway": "Hwy.", "highways": "Hwy.",
+    ]
+
     private static func currencyDigits(from raw: String) -> String {
         let key = raw.lowercased()
         return extendedSpokenNumbers[key] ?? raw
+    }
+
+    /// Sterling disambiguators before units: "pounds sterling" / "quid" → £.
+    private static func applySterlingCurrencyITN(_ text: String) -> String {
+        var result = applyNumberCurrencySymbol(text, pattern: poundsSterlingPattern, symbol: "£")
+        result = applyNumberCurrencySymbol(result, pattern: quidPattern, symbol: "£")
+        return result
+    }
+
+    private static func applyNumberCurrencySymbol(
+        _ text: String,
+        pattern: NSRegularExpression,
+        symbol: String
+    ) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let digits = currencyDigits(from: String(result[numRange]))
+            result.replaceSubrange(fullRange, with: "\(symbol)\(digits)")
+        }
+        return result
     }
 
     private static func applyCurrencyITN(_ text: String) -> String {
         var result = applyCompoundDollarsCents(text)
         result = applySimpleCurrency(result)
         result = applyCentsITN(result)
+        return result
+    }
+
+    private static func applyStreetSuffixITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = streetSuffixPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 4,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let nameRange = Range(match.range(at: 2), in: result),
+                  let suffixRange = Range(match.range(at: 3), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let num = String(result[numRange])
+            let name = String(result[nameRange])
+            let rawSuffix = String(result[suffixRange]).lowercased()
+            guard let abbr = streetSuffixAbbreviations[rawSuffix] else { continue }
+            result.replaceSubrange(fullRange, with: "\(num) \(name) \(abbr)")
+        }
         return result
     }
 
@@ -763,7 +852,6 @@ enum TextPostProcessor {
             switch unit {
             case "dollar", "dollars": symbol = "$"
             case "euro", "euros": symbol = "€"
-            case "pound", "pounds": symbol = "£"
             case "yen": symbol = "¥"
             default: continue
             }

@@ -79,6 +79,21 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("please all caps on") == .setCapsMode(.allCaps))
     }
 
+    @Test("recognizes spell mode on and off")
+    func spellModeCommands() {
+        #expect(DictationCommand.parse("spell mode") == .setSpellMode(.on))
+        #expect(DictationCommand.parse("spelling mode") == .setSpellMode(.on))
+        #expect(DictationCommand.parse("start spelling") == .setSpellMode(.on))
+        #expect(DictationCommand.parse("spell on") == .setSpellMode(.on))
+        #expect(DictationCommand.parse("end spell") == .setSpellMode(.off))
+        #expect(DictationCommand.parse("end spelling") == .setSpellMode(.off))
+        #expect(DictationCommand.parse("spell mode off") == .setSpellMode(.off))
+        #expect(DictationCommand.parse("dictation mode") == .setSpellMode(.off))
+        #expect(DictationCommand.parse("spell off") == .setSpellMode(.off))
+        #expect(DictationCommand.parse("please spell mode") == .setSpellMode(.on))
+        #expect(DictationCommand.parse("Spell Mode Off.") == .setSpellMode(.off))
+    }
+
     @Test("tolerates please / now around commands")
     func politenessTolerance() {
         #expect(DictationCommand.parse("scratch that please") == .scratchThat)
@@ -113,6 +128,36 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("highlight all") == .selectAll)
     }
 
+    @Test("recognizes move left/right word navigation")
+    func moveWordCommands() {
+        #expect(DictationCommand.parse("move left") == .moveLeftWord)
+        #expect(DictationCommand.parse("left word") == .moveLeftWord)
+        #expect(DictationCommand.parse("previous word") == .moveLeftWord)
+        #expect(DictationCommand.parse("go left") == .moveLeftWord)
+        #expect(DictationCommand.parse("back one word") == .moveLeftWord)
+        #expect(DictationCommand.parse("Move left.") == .moveLeftWord)
+        #expect(DictationCommand.parse("please move left") == .moveLeftWord)
+
+        #expect(DictationCommand.parse("move right") == .moveRightWord)
+        #expect(DictationCommand.parse("right word") == .moveRightWord)
+        #expect(DictationCommand.parse("next word") == .moveRightWord)
+        #expect(DictationCommand.parse("go right") == .moveRightWord)
+        #expect(DictationCommand.parse("forward one word") == .moveRightWord)
+        #expect(DictationCommand.parse("please go right") == .moveRightWord)
+    }
+
+    @Test("recognizes move to line start/end")
+    func moveLineCommands() {
+        #expect(DictationCommand.parse("go to start") == .moveToStart)
+        #expect(DictationCommand.parse("go to beginning") == .moveToStart)
+        #expect(DictationCommand.parse("beginning of line") == .moveToStart)
+        #expect(DictationCommand.parse("please go to start") == .moveToStart)
+
+        #expect(DictationCommand.parse("go to end") == .moveToEnd)
+        #expect(DictationCommand.parse("end of line") == .moveToEnd)
+        #expect(DictationCommand.parse("please go to end") == .moveToEnd)
+    }
+
     @Test("normal text is not a command")
     func normalText() {
         #expect(DictationCommand.parse("hello world") == .none)
@@ -127,5 +172,7 @@ struct DictationCommandTests {
         let says = DictationCommand.helpCatalog.map(\.say)
         #expect(Set(says).count == says.count)
         #expect(says.contains(where: { $0.lowercased().contains("select that") }))
+        #expect(says.contains(where: { $0.lowercased().contains("move left") }))
+        #expect(says.contains(where: { $0.lowercased().contains("move right") }))
     }
 }

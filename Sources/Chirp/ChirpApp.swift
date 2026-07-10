@@ -133,6 +133,10 @@ public final class AppState {
     /// Observable for overlay badge when non-normal.
     private(set) var capsMode: CapsMode = .normal
 
+    /// Sticky spell mode for new commits (Dragon/Mac letter packing).
+    /// Observable for overlay badge when on. Dual of specs/SpellMode.tla.
+    private(set) var spellMode: SpellMode = .off
+
     /// Multi-step "replace that": next content undoes last phrase then inserts.
     /// Observable for overlay badge. Dual of specs/ReplaceThat.tla.
     private(set) var awaitingReplace = false
@@ -534,6 +538,7 @@ public final class AppState {
         commitGen = 0
         editStack.clear()
         capsMode = .normal
+        spellMode = .off
         awaitingReplace = false
         lastCommittedNormalized = ""
         recordingSession &+= 1
@@ -645,6 +650,8 @@ public final class AppState {
                         self.performRedoThat(typesIncrementally: false)
                     case .setCapsMode(let mode):
                         self.capsMode = mode
+                    case .setSpellMode(let mode):
+                        self.spellMode = mode
                     case .capThat:
                         self.performTransformLastWord(
                             CapsTransform.capitalizeWord,
@@ -678,11 +685,19 @@ public final class AppState {
                         self.performSelectLastWord(typesIncrementally: false)
                     case .selectAll:
                         self.performSelectAll(typesIncrementally: false)
+                    case .moveLeftWord:
+                        self.performMoveWord(direction: .left)
+                    case .moveRightWord:
+                        self.performMoveWord(direction: .right)
+                    case .moveToStart:
+                        self.performMoveToLineStart()
+                    case .moveToEnd:
+                        self.performMoveToLineEnd()
                     case .none:
                         // One-shot type: replace buffer + stack so scratch undoes the
                         // whole batch (mid-session segments were not typed/pushed).
                         self.awaitingReplace = false
-                        let text = CapsTransform.apply(remaining, mode: self.capsMode)
+                        let text = self.shapeContent(remaining)
                         self.editStack.clear()
                         self.transcribedText = text
                         if !text.isEmpty {
@@ -734,6 +749,8 @@ public final class AppState {
             performRedoThat(typesIncrementally: typesIncrementally)
         case .setCapsMode(let mode):
             capsMode = mode
+        case .setSpellMode(let mode):
+            spellMode = mode
         case .capThat:
             performTransformLastWord(CapsTransform.capitalizeWord, typesIncrementally: typesIncrementally)
         case .allCapsThat:
@@ -752,6 +769,14 @@ public final class AppState {
             performSelectLastWord(typesIncrementally: typesIncrementally)
         case .selectAll:
             performSelectAll(typesIncrementally: typesIncrementally)
+        case .moveLeftWord:
+            performMoveWord(direction: .left)
+        case .moveRightWord:
+            performMoveWord(direction: .right)
+        case .moveToStart:
+            performMoveToLineStart()
+        case .moveToEnd:
+            performMoveToLineEnd()
         case .none:
             // Multi-step replace: undo last phrase, then insert replacement.
             if ReplaceDecision.shouldUndoBeforeCommit(awaitingReplace: awaitingReplace) {
@@ -759,13 +784,17 @@ public final class AppState {
                 performScratchThat(typesIncrementally: typesIncrementally)
             }
             // Skip consecutive identical segments (VAD/ASR echo under noise)
-            let shaped = CapsTransform.apply(text, mode: capsMode)
+            let shaped = shapeContent(text)
             let norm = TranscriptNormalize.key(shaped)
             if !norm.isEmpty, norm == lastCommittedNormalized {
                 Log.transcription.debug("Skipping duplicate segment: \"\(shaped)\"")
                 return
             }
-            let joined = SegmentJoiner.append(existing: transcribedText, next: shaped)
+            let joined = SegmentJoiner.append(
+                existing: transcribedText,
+                next: shaped,
+                preserveLeadingCase: spellMode == .on
+            )
             transcribedText = joined.full
             if typesIncrementally {
                 textInserter.typeText(joined.delta)
@@ -773,6 +802,15 @@ public final class AppState {
             editStack.push(joined.delta)
             lastCommittedNormalized = norm
         }
+    }
+
+    /// Shape a content segment: spell mode packs letters and skips caps;
+    /// otherwise apply sticky CapsTransform.
+    private func shapeContent(_ text: String) -> String {
+        if spellMode == .on {
+            return SpellTransform.apply(text, mode: .on)
+        }
+        return CapsTransform.apply(text, mode: capsMode)
     }
 
     /// Arm multi-step replace; text stays until the next content phrase arrives.
@@ -1061,6 +1099,21 @@ public final class AppState {
         textInserter.selectAll()
     }
 
+    /// Move cursor one word (⌥← / ⌥→). Buffer unchanged — cursor only.
+    private func performMoveWord(direction: MoveDirection) {
+        textInserter.moveWord(direction: direction)
+    }
+
+    /// Move cursor to line start (⌘←). Buffer unchanged.
+    private func performMoveToLineStart() {
+        textInserter.moveToLineStart()
+    }
+
+    /// Move cursor to line end (⌘→). Buffer unchanged.
+    private func performMoveToLineEnd() {
+        textInserter.moveToLineEnd()
+    }
+
     /// Polls the pipeline for a speculative preview of uncommitted audio.
     /// Active speech: ~250ms (snappier partials). Idle: ~500ms to save CPU.
     /// Discarded if a committed segment arrives mid-peek (commitGen).
@@ -1145,6 +1198,7 @@ public final class AppState {
         speculativeText = ""
         editStack.clear()
         capsMode = .normal
+        spellMode = .off
         awaitingReplace = false
         lastCommittedNormalized = ""
         audioLevel = 0

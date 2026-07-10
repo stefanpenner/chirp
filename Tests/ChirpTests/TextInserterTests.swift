@@ -50,6 +50,25 @@ struct TextInserterTests {
         #expect(inserter.selectAllCalled)
     }
 
+    @Test("moveWord records direction")
+    func moveWord() {
+        let inserter = MockTextInserter()
+        inserter.moveWord(direction: .left)
+        inserter.moveWord(direction: .right)
+        #expect(inserter.moveWordDirections == [.left, .right])
+    }
+
+    @Test("moveToLineStart / moveToLineEnd record calls")
+    func moveToLineEdges() {
+        let inserter = MockTextInserter()
+        #expect(!inserter.moveToLineStartCalled)
+        #expect(!inserter.moveToLineEndCalled)
+        inserter.moveToLineStart()
+        inserter.moveToLineEnd()
+        #expect(inserter.moveToLineStartCalled)
+        #expect(inserter.moveToLineEndCalled)
+    }
+
     @Test("steps maps newlines to return keys")
     func newlineSteps() {
         #expect(TextInserter.steps(for: "") == [])

@@ -68,6 +68,9 @@ Inv ==
   /\ TypeOK
   /\ IdleImpliesMisses
 
+\* Bait: negation of a real safety property (must FAIL under TLC)
+BaitInv == ~IdleImpliesMisses
+
 StateConstraint == idleMisses <= MaxMiss
 
 ====

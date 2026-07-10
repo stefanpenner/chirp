@@ -309,6 +309,39 @@ struct AppStateTests {
         #expect(inserter.typedTexts.contains("HELLO WORLD"))
     }
 
+    @Test("spell mode packs letter tokens on following segment")
+    func spellModeSticky() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["spell mode"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.spellMode == .on { break }
+        }
+        #expect(state.spellMode == .on)
+        #expect(inserter.typedTexts.isEmpty, "mode switch must not type")
+
+        await mock.setFeedAudioResult(["alpha bravo charlie"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "abc" { break }
+        }
+        #expect(state.transcribedText == "abc")
+        #expect(inserter.typedTexts.contains("abc"))
+    }
+
     @Test("sentence case that transforms last phrase")
     func sentenceCaseThatLastPhrase() async throws {
         let mock = MockTranscriber()
@@ -743,6 +776,111 @@ struct AppStateTests {
         #expect(state.transcribedText == "Hello world")
         #expect(inserter.selectAllCalled)
         #expect(!inserter.typedTexts.contains("select all"))
+    }
+
+    @Test("move left word moves cursor without changing buffer")
+    func moveLeftWordCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["move left"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveWordDirections.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveWordDirections == [.left])
+        #expect(!inserter.typedTexts.contains("move left"))
+    }
+
+    @Test("move right word moves cursor without changing buffer")
+    func moveRightWordCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["next word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveWordDirections.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveWordDirections == [.right])
+        #expect(!inserter.typedTexts.contains("next word"))
+    }
+
+    @Test("go to start / end moves line cursor without changing buffer")
+    func moveToLineEdgeCommands() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["go to start"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveToLineStartCalled { break }
+        }
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveToLineStartCalled)
+
+        await mock.setFeedAudioResult(["end of line"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveToLineEndCalled { break }
+        }
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveToLineEndCalled)
+        #expect(!inserter.typedTexts.contains("go to start"))
+        #expect(!inserter.typedTexts.contains("end of line"))
     }
 
     @Test("delete last word keeps multi-level undo; redo restores word")
@@ -1732,6 +1870,40 @@ struct AppStateTests {
             Issue.record("Expected .ready after cancel, got \(state.status)")
             return
         }
+        #expect(state.capsMode == .normal)
+        #expect(state.spellMode == .off)
+        #expect(!state.awaitingReplace)
+    }
+
+    @Test("cancelSession resets sticky spellMode to off")
+    func cancelSessionResetsSpellMode() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["spell mode"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.spellMode == .on { break }
+        }
+        #expect(state.spellMode == .on)
+
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after cancel, got \(state.status)")
+            return
+        }
+        #expect(state.spellMode == .off)
         #expect(state.capsMode == .normal)
         #expect(!state.awaitingReplace)
     }

@@ -312,6 +312,39 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("costs one hundred dollars") == "costs $100")
     }
 
+    @Test("Light ITN sterling currency via pounds sterling and quid")
+    func lightITNSterlingCurrency() {
+        // Bare pounds stay weight (lb); currency needs disambiguators.
+        #expect(TextPostProcessor.process("costs 20 pounds") == "costs 20 lb")
+        #expect(TextPostProcessor.process("costs 20 pounds sterling") == "costs £20")
+        #expect(TextPostProcessor.process("costs 20 pound sterling") == "costs £20")
+        #expect(TextPostProcessor.process("costs 20 quid") == "costs £20")
+        // Spoken numbers → digits then sterling
+        #expect(TextPostProcessor.process("pay twenty quid now") == "pay £20 now")
+        #expect(TextPostProcessor.process("twenty pounds sterling") == "£20")
+        #expect(TextPostProcessor.process("one hundred pounds sterling") == "£100")
+    }
+
+    @Test("Light ITN street suffix abbreviations after street number")
+    func lightITNStreetSuffixes() {
+        #expect(TextPostProcessor.process("35 Lexington avenue") == "35 Lexington Ave.")
+        #expect(TextPostProcessor.process("141 Dorchester street") == "141 Dorchester St.")
+        #expect(TextPostProcessor.process("10 Main road") == "10 Main Rd.")
+        #expect(TextPostProcessor.process("22 Oak drive") == "22 Oak Dr.")
+        #expect(TextPostProcessor.process("5 Sunset boulevard") == "5 Sunset Blvd.")
+        #expect(TextPostProcessor.process("8 Maple lane") == "8 Maple Ln.")
+        // Avoid "Court court" — repetition dedup collapses case-insensitive repeats first.
+        #expect(TextPostProcessor.process("3 Baker court") == "3 Baker Ct.")
+        #expect(TextPostProcessor.process("12 Park place") == "12 Park Pl.")
+        #expect(TextPostProcessor.process("7 Elm circle") == "7 Elm Cir.")
+        #expect(TextPostProcessor.process("101 State highway") == "101 State Hwy.")
+        // Plural spoken forms
+        #expect(TextPostProcessor.process("2 Side streets") == "2 Side St.")
+        // No street number → leave alone ("hit the road")
+        #expect(TextPostProcessor.process("hit the road") == "hit the road")
+        #expect(TextPostProcessor.process("go down the street") == "go down the street")
+    }
+
     @Test("Light ITN compact unit abbreviations after numbers")
     func lightITNUnits() {
         #expect(TextPostProcessor.process("5 miles") == "5 mi")
