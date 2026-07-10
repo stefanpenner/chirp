@@ -123,6 +123,7 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("one more thing") == "one more thing")
     }
 
+
     @Test("Does not drop bare function words as whole utterance")
     func keepsBareFunctionWords() {
         // Early VAD endpoints can decode a single onset word; dropping it loses speech.

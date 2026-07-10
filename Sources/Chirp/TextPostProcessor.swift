@@ -69,6 +69,9 @@ enum TextPostProcessor {
             // "create a new node" is almost always "new note" in desktop dictation
             (#"\bnew node\b"#, "new note"),
             (#"\bnew nodes\b"#, "new notes"),
+            // Common email/command confusions
+            (#"\bsend (?:a )?mail\b"#, "send email"),
+            (#"\bopen (?:the )?app store\b"#, "open the App Store"),
         ]
         return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
     }()
@@ -110,7 +113,9 @@ enum TextPostProcessor {
 
     /// Light inverse text normalization for dictation readability.
     /// Parakeet often already emits digits; this catches remaining spoken forms
-    /// for times of day without a full ITN grammar.
+    /// for clock times without a full ITN grammar.
+    /// Ordinals like "first" are left alone — too many false positives
+    /// ("first of all" must not become "1st of all").
     private static let timeITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
             pattern: #"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})\s*([ap])\.?\s*m\.?\b"#,
@@ -125,12 +130,15 @@ enum TextPostProcessor {
     ]
 
     private static func applyLightITN(_ text: String) -> String {
+        applyTimeITN(text)
+    }
+
+    private static func applyTimeITN(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         let matches = timeITNPattern.matches(in: text, range: range)
         guard !matches.isEmpty else { return text }
 
         var result = text
-        // Replace from the end so ranges stay valid
         for match in matches.reversed() {
             guard match.numberOfRanges >= 3,
                   let hourRange = Range(match.range(at: 1), in: result),

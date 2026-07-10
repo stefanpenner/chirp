@@ -179,7 +179,7 @@ actor Transcriber: TranscriberProtocol {
             return []
         }
 
-        let text = transcribeSamples(pendingAudio)
+        let text = transcribeSamples(Self.withLeadingPreRoll(pendingAudio))
         // Empty ASR on a VAD endpoint is usually a false end (noise / mid-pause).
         // Keep pendingAudio so the next commit/flush still sees the full utterance.
         guard !text.isEmpty else {
@@ -208,7 +208,7 @@ actor Transcriber: TranscriberProtocol {
         let samples = pendingAudio.count > maxSamples
             ? Array(pendingAudio.suffix(maxSamples))
             : pendingAudio
-        let text = transcribeSamples(samples)
+        let text = transcribeSamples(Self.withLeadingPreRoll(samples))
         Log.transcription.debug("peek: pendingAudio=\(self.pendingAudio.count) speechDetected=true text=\(text)")
         return text.isEmpty ? nil : text
     }
@@ -237,7 +237,7 @@ actor Transcriber: TranscriberProtocol {
             return ""
         }
 
-        let text = transcribeSamples(pendingAudio)
+        let text = transcribeSamples(Self.withLeadingPreRoll(pendingAudio))
         Log.transcription.debug("flush: pendingAudio=\(self.pendingAudio.count) hasPendingSpeech=true text=\(text)")
         pendingAudio.removeAll()
         return text
@@ -248,6 +248,44 @@ actor Transcriber: TranscriberProtocol {
         if let vad = vad {
             SherpaOnnxVoiceActivityDetectorReset(vad)
         }
+    }
+
+    // MARK: - Decode window
+
+    /// Drop long leading near-silence before ASR, but keep ~200ms pre-roll
+    /// so true speech onset is not clipped (Silero/VAD lag compensation).
+    /// Internal for tests.
+    static func withLeadingPreRoll(
+        _ samples: [Float],
+        preRollSamples: Int = 3200,   // 200ms @ 16kHz
+        frameSamples: Int = 320,      // 20ms
+        energyThreshold: Float = 0.01
+    ) -> [Float] {
+        guard samples.count > preRollSamples + frameSamples else { return samples }
+
+        var firstSpeech = 0
+        var i = 0
+        var found = false
+        while i + frameSamples <= samples.count {
+            var sum: Float = 0
+            let end = i + frameSamples
+            for j in i..<end {
+                let s = samples[j]
+                sum += s * s
+            }
+            let rms = sqrtf(sum / Float(frameSamples))
+            if rms >= energyThreshold {
+                firstSpeech = i
+                found = true
+                break
+            }
+            i += frameSamples
+        }
+
+        guard found else { return samples }
+        let start = max(0, firstSpeech - preRollSamples)
+        if start == 0 { return samples }
+        return Array(samples[start...])
     }
 
     // MARK: - Inference

@@ -26,8 +26,8 @@ bazel test //:TranscriberIntegrationTests --test_output=all
 
 Scoring helpers live in `Tests/ChirpTests/TranscriptionScoring.swift`
 (always-on unit tests via `//:TextTests`). Generation is
-`SpeechAudioGenerator` (`say` + `afconvert`). Budgets: mean WER ≤ 15%,
-median ≤ 10% on clean TTS; silence must not hallucinate.
+`SpeechAudioGenerator` (`say` + `afconvert`). Budgets: mean WER ≤ 10%,
+median ≤ 5% on clean TTS; silence must not hallucinate.
 
 
 ## Components
@@ -107,19 +107,16 @@ end-of-recording flush needs complete audio (pendingAudio).
             ▼                 ▼
      ┌─────────────┐   ┌───────────┐
      │pendingAudio │   │ Silero VAD│
-     │ (raw buffer)│   │           │
+     │ (raw buffer)│   │ (endpoint)│
      └──────┬──────┘   └─────┬─────┘
             │           silence ≥ 0.5s
             │                 │
-            │          ┌──────┴──────┐
-            │          │ VAD segment │
-            │          └──────┬──────┘
+            │          commit signal
             │                 │
-   ┌────────┴──┐      ┌───────┴────┐
-   │peek, flush│      │ feedAudio  │
-   │transcribe │      │ transcribe │
-   │pending    │      │ VAD segment│
-   └───────────┘      └────────────┘
+            └────────┬────────┘
+                     ▼
+              transcribe pending
+           (peek / feedAudio / flush)
 ```
 
 | | Audio source | When | Why |
