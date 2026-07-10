@@ -14,6 +14,8 @@ enum DictationCommand: Equatable, Sendable {
     case deleteLastWord
     /// Delete the last sentence (after [.?!] + whitespace).
     case deleteLastSentence
+    /// Delete the second sentence (session-relative "next"). Does not steal delete last/previous.
+    case deleteNextSentence
     /// Delete the last paragraph (after \n\n or \n).
     case deleteLastParagraph
     /// Delete the last line (after final \n).
@@ -84,10 +86,14 @@ enum DictationCommand: Equatable, Sendable {
     case selectLastSentence
     /// Select the first sentence (before first [.?!] + whitespace).
     case selectFirstSentence
+    /// Select the second sentence (session-relative "next"). Buffer unchanged.
+    case selectNextSentence
     /// Select the last paragraph (after \n\n or \n).
     case selectLastParagraph
     /// Select the first paragraph (before first \n\n or \n).
     case selectFirstParagraph
+    /// Select the second paragraph (session-relative "next"). Buffer unchanged.
+    case selectNextParagraph
     /// Select the last line (after final \n).
     case selectLastLine
     /// Select all in the focused app (⌘A).
@@ -200,6 +206,10 @@ enum DictationCommand: Equatable, Sendable {
         case "delete last sentence", "delete previous sentence", "delete sentence",
              "remove last sentence", "remove previous sentence", "remove sentence":
             return .deleteLastSentence
+        // Do not steal "delete last sentence" / "delete previous sentence".
+        case "delete next sentence", "delete forward sentence",
+             "remove next sentence", "remove forward sentence":
+            return .deleteNextSentence
         case "delete last paragraph", "delete previous paragraph", "delete paragraph",
              "remove last paragraph", "remove previous paragraph", "remove paragraph":
             return .deleteLastParagraph
@@ -327,6 +337,10 @@ enum DictationCommand: Equatable, Sendable {
              "highlight first sentence", "highlight the first sentence",
              "highlight 1st sentence", "highlight the 1st sentence":
             return .selectFirstSentence
+        // Session-relative next sentence — do not steal "next sentence" (move) or "select last".
+        case "select next sentence", "select forward sentence",
+             "highlight next sentence", "highlight forward sentence":
+            return .selectNextSentence
         case "select last paragraph", "select previous paragraph",
              "select paragraph", "highlight last paragraph",
              "highlight previous paragraph", "highlight paragraph":
@@ -337,6 +351,10 @@ enum DictationCommand: Equatable, Sendable {
              "highlight first paragraph", "highlight the first paragraph",
              "highlight 1st paragraph", "highlight the 1st paragraph":
             return .selectFirstParagraph
+        // Session-relative next paragraph — do not steal "select last paragraph".
+        case "select next paragraph", "select forward paragraph",
+             "highlight next paragraph", "highlight forward paragraph":
+            return .selectNextParagraph
         // Select line — listed before move "previous line" so select wins on
         // full phrases; bare "previous line" is moveUpLine only.
         case "select last line", "select previous line", "select line",
@@ -406,6 +424,7 @@ enum DictationCommand: Equatable, Sendable {
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
         ("delete last sentence / previous sentence", "Remove last sentence"),
+        ("delete next sentence / delete forward sentence", "Remove second sentence (session-relative)"),
         ("delete last paragraph / previous paragraph", "Remove last paragraph"),
         ("delete last line / delete line", "Remove last line"),
         ("clear all", "Wipe session text"),
@@ -442,8 +461,10 @@ enum DictationCommand: Equatable, Sendable {
         ("delete next word / delete forward word", "Delete next word (⇧⌥→ then ⌫; keyboard only)"),
         ("select last sentence / previous sentence", "Select last sentence"),
         ("select first sentence / the first sentence", "Select first sentence"),
+        ("select next sentence / select forward sentence", "Select second sentence (session-relative)"),
         ("select last paragraph / previous paragraph", "Select last paragraph"),
         ("select first paragraph / the first paragraph", "Select first paragraph"),
+        ("select next paragraph / select forward paragraph", "Select second paragraph (session-relative)"),
         ("select last line / select line", "Select last line"),
         ("select all", "Select all (⌘A)"),
         ("unselect that / deselect", "Collapse selection (caret to end)"),
@@ -511,6 +532,30 @@ enum TranscriptSelection {
         return String(text[..<afterPunct])
     }
 
+    /// Second sentence: after `firstSentence` + leading whitespace, `firstSentence` of remainder.
+    /// Empty if no second sentence. Does not include leading separator whitespace.
+    static func secondSentence(_ text: String) -> String {
+        let first = firstSentence(text)
+        guard !first.isEmpty, first.count < text.count else { return "" }
+        let afterFirst = text.index(text.startIndex, offsetBy: first.count)
+        let remainder = String(text[afterFirst...].drop(while: { $0.isWhitespace }))
+        guard !remainder.isEmpty else { return "" }
+        return firstSentence(remainder)
+    }
+
+    /// Character offset of second-sentence content start, or nil if none.
+    static func secondSentenceStartOffset(_ text: String) -> Int? {
+        let first = firstSentence(text)
+        guard !first.isEmpty, first.count < text.count else { return nil }
+        var idx = text.index(text.startIndex, offsetBy: first.count)
+        while idx < text.endIndex && text[idx].isWhitespace {
+            idx = text.index(after: idx)
+        }
+        guard idx < text.endIndex else { return nil }
+        guard !secondSentence(text).isEmpty else { return nil }
+        return text.distance(from: text.startIndex, to: idx)
+    }
+
     /// Last paragraph: segment after final `\n\n` or `\n`, else whole buffer.
     /// Trailing blank paragraph (`…\n\n` / `…\n`) returns the separator so
     /// delete peels it instead of no-op on empty content.
@@ -537,6 +582,36 @@ enum TranscriptSelection {
             return String(text[..<r.lowerBound])
         }
         return text
+    }
+
+    /// Second paragraph: after `firstParagraph` + one `\n\n` or `\n`, `firstParagraph` of remainder.
+    /// Empty if no second paragraph.
+    static func secondParagraph(_ text: String) -> String {
+        let first = firstParagraph(text)
+        guard !first.isEmpty, first.count < text.count else { return "" }
+        var idx = text.index(text.startIndex, offsetBy: first.count)
+        if text[idx...].hasPrefix("\n\n") {
+            idx = text.index(idx, offsetBy: 2)
+        } else if idx < text.endIndex && text[idx] == "\n" {
+            idx = text.index(after: idx)
+        }
+        guard idx < text.endIndex else { return "" }
+        return firstParagraph(String(text[idx...]))
+    }
+
+    /// Character offset of second-paragraph content start, or nil if none.
+    static func secondParagraphStartOffset(_ text: String) -> Int? {
+        let first = firstParagraph(text)
+        guard !first.isEmpty, first.count < text.count else { return nil }
+        var idx = text.index(text.startIndex, offsetBy: first.count)
+        if text[idx...].hasPrefix("\n\n") {
+            idx = text.index(idx, offsetBy: 2)
+        } else if idx < text.endIndex && text[idx] == "\n" {
+            idx = text.index(after: idx)
+        }
+        guard idx < text.endIndex else { return nil }
+        guard !secondParagraph(text).isEmpty else { return nil }
+        return text.distance(from: text.startIndex, to: idx)
     }
 
     /// Last line: segment after final `\n` (content only, no leading separator).

@@ -652,6 +652,9 @@ public final class AppState {
                             selected: TranscriptSelection.lastSentence(self.transcribedText),
                             typesIncrementally: false
                         )
+                    case .deleteNextSentence:
+                        self.awaitingReplace = false
+                        self.performDeleteNextSentence(typesIncrementally: false)
                     case .deleteLastParagraph:
                         self.awaitingReplace = false
                         self.performDeleteTrailingSelection(
@@ -746,10 +749,14 @@ public final class AppState {
                         self.performSelectLastSentence(typesIncrementally: false)
                     case .selectFirstSentence:
                         self.performSelectFirstSentence(typesIncrementally: false)
+                    case .selectNextSentence:
+                        self.performSelectNextSentence(typesIncrementally: false)
                     case .selectLastParagraph:
                         self.performSelectLastParagraph(typesIncrementally: false)
                     case .selectFirstParagraph:
                         self.performSelectFirstParagraph(typesIncrementally: false)
+                    case .selectNextParagraph:
+                        self.performSelectNextParagraph(typesIncrementally: false)
                     case .selectLastLine:
                         self.performSelectLastLine(typesIncrementally: false)
                     case .selectAll:
@@ -835,6 +842,9 @@ public final class AppState {
                 selected: TranscriptSelection.lastSentence(transcribedText),
                 typesIncrementally: typesIncrementally
             )
+        case .deleteNextSentence:
+            awaitingReplace = false
+            performDeleteNextSentence(typesIncrementally: typesIncrementally)
         case .deleteLastParagraph:
             awaitingReplace = false
             performDeleteTrailingSelection(
@@ -914,10 +924,14 @@ public final class AppState {
             performSelectLastSentence(typesIncrementally: typesIncrementally)
         case .selectFirstSentence:
             performSelectFirstSentence(typesIncrementally: typesIncrementally)
+        case .selectNextSentence:
+            performSelectNextSentence(typesIncrementally: typesIncrementally)
         case .selectLastParagraph:
             performSelectLastParagraph(typesIncrementally: typesIncrementally)
         case .selectFirstParagraph:
             performSelectFirstParagraph(typesIncrementally: typesIncrementally)
+        case .selectNextParagraph:
+            performSelectNextParagraph(typesIncrementally: typesIncrementally)
         case .selectLastLine:
             performSelectLastLine(typesIncrementally: typesIncrementally)
         case .selectAll:
@@ -1456,6 +1470,58 @@ public final class AppState {
         textInserter.selectForward(count: first.count)
     }
 
+    /// Select the second sentence. Session-end caret model (like select first / move next).
+    /// ← full session, → past first + whitespace, ⇧→ over second. Buffer unchanged.
+    private func performSelectNextSentence(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let text = transcribedText
+        let second = TranscriptSelection.secondSentence(text)
+        guard !second.isEmpty else { return }
+        guard let startOffset = TranscriptSelection.secondSentenceStartOffset(text) else { return }
+        textInserter.moveBackward(count: text.count)
+        textInserter.moveForward(count: startOffset)
+        textInserter.selectForward(count: second.count)
+    }
+
+    /// Delete the second sentence. When second is also last, uses trailing delete
+    /// (stack-aware). Otherwise removes middle sentence via string surgery; stack cleared.
+    private func performDeleteNextSentence(typesIncrementally: Bool) {
+        let text = transcribedText
+        let second = TranscriptSelection.secondSentence(text)
+        guard !second.isEmpty else { return }
+        guard let startOffset = TranscriptSelection.secondSentenceStartOffset(text) else { return }
+
+        let secondEndOffset = startOffset + second.count
+        let remainderAfterSecond = String(text.dropFirst(secondEndOffset))
+        let isTrailing = remainderAfterSecond.allSatisfy(\.isWhitespace)
+
+        if isTrailing {
+            // Second is last: peel trailing sentence (includes leading separator space).
+            performDeleteTrailingSelection(
+                selected: TranscriptSelection.lastSentence(text),
+                typesIncrementally: typesIncrementally
+            )
+            return
+        }
+
+        // Middle delete: buffer = first + remainder after second.
+        let first = TranscriptSelection.firstSentence(text)
+        let newText = first + remainderAfterSecond
+        let gapAndSecondCount = startOffset - first.count + second.count
+
+        if typesIncrementally, gapAndSecondCount > 0 {
+            // From session end: jump to after first, select gap+second, delete selection.
+            textInserter.moveBackward(count: text.count)
+            textInserter.moveForward(count: first.count)
+            textInserter.selectForward(count: gapAndSecondCount)
+            textInserter.deleteBackward(count: 1)
+        }
+
+        transcribedText = newText
+        editStack.clear()
+        lastCommittedNormalized = ""
+    }
+
     /// Select the last paragraph. Buffer unchanged.
     private func performSelectLastParagraph(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
@@ -1474,6 +1540,18 @@ public final class AppState {
         guard !first.isEmpty else { return }
         textInserter.moveBackward(count: text.count)
         textInserter.selectForward(count: first.count)
+    }
+
+    /// Select the second paragraph. Session-end caret model. Buffer unchanged.
+    private func performSelectNextParagraph(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let text = transcribedText
+        let second = TranscriptSelection.secondParagraph(text)
+        guard !second.isEmpty else { return }
+        guard let startOffset = TranscriptSelection.secondParagraphStartOffset(text) else { return }
+        textInserter.moveBackward(count: text.count)
+        textInserter.moveForward(count: startOffset)
+        textInserter.selectForward(count: second.count)
     }
 
     /// Select the last line. Buffer unchanged.

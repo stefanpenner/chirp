@@ -1605,6 +1605,142 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select first sentence"))
     }
 
+    @Test("select next sentence jumps past first then selects second")
+    func selectNextSentenceCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello. World now"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World now" { break }
+        }
+
+        await mock.setFeedAudioResult(["select next sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello. World now")
+        #expect(inserter.moveBackwardCounts.last == "Hello. World now".count)
+        #expect(inserter.moveForwardCounts.last == "Hello. ".count)
+        #expect(inserter.selectForwardCounts.last == "World now".count)
+        #expect(!inserter.typedTexts.contains("select next sentence"))
+    }
+
+    @Test("select next sentence is no-op for single-sentence buffer")
+    func selectNextSentenceSingleSentenceNoOp() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["select next sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<20 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveBackwardCounts.isEmpty)
+        #expect(inserter.moveForwardCounts.isEmpty)
+        #expect(inserter.selectForwardCounts.isEmpty)
+        #expect(!inserter.typedTexts.contains("select next sentence"))
+    }
+
+    @Test("delete next sentence removes second when it is also last")
+    func deleteNextSentenceTwoSentences() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello. World now"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World now" { break }
+        }
+
+        await mock.setFeedAudioResult(["delete next sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello." { break }
+        }
+
+        #expect(state.transcribedText == "Hello.")
+        #expect(inserter.deletedCounts.last == " World now".count)
+        #expect(!inserter.typedTexts.contains("delete next sentence"))
+    }
+
+    @Test("delete next sentence removes middle sentence when three present")
+    func deleteNextSentenceMiddle() async throws {
+        let mock = MockTranscriber()
+        // Avoid single-letter acronym packing and spoken-number ITN.
+        await mock.setFeedAudioResult(["Hello. World. Done"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World. Done" { break }
+        }
+
+        await mock.setFeedAudioResult(["delete next sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. Done" { break }
+        }
+
+        #expect(state.transcribedText == "Hello. Done")
+        // Keyboard: jump to after first, select gap+second (" World."), delete selection
+        #expect(inserter.moveBackwardCounts.last == "Hello. World. Done".count)
+        #expect(inserter.moveForwardCounts.last == "Hello.".count)
+        #expect(inserter.selectForwardCounts.last == " World.".count)
+        #expect(inserter.deletedCounts.last == 1)
+        #expect(!inserter.typedTexts.contains("delete next sentence"))
+    }
+
     @Test("select last paragraph selects trailing paragraph only")
     func selectLastParagraphCommand() async throws {
         let mock = MockTranscriber()
@@ -1670,6 +1806,40 @@ struct AppStateTests {
         #expect(inserter.moveBackwardCounts.last == state.transcribedText.count)
         #expect(inserter.selectForwardCounts.last == "Para one".count)
         #expect(!inserter.typedTexts.contains("select first paragraph"))
+    }
+
+    @Test("select next paragraph jumps past first then selects second")
+    func selectNextParagraphCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Para one\n\nPara two"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("Para two") { break }
+        }
+
+        await mock.setFeedAudioResult(["select next paragraph"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+
+        #expect(state.transcribedText.contains("Para two"))
+        #expect(inserter.moveBackwardCounts.last == state.transcribedText.count)
+        #expect(inserter.moveForwardCounts.last == "Para one\n\n".count)
+        #expect(inserter.selectForwardCounts.last == "Para two".count)
+        #expect(!inserter.typedTexts.contains("select next paragraph"))
     }
 
     @Test("select all posts selectAll without changing buffer")

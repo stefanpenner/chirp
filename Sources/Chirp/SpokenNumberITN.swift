@@ -4,6 +4,7 @@
 // Safe by design:
 // - Bare "one"/"two"/… alone are NOT converted ("one more thing" stays)
 // - Needs compound (twenty five), teen, magnitude (hundred/thousand), or "point"
+// - Exception: bare units before quantity nouns → digits ("five emails" → "5 emails")
 // - Digit runs: ≥3 consecutive single-digit units → concatenate ("five five five" → "555")
 //   Short pure runs ("one two") stay words; "oh" → 0 (leading zeros kept)
 //   Exception: after suite/room/floor/apt/unit/extension/version cues, digit runs of ≥1 convert
@@ -18,6 +19,23 @@ enum SpokenNumberITN {
     private static let forceNumberCues: Set<String> = [
         "suite", "apartment", "apt", "unit", "room", "floor", "extension", "ext",
         "version",
+    ]
+
+    /// Count nouns after a number force bare-unit conversion ("ten items" → "10 items").
+    /// Safer set only — skip ambiguous next words (of, more, times, point, birds…).
+    private static let quantityNouns: Set<String> = [
+        "item", "items",
+        "email", "emails",
+        "person", "people",
+        "copy", "copies",
+        "file", "files",
+        "message", "messages",
+        "page", "pages",
+        "ticket", "tickets",
+        "seat", "seats",
+        "user", "users",
+        "apple", "apples",
+        "orange", "oranges",
     ]
     private static let units: [String: Int] = [
         "zero": 0, "oh": 0,
@@ -162,6 +180,7 @@ enum SpokenNumberITN {
 
     /// Scan a run of number words from `start` and convert when allowed.
     /// `forceConvert` allows bare units (signed / after address or version cues).
+    /// Quantity nouns after the run also force bare-unit convert ("five emails" → "5 emails").
     /// `digitRunMinLength` is 3 by default (phone), 1 after suite/room/floor/ext/version, 1 when signed.
     private static func tryConsumeCardinal(
         parts: [String],
@@ -183,6 +202,11 @@ enum SpokenNumberITN {
         }
         guard !words.isEmpty else { return nil }
 
+        // Next token after the number run (e.g. "items" in "ten items").
+        let nextCore = j < parts.count ? normalizeToken(parts[j]) : ""
+        let afterQuantity = !nextCore.isEmpty && quantityNouns.contains(nextCore)
+        let allowBare = forceConvert || afterQuantity
+
         // Phone-style: consecutive single-digit units → concatenate
         // "five five five one two one two" → "5551212", "oh five five five" → "0555"
         // Short runs ("one two") stay conversational words unless min length lowered.
@@ -192,8 +216,14 @@ enum SpokenNumberITN {
                 let trailing = trailingPunctuation(lastRaw)
                 return (digits + trailing, j)
             }
+            // Bare single digit before a quantity noun: "five emails" → "5 emails"
+            if allowBare, words.count == 1, let digits = formatDigitRun(words) {
+                let lastRaw = parts[j - 1]
+                let trailing = trailingPunctuation(lastRaw)
+                return (digits + trailing, j)
+            }
             return nil
-        } else if let value = parsePhrase(words), forceConvert || shouldConvert(words) {
+        } else if let value = parsePhrase(words), allowBare || shouldConvert(words) {
             let lastRaw = parts[j - 1]
             let trailing = trailingPunctuation(lastRaw)
             return (formatValue(value) + trailing, j)

@@ -366,6 +366,24 @@ struct DictationCommandTests {
         #expect(TranscriptSelection.firstSentence("Hi. There  ") == "Hi.")
     }
 
+    @Test("second sentence selection boundaries")
+    func secondSentenceSelection() {
+        #expect(TranscriptSelection.secondSentence("") == "")
+        #expect(TranscriptSelection.secondSentence("Hello world") == "")
+        #expect(TranscriptSelection.secondSentence("Done.") == "")
+        #expect(TranscriptSelection.secondSentence("Hello. World") == "World")
+        #expect(TranscriptSelection.secondSentence("Hello. World now") == "World now")
+        #expect(TranscriptSelection.secondSentence("A. B. C") == "B.")
+        #expect(TranscriptSelection.secondSentence("Wait? Next") == "Next")
+        #expect(TranscriptSelection.secondSentence("Wow! Yes") == "Yes")
+        #expect(TranscriptSelection.secondSentence("Hi. There  ") == "There  ")
+        // Start offset: after first sentence + whitespace
+        #expect(TranscriptSelection.secondSentenceStartOffset("") == nil)
+        #expect(TranscriptSelection.secondSentenceStartOffset("Hello world") == nil)
+        #expect(TranscriptSelection.secondSentenceStartOffset("Hello. World") == "Hello. ".count)
+        #expect(TranscriptSelection.secondSentenceStartOffset("A. B. C") == "A. ".count)
+    }
+
     @Test("last paragraph selection boundaries")
     func lastParagraphSelection() {
         #expect(TranscriptSelection.lastParagraph("") == "")
@@ -389,6 +407,20 @@ struct DictationCommandTests {
         #expect(TranscriptSelection.firstParagraph("Only\n") == "Only")
     }
 
+    @Test("second paragraph selection boundaries")
+    func secondParagraphSelection() {
+        #expect(TranscriptSelection.secondParagraph("") == "")
+        #expect(TranscriptSelection.secondParagraph("Hello world") == "")
+        #expect(TranscriptSelection.secondParagraph("Para one\n\nPara two") == "Para two")
+        #expect(TranscriptSelection.secondParagraph("Line one\nLine two") == "Line two")
+        #expect(TranscriptSelection.secondParagraph("A\n\nB\n\nC") == "B")
+        #expect(TranscriptSelection.secondParagraph("Only\n\n") == "")
+        #expect(TranscriptSelection.secondParagraphStartOffset("") == nil)
+        #expect(TranscriptSelection.secondParagraphStartOffset("Hello world") == nil)
+        #expect(TranscriptSelection.secondParagraphStartOffset("Para one\n\nPara two") == "Para one\n\n".count)
+        #expect(TranscriptSelection.secondParagraphStartOffset("Line one\nLine two") == "Line one\n".count)
+    }
+
     @Test("recognizes select first sentence")
     func selectFirstSentenceCommands() {
         #expect(DictationCommand.parse("select first sentence") == .selectFirstSentence)
@@ -402,6 +434,34 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("highlight 1st sentence") == .selectFirstSentence)
     }
 
+    @Test("recognizes select next sentence (not move next / select last)")
+    func selectNextSentenceCommands() {
+        #expect(DictationCommand.parse("select next sentence") == .selectNextSentence)
+        #expect(DictationCommand.parse("select forward sentence") == .selectNextSentence)
+        #expect(DictationCommand.parse("Select next sentence.") == .selectNextSentence)
+        #expect(DictationCommand.parse("please select next sentence") == .selectNextSentence)
+        #expect(DictationCommand.parse("highlight next sentence") == .selectNextSentence)
+        #expect(DictationCommand.parse("highlight forward sentence") == .selectNextSentence)
+        // Do not steal move / select last
+        #expect(DictationCommand.parse("next sentence") == .moveToNextSentence)
+        #expect(DictationCommand.parse("select last sentence") == .selectLastSentence)
+        #expect(DictationCommand.parse("select previous sentence") == .selectLastSentence)
+    }
+
+    @Test("recognizes delete next sentence (not delete last / previous)")
+    func deleteNextSentenceCommands() {
+        #expect(DictationCommand.parse("delete next sentence") == .deleteNextSentence)
+        #expect(DictationCommand.parse("delete forward sentence") == .deleteNextSentence)
+        #expect(DictationCommand.parse("Delete next sentence.") == .deleteNextSentence)
+        #expect(DictationCommand.parse("please delete next sentence") == .deleteNextSentence)
+        #expect(DictationCommand.parse("remove next sentence") == .deleteNextSentence)
+        #expect(DictationCommand.parse("remove forward sentence") == .deleteNextSentence)
+        // Do not steal delete last / previous
+        #expect(DictationCommand.parse("delete last sentence") == .deleteLastSentence)
+        #expect(DictationCommand.parse("delete previous sentence") == .deleteLastSentence)
+        #expect(DictationCommand.parse("delete sentence") == .deleteLastSentence)
+    }
+
     @Test("recognizes select first paragraph")
     func selectFirstParagraphCommands() {
         #expect(DictationCommand.parse("select first paragraph") == .selectFirstParagraph)
@@ -413,6 +473,18 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("select 1st paragraph") == .selectFirstParagraph)
         #expect(DictationCommand.parse("select the 1st paragraph") == .selectFirstParagraph)
         #expect(DictationCommand.parse("highlight 1st paragraph") == .selectFirstParagraph)
+    }
+
+    @Test("recognizes select next paragraph (not select last)")
+    func selectNextParagraphCommands() {
+        #expect(DictationCommand.parse("select next paragraph") == .selectNextParagraph)
+        #expect(DictationCommand.parse("select forward paragraph") == .selectNextParagraph)
+        #expect(DictationCommand.parse("Select next paragraph.") == .selectNextParagraph)
+        #expect(DictationCommand.parse("please select next paragraph") == .selectNextParagraph)
+        #expect(DictationCommand.parse("highlight next paragraph") == .selectNextParagraph)
+        #expect(DictationCommand.parse("highlight forward paragraph") == .selectNextParagraph)
+        #expect(DictationCommand.parse("select last paragraph") == .selectLastParagraph)
+        #expect(DictationCommand.parse("select previous paragraph") == .selectLastParagraph)
     }
 
     @Test("last line selection boundaries (content after last \\n, no leading separator)")
@@ -640,6 +712,9 @@ struct DictationCommandTests {
         #expect(says.contains(where: { $0.lowercased().contains("select next word") }))
         #expect(says.contains(where: { $0.lowercased().contains("select previous word") || $0.lowercased().contains("select prior word") }))
         #expect(says.contains(where: { $0.lowercased().contains("delete next word") }))
+        #expect(says.contains(where: { $0.lowercased().contains("select next sentence") }))
+        #expect(says.contains(where: { $0.lowercased().contains("delete next sentence") }))
+        #expect(says.contains(where: { $0.lowercased().contains("select next paragraph") }))
     }
 
     @Test("spell as is content not a sticky command")

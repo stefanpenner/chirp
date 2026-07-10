@@ -6,11 +6,34 @@ import Testing
 @Suite("SpokenNumberITN")
 struct SpokenNumberITNTests {
 
-    @Test("does not convert bare small units")
+    @Test("does not convert bare small units without quantity noun")
     func bareUnitsStay() {
         #expect(SpokenNumberITN.apply("one more thing") == "one more thing")
         #expect(SpokenNumberITN.apply("two birds") == "two birds")
-        #expect(SpokenNumberITN.apply("ten items") == "ten items")
+        // Non-quantity follow-on stays words
+        #expect(SpokenNumberITN.apply("ten things") == "ten things")
+    }
+
+    @Test("converts bare units before quantity nouns")
+    func quantityNounForceConvert() {
+        #expect(SpokenNumberITN.apply("ten items") == "10 items")
+        #expect(SpokenNumberITN.apply("five emails") == "5 emails")
+        #expect(SpokenNumberITN.apply("three people") == "3 people")
+        #expect(SpokenNumberITN.apply("one person") == "1 person")
+        #expect(SpokenNumberITN.apply("two files") == "2 files")
+        #expect(SpokenNumberITN.apply("four messages") == "4 messages")
+        #expect(SpokenNumberITN.apply("six pages") == "6 pages")
+        #expect(SpokenNumberITN.apply("seven tickets") == "7 tickets")
+        #expect(SpokenNumberITN.apply("eight seats") == "8 seats")
+        #expect(SpokenNumberITN.apply("nine users") == "9 users")
+        #expect(SpokenNumberITN.apply("twelve copies") == "12 copies")
+        #expect(SpokenNumberITN.apply("five apples") == "5 apples")
+        #expect(SpokenNumberITN.apply("two oranges") == "2 oranges")
+        // Compounds already convert; quantity still fine
+        #expect(SpokenNumberITN.apply("twenty five apples") == "25 apples")
+        // "of them" / non-quantity do not force
+        #expect(SpokenNumberITN.apply("ten of them") == "ten of them")
+        #expect(SpokenNumberITN.apply("one more thing") == "one more thing")
     }
 
     @Test("converts teens and tens compounds")
@@ -156,8 +179,10 @@ struct TextPostProcessorNumberITNTests {
         #expect(TextPostProcessor.process("costs one hundred dollars") == "costs $100")
         #expect(TextPostProcessor.process("about fifty percent done") == "about 50% done")
         #expect(TextPostProcessor.process("one hundred percent ready") == "100% ready")
-        // Bare one stays
+        // Bare one stays; quantity noun forces digits
         #expect(TextPostProcessor.process("one more thing") == "one more thing")
+        #expect(TextPostProcessor.process("five emails") == "5 emails")
+        #expect(TextPostProcessor.process("ten items") == "10 items")
     }
 
     @Test("meeting times still work after cardinal ITN")
