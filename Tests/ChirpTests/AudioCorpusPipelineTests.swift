@@ -418,4 +418,42 @@ struct AudioCorpusPipelineTests {
         let withPad = SpeechAudioGenerator.withTrailingSilence(samples, seconds: 0.5)
         #expect(withPad.count > samples.count)
     }
+
+    @Test("Multi-utterance session: two phrases with silence, ranked")
+    @MainActor
+    func multiUtteranceSession() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+
+        let phrase1 = "hello world"
+        let phrase2 = "create a new note"
+
+        let speech1 = try SpeechAudioGenerator.synthesize(text: phrase1, voice: "Samantha")
+        let speech2 = try SpeechAudioGenerator.synthesize(text: phrase2, voice: "Samantha")
+        // phrase1 + silence gap (triggers VAD commit) + phrase2 + trailing silence
+        var samples = SpeechAudioGenerator.withTrailingSilence(speech1, seconds: 0.8)
+        samples += speech2
+        samples = SpeechAudioGenerator.withTrailingSilence(samples, seconds: 0.8)
+
+        let hyp = try await Self.transcribeViaAppState(samples: samples, paths: paths)
+        print("multi-utterance hyp=\"\(hyp)\"")
+
+        let score = TranscriptionScoring.score(
+            id: "multi",
+            reference: "\(phrase1) \(phrase2)",
+            hypothesis: hyp
+        )
+        print(score.summaryLine)
+
+        #expect(!hyp.isEmpty, "multi-utterance produced empty text")
+        #expect(
+            score.majorWER <= 0.35,
+            "multi-utterance majorWER \(score.majorWER) too high: \"\(hyp)\""
+        )
+        let norm = TranscriptionScoring.normalize(hyp)
+        #expect(norm.contains("hello") || norm.contains("world"), "missing first phrase in \"\(hyp)\"")
+        #expect(norm.contains("note") || norm.contains("create"), "missing second phrase in \"\(hyp)\"")
+    }
 }

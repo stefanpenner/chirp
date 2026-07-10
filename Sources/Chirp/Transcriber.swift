@@ -174,7 +174,7 @@ actor Transcriber: TranscriberProtocol {
 
         // Min length guard: too-short buffers are unreliable. Keep pendingAudio —
         // a false VAD endpoint must not wipe speech that continues after.
-        guard pendingAudio.count >= 1600 else {
+        guard DecodePolicy.canCommit(pendingSampleCount: pendingAudio.count) else {
             Log.transcription.debug("feedAudio: pendingAudio=\(self.pendingAudio.count) too short — keep buffer")
             return []
         }
@@ -203,10 +203,12 @@ actor Transcriber: TranscriberProtocol {
             Log.transcription.debug("peek: pendingAudio=\(self.pendingAudio.count) speechDetected=false")
             return nil
         }
-        guard pendingAudio.count >= 4800 else { return nil }
-        let maxSamples = 16000 * 5
-        let samples = pendingAudio.count > maxSamples
-            ? Array(pendingAudio.suffix(maxSamples))
+        guard DecodePolicy.canPeek(pendingSampleCount: pendingAudio.count, speechDetected: true) else {
+            return nil
+        }
+        let window = DecodePolicy.peekWindowCount(pendingSampleCount: pendingAudio.count)
+        let samples = pendingAudio.count > window
+            ? Array(pendingAudio.suffix(window))
             : pendingAudio
         let text = transcribeSamples(Self.withSpeechWindow(samples))
         Log.transcription.debug("peek: pendingAudio=\(self.pendingAudio.count) speechDetected=true text=\(text)")
@@ -231,7 +233,7 @@ actor Transcriber: TranscriberProtocol {
             SherpaOnnxVoiceActivityDetectorPop(vad)
         }
 
-        guard hasPendingSpeech, pendingAudio.count >= 1600 else {
+        guard hasPendingSpeech, DecodePolicy.canCommit(pendingSampleCount: pendingAudio.count) else {
             Log.transcription.debug("flush: pendingAudio=\(self.pendingAudio.count) hasPendingSpeech=\(hasPendingSpeech) — skipped")
             pendingAudio.removeAll()
             return ""
@@ -258,10 +260,10 @@ actor Transcriber: TranscriberProtocol {
     /// Internal for tests.
     static func withSpeechWindow(
         _ samples: [Float],
-        preRollSamples: Int = 3200,   // 200ms @ 16kHz
-        postRollSamples: Int = 3200,  // 200ms @ 16kHz
-        frameSamples: Int = 320,      // 20ms
-        energyThreshold: Float = 0.01
+        preRollSamples: Int = DecodePolicy.preRollSamples,
+        postRollSamples: Int = DecodePolicy.postRollSamples,
+        frameSamples: Int = DecodePolicy.energyFrameSamples,
+        energyThreshold: Float = DecodePolicy.energyThreshold
     ) -> [Float] {
         guard samples.count > preRollSamples + postRollSamples + frameSamples else {
             return samples
@@ -298,9 +300,9 @@ actor Transcriber: TranscriberProtocol {
     /// Back-compat alias used by older tests/call sites.
     static func withLeadingPreRoll(
         _ samples: [Float],
-        preRollSamples: Int = 3200,
-        frameSamples: Int = 320,
-        energyThreshold: Float = 0.01
+        preRollSamples: Int = DecodePolicy.preRollSamples,
+        frameSamples: Int = DecodePolicy.energyFrameSamples,
+        energyThreshold: Float = DecodePolicy.energyThreshold
     ) -> [Float] {
         withSpeechWindow(
             samples,

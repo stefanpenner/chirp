@@ -257,12 +257,10 @@ public final class AppState {
     /// Rebuild the transcription pipeline from the active AI mode.
     /// Called when AI settings change in the Settings UI.
     public func rebuildPipeline() {
-        switch status {
-        case .recording, .transcribing:
+        let phase = SessionDecision.phase(from: status)
+        if PipelineRebuildDecision.shouldDefer(phase: phase) {
             pipelineNeedsRebuild = true
             return
-        default:
-            break
         }
         pipelineNeedsRebuild = false
         guard let mode = aiSettings.activeMode else {
@@ -488,15 +486,19 @@ public final class AppState {
             ensureModel()
             return
         case .ready:
+            // SessionDecision.canStartRecording(.ready)
             break
         case .transcribing:
             // Rejoin: fn pressed during finalization — resume recording
             // in the same session. Text accumulates.
+            guard SessionDecision.canRejoin(.transcribing) else { return }
             rejoinSession()
             return
         default:
             return
         }
+        // Extra pure-gate check for the ready → recording path
+        guard SessionDecision.canStartRecording(.ready) else { return }
         if !modelFileCheck() {
             ensureModel()
             return
