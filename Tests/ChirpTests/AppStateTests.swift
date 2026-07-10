@@ -376,6 +376,56 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("spell that"))
     }
 
+    @Test("one-shot spell as packs once and leaves spell mode off")
+    func spellAsOneShot() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["spell as a b c"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "abc" { break }
+        }
+        #expect(state.transcribedText == "abc")
+        #expect(state.spellMode == .off, "one-shot must not enable sticky spell mode")
+        #expect(inserter.typedTexts.contains("abc"))
+        #expect(!inserter.typedTexts.contains(where: { $0.lowercased().contains("spell as") }))
+    }
+
+    @Test("one-shot spell as with capital packs and leaves sticky mode unchanged")
+    func spellAsOneShotCapital() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["spell as capital j o h n"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "John" { break }
+        }
+        #expect(state.transcribedText == "John")
+        #expect(state.spellMode == .off)
+    }
+
     @Test("spell mode glues multi-segment commits without space")
     func spellModeMultiSegmentGlue() async throws {
         let mock = MockTranscriber()

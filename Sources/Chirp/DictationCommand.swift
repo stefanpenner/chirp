@@ -226,6 +226,7 @@ enum DictationCommand: Equatable, Sendable {
         ("spell mode / start spelling", "Sticky spell mode (letter packing)"),
         ("spell off / end spelling / dictation mode", "Exit spell mode"),
         ("spell that", "Select last phrase + enter spell mode"),
+        ("spell as a b c", "Pack letters once (no sticky mode)"),
         ("cap that / all caps that", "Transform last word"),
         ("title case that", "Title-case last phrase"),
         ("sentence case that", "Sentence-case last phrase"),

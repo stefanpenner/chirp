@@ -22,7 +22,7 @@ tlc specs/PipelineRebuild.tla
 | `SpellMode` | sticky spell mode (letter packing) | `SpellMode` / `SpellTransform` |
 | `ReplaceThat` | multi-step replace: arm then next content swaps last | `ReplaceDecision` |
 | `ListCounter` | session numbered-list index for next number | `SpokenListITN` |
-| `ScratchUndo` | **legacy** single-level scratch (superseded by `EditStack`) | — |
+| `ScratchUndo` | **legacy / no bait** single-level scratch (superseded by `EditStack`) | — |
 | `EditCommands` | coarse length model of edit commands (see `EditStack` for stack) | `DictationCommand` |
 | `ConfidenceGate` | accept/reject ASR when token log-probs exist | `ConfidenceGate` |
 | `DecodeReject` | energy/silence + log-prob composite reject (Parakeet nil scores) | `DecodeReject` |
@@ -42,6 +42,7 @@ tlc specs/ClipboardCommands.tla
 tlc specs/SpellMode.tla
 tlc specs/ConfidenceGate.tla
 tlc specs/DecodeReject.tla
+tlc specs/EditCommands.tla
 tlc specs/EditStack.tla
 tlc specs/ListCounter.tla
 tlc specs/PeekCommit.tla
@@ -59,6 +60,7 @@ tlc -c ClipboardCommands_bait.cfg specs/ClipboardCommands.tla
 tlc -c SpellMode_bait.cfg specs/SpellMode.tla
 tlc -c ConfidenceGate_bait.cfg specs/ConfidenceGate.tla
 tlc -c DecodeReject_bait.cfg specs/DecodeReject.tla
+tlc -c EditCommands_bait.cfg specs/EditCommands.tla
 tlc -c EditStack_bait.cfg specs/EditStack.tla
 tlc -c ListCounter_bait.cfg specs/ListCounter.tla
 tlc -c PeekCommit_bait.cfg specs/PeekCommit.tla
@@ -78,6 +80,7 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | `SpellMode_bait` | reset may leave spell on | `ResetYieldsOff` |
 | `ConfidenceGate_bait` | no-scores may reject | `NoScoresAccept` |
 | `DecodeReject_bait` | silence may accept non-empty hyp | `SilenceNonEmptyRejects` |
+| `EditCommands_bait` | lastTyped may exceed textLen | `LastTypedWithinText` |
 | `EditStack_bait` | typed length may diverge from text | `TypedMatchesText` |
 | `ListCounter_bait` | end/reset may leave n ≠ 1 | `EndOrResetYieldsOne` |
 | `PeekCommit_bait` | speculative text may appear while idle | `SpecOnlyWhileRecording` |

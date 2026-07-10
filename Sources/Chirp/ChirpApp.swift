@@ -701,7 +701,7 @@ public final class AppState {
                         // One-shot type: replace buffer + stack so scratch undoes the
                         // whole batch (mid-session segments were not typed/pushed).
                         self.awaitingReplace = false
-                        let text = self.shapeContent(remaining)
+                        let text = self.shapeContent(remaining).text
                         self.editStack.clear()
                         self.transcribedText = text
                         if !text.isEmpty {
@@ -793,17 +793,17 @@ public final class AppState {
             }
             // Skip consecutive identical segments (VAD/ASR echo under noise)
             let shaped = shapeContent(text)
-            let norm = TranscriptNormalize.key(shaped)
+            let norm = TranscriptNormalize.key(shaped.text)
             if !norm.isEmpty, norm == lastCommittedNormalized {
-                Log.transcription.debug("Skipping duplicate segment: \"\(shaped)\"")
+                Log.transcription.debug("Skipping duplicate segment: \"\(shaped.text)\"")
                 return
             }
-            let spellOn = spellMode == .on
+            // One-shot pack preserves case ("abc"/"John"); sticky also glues segments.
             let joined = SegmentJoiner.append(
                 existing: transcribedText,
-                next: shaped,
-                preserveLeadingCase: spellOn,
-                emptySeparator: spellOn
+                next: shaped.text,
+                preserveLeadingCase: shaped.preserveLeadingCase,
+                emptySeparator: spellMode == .on
             )
             transcribedText = joined.full
             if typesIncrementally {
@@ -814,13 +814,16 @@ public final class AppState {
         }
     }
 
-    /// Shape a content segment: spell mode packs letters and skips caps;
-    /// otherwise apply sticky CapsTransform.
-    private func shapeContent(_ text: String) -> String {
-        if spellMode == .on {
-            return SpellTransform.apply(text, mode: .on)
+    /// Shape a content segment: one-shot "spell as …", sticky spell mode, or caps.
+    /// One-shot does not change `spellMode`.
+    private func shapeContent(_ text: String) -> (text: String, preserveLeadingCase: Bool) {
+        if let packed = SpellTransform.oneShot(text) {
+            return (packed, true)
         }
-        return CapsTransform.apply(text, mode: capsMode)
+        if spellMode == .on {
+            return (SpellTransform.apply(text, mode: .on), true)
+        }
+        return (CapsTransform.apply(text, mode: capsMode), false)
     }
 
     /// Arm multi-step replace; text stays until the next content phrase arrives.

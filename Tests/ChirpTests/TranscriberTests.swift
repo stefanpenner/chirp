@@ -13,7 +13,11 @@ struct TranscriberTests {
 
     @Test("withSpeechWindow keeps short buffers unchanged")
     func speechWindowShortUnchanged() {
-        let samples = [Float](repeating: 0.1, count: 1000)
+        // Too short to trim; still report energy frames.
+        // Mix quiet + louder so adaptive floor stays below speech peaks
+        // (uniform amplitude would sit at the noise percentile).
+        var samples = [Float](repeating: 0.02, count: 400)
+        samples += [Float](repeating: 0.2, count: 600)
         let out = Transcriber.withSpeechWindow(samples)
         #expect(out.samples.count == samples.count)
         #expect(out.speechFrameCount > 0)
@@ -48,6 +52,42 @@ struct TranscriberTests {
         let out = Transcriber.withSpeechWindow(samples)
         #expect(out.samples.count == samples.count)
         #expect(out.speechFrameCount == 0)
+    }
+
+    @Test("withSpeechWindow adaptive floor: room noise alone is not speech")
+    func speechWindowRoomNoiseNotSpeech() {
+        // Constant ~0.02 RMS would exceed fixed 0.01 threshold.
+        let samples = [Float](repeating: 0.02, count: 32_000)
+        let out = Transcriber.withSpeechWindow(samples)
+        #expect(out.speechFrameCount == 0)
+        #expect(out.samples.count == samples.count)
+    }
+
+    @Test("withSpeechWindow adaptive floor: finds speech burst above room noise")
+    func speechWindowSpeechAboveRoomNoise() {
+        // Quiet room (~0.02) + 0.5s speech burst (0.3) + quiet tail.
+        var samples = [Float](repeating: 0.02, count: 16_000)
+        samples += [Float](repeating: 0.3, count: 8_000)
+        samples += [Float](repeating: 0.02, count: 16_000)
+        let out = Transcriber.withSpeechWindow(samples)
+        // ~0.5s / 20ms frames ≈ 25 speech frames — not the whole buffer.
+        #expect(out.speechFrameCount >= 20)
+        #expect(out.speechFrameCount <= 35)
+        #expect(out.samples.count < samples.count)
+        #expect((out.samples.map { abs($0) }.max() ?? 0) >= 0.3)
+        // Pre/post roll preserved (~200ms each).
+        #expect(out.samples.count >= 8_000 + 3_200 + 3_200 - 640)
+        #expect(out.samples.count <= 8_000 + 3_200 + 3_200 + 640)
+    }
+
+    @Test("withSpeechWindow explicit threshold still overrides adaptive")
+    func speechWindowExplicitThreshold() {
+        // Room noise above fixed 0.01 counts as speech when override is fixed.
+        let samples = [Float](repeating: 0.02, count: 16_000)
+        let adaptive = Transcriber.withSpeechWindow(samples)
+        let fixed = Transcriber.withSpeechWindow(samples, energyThreshold: 0.01)
+        #expect(adaptive.speechFrameCount == 0)
+        #expect(fixed.speechFrameCount > 0)
     }
 
     @Test("withLeadingPreRoll alias still trims leading silence")

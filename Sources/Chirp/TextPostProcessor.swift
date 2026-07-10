@@ -176,7 +176,15 @@ enum TextPostProcessor {
         // Classic Whisper/Parakeet silence artifacts
         "thank you.", "thanks.", "thank you for watching.",
         "thanks for watching.", "thank you for watching",
+        "thanks for listening.", "thanks for listening",
         "subscribe.", "please subscribe.", "please subscribe",
+        // Lone closings / greetings with punct (ASR silence dumps). Keep bare
+        // "okay"/"hello"/"hi" without punct — those can be real short speech.
+        "bye.", "bye",
+        "okay.", "ok.",
+        "hello.", "hello?",
+        "hi.", "hi?",
+        "you know.", "i mean.",
         // Pure vocalizations (also handled as fillers mid-sentence)
         "hmm", "hm", "mm", "mhm", "uh", "um", "ah", "er",
         "you", // common lone garbage token from noise; rarely intentional alone
@@ -476,8 +484,8 @@ enum TextPostProcessor {
         // Street suffixes after numbers: "35 Lexington avenue" → "35 Lexington Ave."
         result = applyStreetSuffixITN(result)
         // US states + ZIP after street suffixes so "… avenue california" → "… Ave. CA"
-        // and "zip code 90210" → "90210". Pragmatic: whole-word state names always
-        // rewrite ("I love california" → "I love CA") — typical for dictation ITN.
+        // and "zip code 90210" → "90210". Multi-word states always rewrite; single-word
+        // only with address cue left of match (street abbrev, ZIP, or "state of").
         result = applyAddressITN(result)
         return result
     }
@@ -875,6 +883,45 @@ enum TextPostProcessor {
         return result
     }
 
+    /// Street suffix abbreviations produced by street ITN (optional trailing period).
+    private static let addressStreetAbbrevCuePattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:St|Ave|Rd|Dr|Blvd|Ln|Ct|Pl|Cir|Hwy)\.?"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Bare 5-digit ZIP as an address cue for state rewrite.
+    private static let addressZIPCuePattern: NSRegularExpression = {
+        try! NSRegularExpression(pattern: #"\b\d{5}\b"#)
+    }()
+
+    /// Spoken "state of …" cue before a state name.
+    private static let addressStateOfCuePattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bstate\s+of\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// True when left context looks like an address (street abbrev, ZIP, or "state of").
+    private static func hasAddressCue(leftOf text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        let range = NSRange(text.startIndex..., in: text)
+        if addressStreetAbbrevCuePattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if addressZIPCuePattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if addressStateOfCuePattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        return false
+    }
+
+    /// Multi-word states always rewrite (low FP). Single-word only with address cue
+    /// left of the match so "I love california" stays but "… Ave. california" → CA.
     private static func applyStateAbbreviationITN(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         let matches = stateITNPattern.matches(in: text, range: range)
@@ -886,6 +933,11 @@ enum TextPostProcessor {
                   let fullRange = Range(match.range, in: result) else { continue }
             let key = String(result[nameRange]).lowercased()
             guard let code = usStateAbbreviations[key] else { continue }
+            let isMultiWord = key.contains(" ")
+            if !isMultiWord {
+                let left = String(result[..<fullRange.lowerBound])
+                guard hasAddressCue(leftOf: left) else { continue }
+            }
             result.replaceSubrange(fullRange, with: code)
         }
         return result

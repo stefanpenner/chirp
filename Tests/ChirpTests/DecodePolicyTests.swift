@@ -46,4 +46,61 @@ struct DecodePolicyTests {
         #expect(DecodePolicy.peekSleepNs(idleMisses: 5) == DecodePolicy.peekIntervalIdleNs)
         #expect(DecodePolicy.peekIntervalActiveNs < DecodePolicy.peekIntervalIdleNs)
     }
+
+    // MARK: - Adaptive energy noise floor
+
+    @Test("noiseFloor tracks low RMS values (≈20th percentile)")
+    func noiseFloorLowValues() {
+        let rms: [Float] = [0.01, 0.01, 0.5, 0.6]
+        let floor = DecodePolicy.noiseFloor(frameRMS: rms)
+        #expect(floor <= 0.01 + 1e-6)
+        #expect(floor >= 0)
+    }
+
+    @Test("noiseFloor empty returns zero")
+    func noiseFloorEmpty() {
+        #expect(DecodePolicy.noiseFloor(frameRMS: []) == 0)
+    }
+
+    @Test("adaptiveEnergyThreshold is at least minFloor")
+    func adaptiveThresholdMinFloor() {
+        let quiet: [Float] = [0.001, 0.002, 0.001, 0.003]
+        let t = DecodePolicy.adaptiveEnergyThreshold(frameRMS: quiet)
+        #expect(t >= DecodePolicy.energyThreshold)
+        #expect(t >= DecodePolicy.energyMinFloor)
+    }
+
+    @Test("adaptiveEnergyThreshold rises above room noise")
+    func adaptiveThresholdAboveNoise() {
+        // Quiet room ~0.02; speech-like frames higher.
+        let rms: [Float] = [
+            0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02,
+            0.4, 0.5, 0.45, 0.02, 0.02, 0.02, 0.02, 0.02,
+        ]
+        let t = DecodePolicy.adaptiveEnergyThreshold(frameRMS: rms)
+        #expect(t > 0.02)
+        #expect(t < 0.4)
+        // noiseFloor * multiplier ≈ 0.02 * 2.5 = 0.05
+        #expect(abs(t - 0.02 * DecodePolicy.energyFloorMultiplier) < 0.02)
+    }
+
+    @Test("adaptiveEnergyThreshold falls back to fixed when too few frames")
+    func adaptiveThresholdFewFrames() {
+        #expect(
+            DecodePolicy.adaptiveEnergyThreshold(frameRMS: [])
+                == DecodePolicy.energyThreshold
+        )
+        #expect(
+            DecodePolicy.adaptiveEnergyThreshold(frameRMS: [0.5])
+                == DecodePolicy.energyThreshold
+        )
+    }
+
+    @Test("energy floor constants are dual-testable")
+    func energyFloorConstants() {
+        #expect(DecodePolicy.energyMinFloor == DecodePolicy.energyThreshold)
+        #expect(DecodePolicy.energyFloorMultiplier == 2.5)
+        #expect(DecodePolicy.energyNoisePercentile > 0 && DecodePolicy.energyNoisePercentile < 0.5)
+        #expect(DecodePolicy.energyFloorMinFrames >= 2)
+    }
 }

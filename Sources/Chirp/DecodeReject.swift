@@ -9,6 +9,8 @@ enum DecodeReject {
     /// Applied only when speechFrameCount ≤ 1 (conservative).
     static let lowEnergyFillers: Set<String> = [
         "yeah", "yes", "you", "the", "a", "um", "uh",
+        // Short greetings/closings common on near-silence (frames ≤ 1 only)
+        "ok", "okay", "hi", "bye", "hmm", "mhm",
     ]
 
     /// Reject ASR hyp when energy + text heuristics say garbage.

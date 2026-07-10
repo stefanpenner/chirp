@@ -75,9 +75,15 @@ Next ==
 
 Spec == Init /\ [][Next]_vars
 
+\* Scratch / delete never leave lastTyped beyond remaining text
+LastTypedWithinText == lastTyped <= textLen
+
 Inv ==
   /\ TypeOK
-  /\ lastTyped <= textLen
+  /\ LastTypedWithinText
+
+\* Bait: negation of a real safety property (must FAIL under TLC)
+BaitInv == ~LastTypedWithinText
 
 StateConstraint == textLen <= MaxLen
 

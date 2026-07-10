@@ -283,17 +283,21 @@ actor Transcriber: TranscriberProtocol {
     /// Drop long leading *and* trailing near-silence before ASR, but keep
     /// ~200ms pre-roll / post-roll so true speech edges are not clipped.
     /// Reduces decode on pure silence padding while preserving onset/offset.
+    ///
+    /// Energy gate is adaptive by default (`DecodePolicy.adaptiveEnergyThreshold`):
+    /// noise floor from frame RMS (20th percentile) × multiplier, floored at
+    /// `energyMinFloor`. Pass `energyThreshold` to force a fixed gate (tests).
     /// Internal for tests.
     static func withSpeechWindow(
         _ samples: [Float],
         preRollSamples: Int = DecodePolicy.preRollSamples,
         postRollSamples: Int = DecodePolicy.postRollSamples,
         frameSamples: Int = DecodePolicy.energyFrameSamples,
-        energyThreshold: Float = DecodePolicy.energyThreshold
+        energyThreshold: Float? = nil
     ) -> SpeechWindow {
-        var speechFrameCount = 0
-        var firstSpeech: Int?
-        var lastSpeech: Int?
+        // First pass: per-frame RMS for adaptive floor + speech classification.
+        var frameRMS: [Float] = []
+        var frameStarts: [Int] = []
         var i = 0
         while i + frameSamples <= samples.count {
             var sum: Float = 0
@@ -302,13 +306,24 @@ actor Transcriber: TranscriberProtocol {
                 let s = samples[j]
                 sum += s * s
             }
-            let rms = sqrtf(sum / Float(frameSamples))
-            if rms >= energyThreshold {
-                speechFrameCount += 1
-                if firstSpeech == nil { firstSpeech = i }
-                lastSpeech = end
-            }
+            frameRMS.append(sqrtf(sum / Float(frameSamples)))
+            frameStarts.append(i)
             i += frameSamples
+        }
+
+        let threshold = energyThreshold
+            ?? DecodePolicy.adaptiveEnergyThreshold(frameRMS: frameRMS)
+
+        var speechFrameCount = 0
+        var firstSpeech: Int?
+        var lastSpeech: Int?
+        for (idx, rms) in frameRMS.enumerated() {
+            if rms >= threshold {
+                speechFrameCount += 1
+                let start = frameStarts[idx]
+                if firstSpeech == nil { firstSpeech = start }
+                lastSpeech = start + frameSamples
+            }
         }
 
         // Too short to trim usefully — still report energy frame count.
@@ -337,7 +352,7 @@ actor Transcriber: TranscriberProtocol {
         _ samples: [Float],
         preRollSamples: Int = DecodePolicy.preRollSamples,
         frameSamples: Int = DecodePolicy.energyFrameSamples,
-        energyThreshold: Float = DecodePolicy.energyThreshold
+        energyThreshold: Float? = nil
     ) -> [Float] {
         withSpeechWindow(
             samples,

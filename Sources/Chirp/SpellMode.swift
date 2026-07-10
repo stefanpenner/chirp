@@ -24,8 +24,33 @@ enum SpellTransform {
     /// Apply sticky spell mode to a newly committed text segment (not commands).
     static func apply(_ text: String, mode: SpellMode) -> String {
         guard mode == .on, !text.isEmpty else { return text }
-        return packTokens(text)
+        return pack(text)
     }
+
+    /// Pack spoken letter / NATO / digit tokens into characters (shared by sticky mode + one-shot).
+    static func pack(_ text: String) -> String {
+        packTokens(text)
+    }
+
+    /// One-shot whole-utterance: `"spell as a b c"` → `"abc"`. Nil if not a match.
+    /// Does not toggle sticky spell mode (caller leaves `spellMode` unchanged).
+    static func oneShot(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let range = NSRange(trimmed.startIndex..., in: trimmed)
+        guard let match = oneShotPattern.firstMatch(in: trimmed, options: [], range: range),
+              match.numberOfRanges >= 2,
+              let restRange = Range(match.range(at: 1), in: trimmed) else {
+            return nil
+        }
+        let rest = String(trimmed[restRange])
+        guard !rest.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return pack(rest)
+    }
+
+    private static let oneShotPattern: NSRegularExpression = {
+        try! NSRegularExpression(pattern: #"^spell as\s+(.+)$"#, options: .caseInsensitive)
+    }()
 
     // MARK: - Token packing
 

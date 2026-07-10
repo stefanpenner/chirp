@@ -54,7 +54,8 @@ Coverage:
 
 Scoring helpers live in `Tests/ChirpTests/TranscriptionScoring.swift`
 (always-on unit tests via `//:TextTests`).
-Decode uses `withSpeechWindow` (lead+trail energy trim with 200ms rolls).
+Decode uses `withSpeechWindow` (lead+trail energy trim with 200ms rolls;
+adaptive RMS noise floor so noisy rooms do not inflate speechFrameCount).
 Constants live in `DecodePolicy` (dual-tested with `TranscriberBuffer.tla`).
 Pipeline rebuild deferral: `PipelineRebuildDecision` + `PipelineRebuild.tla`.
 ASR EP selection: `InferenceProvider` defaults to CPU (CoreML often slower
@@ -75,9 +76,11 @@ weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
 `20 dollars and 50 cents`→`$20.50`; bare `20 pounds`→`20 lb` weight;
 `20 pounds sterling` / `20 quid`→`£20`), street suffixes after a house number
 (`35 Lexington avenue`→`35 Lexington Ave.`; `hit the road` stays), US states →
-USPS codes (`california`→`CA`, `new york`→`NY`; whole-word always) and ZIP
-(`zip code 90210`→`90210`, `90210 1234`→`90210-1234`; address e.g.
-`35 Lexington avenue california`→`35 Lexington Ave. CA`).
+USPS codes (multi-word always: `new york`→`NY`; single-word only with address
+cue left of match — street abbrev, ZIP, or `state of` — so `I love california`
+stays, `35 Lexington avenue california`→`35 Lexington Ave. CA`,
+`state of maine`→`state of ME`) and ZIP (`zip code 90210`→`90210`,
+`90210 1234`→`90210-1234`).
 Bare `one`/`two` stay words. Digit runs (≥3 single digits) concatenate for
 phones (`five five five one two one two`→`555-1212`; 10-digit `XXX-XXX-XXXX`;
 11-digit leading-1 `1-XXX-XXX-XXXX`; `oh`→`0`). Negatives: `minus twenty` /
@@ -107,6 +110,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **spell mode** / **start spelling** / **spell on** — sticky spell mode (`SpellMode`); packs letters / NATO / digits
 - **spell off** / **end spelling** / **dictation mode** — exit spell mode
 - **spell that** / **spell it** / **spell last** — select last phrase + enter spell mode (does not delete)
+- **spell as a b c** — one-shot pack (`SpellTransform.oneShot`); does not enable sticky spell mode
+  (e.g. `spell as capital j o h n` → `John`)
 - **cap that / all caps that / no caps that** — transform last word
 - **title case that** — title-case last phrase (stack delta)
 - **sentence case that** — sentence-case last phrase

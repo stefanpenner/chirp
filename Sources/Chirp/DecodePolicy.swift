@@ -28,8 +28,44 @@ enum DecodePolicy {
     /// Energy frame size for speech-window detection (~20ms).
     static let energyFrameSamples = 320
 
-    /// RMS threshold for "speech-like" energy.
+    /// Fixed / minimum RMS threshold for "speech-like" energy.
+    /// Also used when too few frames exist to estimate a noise floor.
     static let energyThreshold: Float = 0.01
+
+    /// Alias for adaptive floor lower bound (same value as energyThreshold).
+    static let energyMinFloor: Float = energyThreshold
+
+    /// Percentile of frame RMS used as the noise-floor estimate (20th).
+    static let energyNoisePercentile: Float = 0.2
+
+    /// Adaptive threshold = max(minFloor, noiseFloor * multiplier).
+    /// Raises the gate above room noise so DecodeReject silence rejection
+    /// is not weakened by noisy rooms counting as speech frames.
+    static let energyFloorMultiplier: Float = 2.5
+
+    /// Minimum frame count before adaptive floor estimation is trusted.
+    static let energyFloorMinFrames = 2
+
+    /// Estimate noise floor from frame RMS values (energyNoisePercentile).
+    static func noiseFloor(frameRMS: [Float]) -> Float {
+        guard !frameRMS.isEmpty else { return 0 }
+        let sorted = frameRMS.sorted()
+        let idx = Int(Float(sorted.count - 1) * energyNoisePercentile)
+        return sorted[max(0, min(idx, sorted.count - 1))]
+    }
+
+    /// Adaptive energy threshold: max(minFloor, noiseFloor * multiplier).
+    /// Falls back to fixed energyThreshold when too few frames to estimate.
+    static func adaptiveEnergyThreshold(
+        frameRMS: [Float],
+        minFloor: Float = energyMinFloor,
+        multiplier: Float = energyFloorMultiplier
+    ) -> Float {
+        guard frameRMS.count >= energyFloorMinFrames else {
+            return energyThreshold
+        }
+        return max(minFloor, noiseFloor(frameRMS: frameRMS) * multiplier)
+    }
 
     /// Real-time chunk size used by audio capture / tests (~85ms).
     static let streamChunkSamples = 1_360

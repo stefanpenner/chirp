@@ -32,7 +32,7 @@ struct TextPostProcessorTests {
 
     @Test("Removes space before punctuation")
     func spaceBeforePunct() {
-        #expect(TextPostProcessor.process("Hello .") == "Hello.")
+        #expect(TextPostProcessor.process("Ready .") == "Ready.")
         #expect(TextPostProcessor.process("What ?") == "What?")
         #expect(TextPostProcessor.process("Wait , no") == "Wait, no")
     }
@@ -89,20 +89,37 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("thank you.") == "")
         #expect(TextPostProcessor.process("Thank you for watching.") == "")
         #expect(TextPostProcessor.process("hmm") == "")
-        // Legitimate single-word dictation must pass through
+        #expect(TextPostProcessor.process("thanks for listening.") == "")
+        #expect(TextPostProcessor.process("Thanks for listening") == "")
+        #expect(TextPostProcessor.process("bye.") == "")
+        #expect(TextPostProcessor.process("bye") == "")
+        #expect(TextPostProcessor.process("okay.") == "")
+        #expect(TextPostProcessor.process("ok.") == "")
+        #expect(TextPostProcessor.process("hello.") == "")
+        #expect(TextPostProcessor.process("hello?") == "")
+        #expect(TextPostProcessor.process("hi.") == "")
+        #expect(TextPostProcessor.process("hi?") == "")
+        #expect(TextPostProcessor.process("you know.") == "")
+        #expect(TextPostProcessor.process("i mean.") == "")
+        // Legitimate single-word dictation must pass through (no trailing punct)
         #expect(TextPostProcessor.process("Yeah") == "Yeah")
         #expect(TextPostProcessor.process("Okay") == "Okay")
+        #expect(TextPostProcessor.process("ok") == "ok")
+        #expect(TextPostProcessor.process("hello") == "hello")
+        #expect(TextPostProcessor.process("hi") == "hi")
         #expect(TextPostProcessor.process("goodbye") == "goodbye")
         #expect(TextPostProcessor.process("yes") == "yes")
         // Multi-word speech must pass through
         #expect(TextPostProcessor.process("yeah I agree") == "yeah I agree")
         #expect(TextPostProcessor.process("thank you so much") == "thank you so much")
         #expect(TextPostProcessor.process("okay let's go") == "okay let's go")
+        #expect(TextPostProcessor.process("hello there") == "hello there")
+        #expect(TextPostProcessor.process("you know what") == "you know what")
     }
 
     @Test("Collapses repeated punctuation")
     func multiPunct() {
-        #expect(TextPostProcessor.process("Hello??") == "Hello?")
+        #expect(TextPostProcessor.process("Ready??") == "Ready?")
         #expect(TextPostProcessor.process("Wait..") == "Wait.")
     }
 
@@ -347,13 +364,7 @@ struct TextPostProcessorTests {
 
     @Test("Light ITN US state names to USPS abbreviations")
     func lightITNStateAbbreviations() {
-        // Single-word states (case-insensitive whole words)
-        #expect(TextPostProcessor.process("california") == "CA")
-        #expect(TextPostProcessor.process("TEXAS") == "TX")
-        #expect(TextPostProcessor.process("lives in Florida now") == "lives in FL now")
-        #expect(TextPostProcessor.process("Massachusetts") == "MA")
-        #expect(TextPostProcessor.process("washington") == "WA")
-        // Multi-word: longest match first
+        // Multi-word: always convert (low FP); longest match first
         #expect(TextPostProcessor.process("new york") == "NY")
         #expect(TextPostProcessor.process("new jersey") == "NJ")
         #expect(TextPostProcessor.process("new mexico") == "NM")
@@ -364,8 +375,31 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("west virginia") == "WV")
         #expect(TextPostProcessor.process("rhode island") == "RI")
         #expect(TextPostProcessor.process("district of columbia") == "DC")
-        // Pragmatic v1: whole-word always (dictation-friendly; "I love CA" ok)
-        #expect(TextPostProcessor.process("I love california") == "I love CA")
+        #expect(TextPostProcessor.process("I love new york") == "I love NY")
+        // Single-word bare / casual prose: leave alone (high FP without address cue)
+        #expect(TextPostProcessor.process("california") == "california")
+        #expect(TextPostProcessor.process("TEXAS") == "TEXAS")
+        #expect(TextPostProcessor.process("Massachusetts") == "Massachusetts")
+        #expect(TextPostProcessor.process("washington") == "washington")
+        #expect(TextPostProcessor.process("I love california") == "I love california")
+        #expect(TextPostProcessor.process("lives in Florida now") == "lives in Florida now")
+        #expect(TextPostProcessor.process("visit georgia") == "visit georgia")
+        #expect(TextPostProcessor.process("maine is cold") == "maine is cold")
+        // Single-word with street suffix cue (street ITN → Ave. then state)
+        #expect(
+            TextPostProcessor.process("35 Lexington avenue california")
+                == "35 Lexington Ave. CA"
+        )
+        #expect(
+            TextPostProcessor.process("141 Dorchester street massachusetts")
+                == "141 Dorchester St. MA"
+        )
+        // Single-word after ZIP cue (left of match)
+        #expect(TextPostProcessor.process("90210 california") == "90210 CA")
+        #expect(TextPostProcessor.process("zip code 90210 california") == "90210 CA")
+        // "state of" cue
+        #expect(TextPostProcessor.process("in the state of maine") == "in the state of ME")
+        #expect(TextPostProcessor.process("state of Washington") == "state of WA")
         // Partial / non-state tokens stay
         #expect(TextPostProcessor.process("carolina") == "carolina")
         #expect(TextPostProcessor.process("york") == "york")

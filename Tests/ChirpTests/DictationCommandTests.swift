@@ -192,8 +192,17 @@ struct DictationCommandTests {
         #expect(Set(says).count == says.count)
         #expect(says.contains(where: { $0.lowercased().contains("select that") }))
         #expect(says.contains(where: { $0.lowercased().contains("spell that") }))
+        #expect(says.contains(where: { $0.lowercased().contains("spell as") }))
         #expect(says.contains(where: { $0.lowercased().contains("backspace") }))
         #expect(says.contains(where: { $0.lowercased().contains("move left") }))
         #expect(says.contains(where: { $0.lowercased().contains("move right") }))
+    }
+
+    @Test("spell as is content not a sticky command")
+    func spellAsIsNotCommand() {
+        #expect(DictationCommand.parse("spell as a b c") == .none)
+        #expect(DictationCommand.parse("spell as capital j o h n") == .none)
+        #expect(DictationCommand.parse("spell mode") == .setSpellMode(.on))
+        #expect(DictationCommand.parse("spell that") == .spellThat)
     }
 }
