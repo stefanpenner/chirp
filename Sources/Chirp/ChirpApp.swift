@@ -126,6 +126,10 @@ public final class AppState {
     /// Peek previews that were started before the latest commit are discarded.
     private var commitGen = 0
 
+    /// Character count of the last typed delta (for "scratch that" undo).
+    /// Includes any join separator SegmentJoiner prepended.
+    private var lastTypedCount = 0
+
     public convenience init() {
         let transcriber = Transcriber()
         self.init(audioRecorder: AudioRecorder(), transcriber: transcriber, textInserter: TextInserter(), startListening: false)
@@ -508,6 +512,7 @@ public final class AppState {
         transcribedText = ""
         speculativeText = ""
         commitGen = 0
+        lastTypedCount = 0
         recordingSession &+= 1
         let session = recordingSession
         status = .recording
@@ -571,11 +576,7 @@ public final class AppState {
                     guard !text.isEmpty else { continue }
                     self.commitGen += 1
                     self.speculativeText = ""
-                    let joined = SegmentJoiner.append(existing: self.transcribedText, next: text)
-                    self.transcribedText = joined.full
-                    if typesIncrementally {
-                        self.textInserter.typeText(joined.delta)
-                    }
+                    self.applyCommittedText(text, typesIncrementally: typesIncrementally)
                 }
             }
 
@@ -593,13 +594,16 @@ public final class AppState {
             self.speculativeText = ""
             if !remaining.isEmpty {
                 if typesIncrementally {
-                    let joined = SegmentJoiner.append(existing: self.transcribedText, next: remaining)
-                    self.transcribedText = joined.full
-                    self.textInserter.typeText(joined.delta)
+                    self.applyCommittedText(remaining, typesIncrementally: true)
                 } else {
                     // Non-incremental: pipeline returns full processed text on flush
-                    self.transcribedText = remaining
-                    self.textInserter.typeText(remaining)
+                    if DictationCommand.parse(remaining) == .scratchThat {
+                        self.performScratchThat(typesIncrementally: true)
+                    } else {
+                        self.transcribedText = remaining
+                        self.textInserter.typeText(remaining)
+                        self.lastTypedCount = remaining.count
+                    }
                 }
             }
             self.audioLevel = 0
@@ -615,6 +619,38 @@ public final class AppState {
                 self.rebuildPipeline()
             }
         }
+    }
+
+    /// Apply a committed ASR segment: either a spoken command or normal text.
+    private func applyCommittedText(_ text: String, typesIncrementally: Bool) {
+        switch DictationCommand.parse(text) {
+        case .scratchThat:
+            performScratchThat(typesIncrementally: typesIncrementally)
+        case .none:
+            let joined = SegmentJoiner.append(existing: transcribedText, next: text)
+            transcribedText = joined.full
+            if typesIncrementally {
+                textInserter.typeText(joined.delta)
+                lastTypedCount = joined.delta.count
+            } else {
+                lastTypedCount = joined.delta.count
+            }
+        }
+    }
+
+    /// Undo the last typed segment (Dragon-style "scratch that").
+    private func performScratchThat(typesIncrementally: Bool) {
+        guard lastTypedCount > 0 else { return }
+        let remove = min(lastTypedCount, transcribedText.count)
+        if remove > 0 {
+            transcribedText = String(transcribedText.dropLast(remove))
+            // Trim orphaned trailing separator if join left "foo. " then we
+            // already removed the full delta including ". ".
+            if typesIncrementally {
+                textInserter.deleteBackward(count: remove)
+            }
+        }
+        lastTypedCount = 0
     }
 
     /// Polls the pipeline every 400 ms for a speculative preview of
@@ -681,6 +717,7 @@ public final class AppState {
         recordingSession &+= 1  // discard in-flight async work
         transcribedText = ""
         speculativeText = ""
+        lastTypedCount = 0
         audioLevel = 0
         processingPhase = .none
         hotkeyManager?.sessionActive = false

@@ -16,6 +16,7 @@ tlc specs/PipelineRebuild.tla
 | `PeekCommit` | stale peeks discarded via commitGen | `AppState` peek loop |
 | `PipelineRebuild` | defer pipeline rebuild mid-session | `PipelineRebuildDecision` |
 | `SegmentJoin` | multi-utterance separators (space vs ". ") | `SegmentJoiner` |
+| `ScratchUndo` | spoken "scratch that" undoes last segment | `DictationCommand` |
 
 Bait configs (`*_bait.cfg`) must **fail** — they prove the real invariants are checked.
 

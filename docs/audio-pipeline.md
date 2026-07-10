@@ -39,6 +39,8 @@ capitalized segment follows bare text). Spoken `new line` / `new
 paragraph` rewrite in `TextPostProcessor`; newlines type as Return
 keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
 (built-in tech phrases + UserDefaults `chirp.dictationDictionary`).
+Spoken **scratch that** / **delete that** undoes the last typed segment
+(`DictationCommand` + `ScratchUndo.tla`). Edit phrases in Settings → Audio.
 
 
 ## Components

@@ -229,6 +229,41 @@ struct AppStateTests {
         #expect(inserter.typedTexts == ["Hello", " world"])
     }
 
+    @Test("scratch that undoes the last typed segment")
+    func scratchThatUndoesLastSegment() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.typedTexts == ["Hello world"])
+
+        await mock.setFeedAudioResult(["scratch that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.isEmpty { break }
+        }
+
+        #expect(state.transcribedText.isEmpty, "transcript should be cleared by scratch that")
+        #expect(inserter.deletedCounts == [11], "should delete 11 chars of 'Hello world'")
+        #expect(!inserter.typedTexts.contains("scratch that"))
+    }
+
     @Test("Committed segment clears speculativeText")
     func committedSegmentClearsSpeculative() async throws {
         let mock = MockTranscriber()

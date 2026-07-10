@@ -126,6 +126,13 @@ struct AudioSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Dictation Dictionary") {
+                DictationDictionaryEditor()
+                Text("Replace misheard phrases (e.g. “get hub” → “GitHub”). Built-in tech terms are included. Say “scratch that” to undo the last phrase.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Speaker Verification") {
                 Toggle("Enable speaker verification", isOn: Binding(
                     get: { appState.speakerEnrollment.isEnabled },
@@ -167,6 +174,75 @@ struct AudioSettingsTab: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Dictation Dictionary Editor
+
+struct DictationDictionaryEditor: View {
+    @State private var entries: [(from: String, to: String)] = []
+    @State private var newFrom = ""
+    @State private var newTo = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if entries.isEmpty {
+                Text("No custom phrases yet")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
+                    HStack {
+                        Text(entry.from)
+                            .font(.body.monospaced())
+                        Image(systemName: "arrow.right")
+                            .foregroundStyle(.secondary)
+                        Text(entry.to)
+                            .font(.body.monospaced())
+                        Spacer()
+                        Button(role: .destructive) {
+                            entries.remove(at: index)
+                            persist()
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+
+            HStack {
+                TextField("heard as", text: $newFrom)
+                    .textFieldStyle(.roundedBorder)
+                TextField("replace with", text: $newTo)
+                    .textFieldStyle(.roundedBorder)
+                Button("Add") {
+                    let f = newFrom.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let t = newTo.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !f.isEmpty, !t.isEmpty else { return }
+                    entries.append((from: f, to: t))
+                    newFrom = ""
+                    newTo = ""
+                    persist()
+                }
+                .disabled(newFrom.trimmingCharacters(in: .whitespaces).isEmpty
+                          || newTo.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .onAppear { reload() }
+    }
+
+    private func reload() {
+        let user = DictationDictionary.userEntries()
+        entries = user.keys.sorted().map { ($0, user[$0] ?? "") }
+    }
+
+    private func persist() {
+        var map: [String: String] = [:]
+        for e in entries {
+            map[e.from] = e.to
+        }
+        DictationDictionary.saveUserEntries(map)
     }
 }
 
