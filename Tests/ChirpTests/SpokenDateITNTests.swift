@@ -50,6 +50,13 @@ struct SpokenDateITNTests {
         #expect(SpokenDateITN.apply("march twenty first") == "March 21")
         #expect(SpokenDateITN.apply("may thirty first") == "May 31")
     }
+
+    @Test("weekday capitalization")
+    func weekdays() {
+        #expect(SpokenDateITN.apply("meet on monday") == "meet on Monday")
+        #expect(SpokenDateITN.apply("next friday morning") == "next Friday morning")
+        #expect(SpokenDateITN.apply("sunday") == "Sunday")
+    }
 }
 
 @Suite("TextPostProcessor date ITN")

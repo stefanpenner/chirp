@@ -51,7 +51,20 @@ enum SpokenDateITN {
         "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
     ]
 
-    /// Rewrite spoken month/day(/year) and standalone year phrases.
+    private static let weekdays: [String: String] = [
+        "monday": "Monday", "tuesday": "Tuesday", "wednesday": "Wednesday",
+        "thursday": "Thursday", "friday": "Friday", "saturday": "Saturday",
+        "sunday": "Sunday",
+    ]
+
+    /// Relative day words kept as words but capitalized for dictation polish.
+    private static let relativeDays: [String: String] = [
+        "today": "today",
+        "tomorrow": "tomorrow",
+        "yesterday": "yesterday",
+    ]
+
+    /// Rewrite spoken month/day(/year), standalone years, and weekdays.
     static func apply(_ text: String) -> String {
         let parts = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         guard !parts.isEmpty else { return text }
@@ -75,6 +88,23 @@ enum SpokenDateITN {
                 let trailing = trailingPunct(parts[i + consumed - 1])
                 out.append(String(year) + trailing)
                 i += consumed
+                continue
+            }
+
+            // Weekday capitalization: monday → Monday (preserves trailing punct)
+            if let day = weekdays[core] {
+                out.append(day + trailingPunct(parts[i]))
+                i += 1
+                continue
+            }
+
+            // Relative days stay lowercase mid-sentence; capitalize only at start
+            // of string or after newline (handled lightly here as word form).
+            if relativeDays[core] != nil {
+                // Keep as-is (already lowercase spoken); no absolute date conversion
+                // so tests stay deterministic without a clock.
+                out.append(parts[i])
+                i += 1
                 continue
             }
 

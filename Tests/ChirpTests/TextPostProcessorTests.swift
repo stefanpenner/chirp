@@ -181,6 +181,18 @@ struct TextPostProcessorTests {
         #expect(fullStop == "done." || fullStop == "Done.")
     }
 
+    @Test("Spoken symbols slash asterisk underscore")
+    func spokenSymbols() {
+        #expect(TextPostProcessor.process("docs slash readme") == "docs/readme")
+        #expect(TextPostProcessor.process("path forward slash bin") == "path/bin")
+        #expect(TextPostProcessor.process("star asterisk note").contains("*"))
+        #expect(TextPostProcessor.process("file underscore name").contains("_"))
+        #expect(TextPostProcessor.process("a plus sign b").contains("+"))
+        #expect(TextPostProcessor.process("x equals sign y").contains("="))
+        #expect(TextPostProcessor.process("one half cup").contains("½"))
+        #expect(TextPostProcessor.process("site dot edu") == "site.edu")
+    }
+
     @Test("Light ITN formats spoken times")
     func lightITN() {
         #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")
