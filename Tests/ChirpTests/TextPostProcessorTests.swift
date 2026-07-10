@@ -187,6 +187,23 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("dot company").contains("company"))
     }
 
+    @Test("Spoken URL ITN www and protocol")
+    func spokenURL() {
+        #expect(TextPostProcessor.process("www dot example dot com") == "www.example.com")
+        #expect(TextPostProcessor.process("visit www dot example dot com") == "visit www.example.com")
+        #expect(TextPostProcessor.process("w w w dot example dot org") == "www.example.org")
+        #expect(TextPostProcessor.process("double you double you double you dot example dot net")
+                == "www.example.net")
+        #expect(TextPostProcessor.process("https colon slash slash example dot com")
+                == "https://example.com")
+        #expect(TextPostProcessor.process("http colon slash slash example dot io")
+                == "http://example.io")
+        #expect(TextPostProcessor.process("https colon forward slash forward slash example dot com")
+                == "https://example.com")
+        // Bare www without domain stays www
+        #expect(TextPostProcessor.process("say www please").contains("www"))
+    }
+
     @Test("Spoken email-ish rewrite")
     func spokenEmail() {
         #expect(TextPostProcessor.process("john at example dot com") == "john@example.com")

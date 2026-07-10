@@ -147,6 +147,48 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("highlight all") == .selectAll)
     }
 
+    @Test("recognizes select last sentence / previous sentence")
+    func selectLastSentenceCommands() {
+        #expect(DictationCommand.parse("select last sentence") == .selectLastSentence)
+        #expect(DictationCommand.parse("select previous sentence") == .selectLastSentence)
+        #expect(DictationCommand.parse("select sentence") == .selectLastSentence)
+        #expect(DictationCommand.parse("Select last sentence.") == .selectLastSentence)
+        #expect(DictationCommand.parse("please select previous sentence") == .selectLastSentence)
+    }
+
+    @Test("recognizes select last paragraph / previous paragraph")
+    func selectLastParagraphCommands() {
+        #expect(DictationCommand.parse("select last paragraph") == .selectLastParagraph)
+        #expect(DictationCommand.parse("select previous paragraph") == .selectLastParagraph)
+        #expect(DictationCommand.parse("select paragraph") == .selectLastParagraph)
+        #expect(DictationCommand.parse("Select last paragraph.") == .selectLastParagraph)
+        #expect(DictationCommand.parse("please select previous paragraph") == .selectLastParagraph)
+    }
+
+    @Test("last sentence selection boundaries")
+    func lastSentenceSelection() {
+        #expect(TranscriptSelection.lastSentence("") == "")
+        #expect(TranscriptSelection.lastSentence("Hello world") == "Hello world")
+        #expect(TranscriptSelection.lastSentence("Hello. World") == " World")
+        #expect(TranscriptSelection.lastSentence("A. B. C") == " C")
+        #expect(TranscriptSelection.lastSentence("Wait? Next") == " Next")
+        #expect(TranscriptSelection.lastSentence("Wow! Yes") == " Yes")
+        #expect(TranscriptSelection.lastSentence("Done.") == "Done.")
+        // Trailing buffer content included
+        #expect(TranscriptSelection.lastSentence("Hi. There  ") == " There  ")
+    }
+
+    @Test("last paragraph selection boundaries")
+    func lastParagraphSelection() {
+        #expect(TranscriptSelection.lastParagraph("") == "")
+        #expect(TranscriptSelection.lastParagraph("Hello world") == "Hello world")
+        #expect(TranscriptSelection.lastParagraph("Para one\n\nPara two") == "Para two")
+        #expect(TranscriptSelection.lastParagraph("Line one\nLine two") == "Line two")
+        #expect(TranscriptSelection.lastParagraph("A\n\nB\n\nC") == "C")
+        // Prefer last break; blank trailing paragraph → empty after last \n\n
+        #expect(TranscriptSelection.lastParagraph("Only\n\n") == "")
+    }
+
     @Test("recognizes bold / italic / underline that")
     func formatThatCommands() {
         #expect(DictationCommand.parse("bold that") == .boldThat)
@@ -218,6 +260,8 @@ struct DictationCommandTests {
         let says = DictationCommand.helpCatalog.map(\.say)
         #expect(Set(says).count == says.count)
         #expect(says.contains(where: { $0.lowercased().contains("select that") }))
+        #expect(says.contains(where: { $0.lowercased().contains("sentence") }))
+        #expect(says.contains(where: { $0.lowercased().contains("paragraph") }))
         #expect(says.contains(where: { $0.lowercased().contains("spell that") }))
         #expect(says.contains(where: { $0.lowercased().contains("spell as") }))
         #expect(says.contains(where: { $0.lowercased().contains("backspace") }))

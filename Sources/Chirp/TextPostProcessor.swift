@@ -25,6 +25,9 @@ enum TextPostProcessor {
 
     static func process(_ text: String) -> String {
         var result = text
+        // Pack spoken URL tokens before repetition collapse ("w w w"→"w",
+        // "slash slash"→"slash") can destroy them.
+        result = packSpokenURL(result)
         result = removeFillersAndRepetitions(result)
         result = applyPhraseFixes(result)
         result = applySpokenTerminalPunct(result)
@@ -89,6 +92,9 @@ enum TextPostProcessor {
             // Common email/command confusions
             (#"\bsend (?:a )?mail\b"#, "send email"),
             (#"\bopen (?:the )?app store\b"#, "open the App Store"),
+            // www. before generic "dot com" so "www.example.com" glues.
+            // Protocol (https://) is packed earlier in packSpokenURL.
+            (#"\bwww\s+dot\b\s*"#, "www."),
             // Desktop dictation: spoken punctuation / structure (Mac Voice Control style)
             // Terminal punct (period / full stop / ? / !) is handled in
             // applySpokenTerminalPunct so mid-segment commands work too.
@@ -155,6 +161,27 @@ enum TextPostProcessor {
         ]
         return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
     }()
+
+    /// Spoken URL tokens that must pack before stutter collapse.
+    /// (`"w w w"`→`"w"`, `"slash slash"`→`"slash"` would otherwise destroy them.)
+    private static let spokenURLPackPatterns: [(NSRegularExpression, String)] = {
+        let pairs: [(String, String)] = [
+            (#"\bdouble you double you double you\b"#, "www"),
+            (#"\bw w w\b"#, "www"),
+            (#"\bhttps\s+colon\s+(?:forward\s+)?slash\s+(?:forward\s+)?slash\b\s*"#, "https://"),
+            (#"\bhttp\s+colon\s+(?:forward\s+)?slash\s+(?:forward\s+)?slash\b\s*"#, "http://"),
+        ]
+        return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
+    }()
+
+    private static func packSpokenURL(_ text: String) -> String {
+        var result = text
+        for (pattern, replacement) in spokenURLPackPatterns {
+            let range = NSRange(result.startIndex..., in: result)
+            result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
+        }
+        return result
+    }
 
     /// "john at example dot com" / "john underscore smith at …" → email.
     /// Local may include spoken connectors (dot / underscore / plus).

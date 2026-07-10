@@ -687,8 +687,14 @@ public final class AppState {
                         self.performSelectThat(typesIncrementally: false)
                     case .selectLastWord:
                         self.performSelectLastWord(typesIncrementally: false)
+                    case .selectLastSentence:
+                        self.performSelectLastSentence(typesIncrementally: false)
+                    case .selectLastParagraph:
+                        self.performSelectLastParagraph(typesIncrementally: false)
                     case .selectAll:
                         self.performSelectAll(typesIncrementally: false)
+                    case .unselectThat:
+                        self.performUnselectThat()
                     case .boldThat:
                         self.performFormatThat(.bold, typesIncrementally: false)
                     case .italicThat:
@@ -783,8 +789,14 @@ public final class AppState {
             performSelectThat(typesIncrementally: typesIncrementally)
         case .selectLastWord:
             performSelectLastWord(typesIncrementally: typesIncrementally)
+        case .selectLastSentence:
+            performSelectLastSentence(typesIncrementally: typesIncrementally)
+        case .selectLastParagraph:
+            performSelectLastParagraph(typesIncrementally: typesIncrementally)
         case .selectAll:
             performSelectAll(typesIncrementally: typesIncrementally)
+        case .unselectThat:
+            performUnselectThat()
         case .boldThat:
             performFormatThat(.bold, typesIncrementally: typesIncrementally)
         case .italicThat:
@@ -1091,11 +1103,18 @@ public final class AppState {
 
     /// Select last phrase (when available) then apply bold/italic/underline.
     /// If nothing to select, still format current app selection.
+    /// Always collapses selection after format so next typing does not overwrite.
     private func performFormatThat(_ style: TextFormatStyle, typesIncrementally: Bool) {
         if typesIncrementally, let delta = editStack.lastDelta, !delta.isEmpty {
             textInserter.selectBackward(count: delta.count)
         }
         textInserter.applyFormat(style)
+        textInserter.clearSelection()
+    }
+
+    /// Collapse the current selection (spoken "unselect that"). Buffer unchanged.
+    private func performUnselectThat() {
+        textInserter.clearSelection()
     }
 
     /// Select last phrase, cut (⌘X), drop buffer delta without re-deleting.
@@ -1161,6 +1180,24 @@ public final class AppState {
             }
         }
         let selected = String(transcribedText[start...])
+        if !selected.isEmpty {
+            textInserter.selectBackward(count: selected.count)
+        }
+    }
+
+    /// Select the last sentence. Buffer unchanged.
+    private func performSelectLastSentence(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let selected = TranscriptSelection.lastSentence(transcribedText)
+        if !selected.isEmpty {
+            textInserter.selectBackward(count: selected.count)
+        }
+    }
+
+    /// Select the last paragraph. Buffer unchanged.
+    private func performSelectLastParagraph(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let selected = TranscriptSelection.lastParagraph(transcribedText)
         if !selected.isEmpty {
             textInserter.selectBackward(count: selected.count)
         }

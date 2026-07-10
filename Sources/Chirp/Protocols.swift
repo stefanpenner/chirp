@@ -66,6 +66,8 @@ enum TextFormatStyle: Equatable, Sendable {
     func moveToLineEnd()
     /// Apply rich-text format to the current selection (⌘B / ⌘I / ⌘U).
     func applyFormat(_ style: TextFormatStyle)
+    /// Collapse selection to its end (right-arrow without shift). Spoken "unselect that".
+    func clearSelection()
     /// Cut the current selection to the clipboard (⌘X). Spoken "cut that".
     func cutSelection()
     /// Copy `text` to the system pasteboard (spoken "copy that").
@@ -83,6 +85,7 @@ extension TextInserting {
     func moveToLineStart() {}
     func moveToLineEnd() {}
     func applyFormat(_ style: TextFormatStyle) {}
+    func clearSelection() {}
     func cutSelection() {}
     func copyToClipboard(_ text: String) {}
     func pasteFromClipboard() {}

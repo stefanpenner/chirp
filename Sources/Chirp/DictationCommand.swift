@@ -48,8 +48,14 @@ enum DictationCommand: Equatable, Sendable {
     case selectThat
     /// Select the last whitespace-delimited word.
     case selectLastWord
+    /// Select the last sentence (after [.?!] + whitespace).
+    case selectLastSentence
+    /// Select the last paragraph (after \n\n or \n).
+    case selectLastParagraph
     /// Select all in the focused app (⌘A).
     case selectAll
+    /// Collapse the current selection (right-arrow without shift).
+    case unselectThat
     /// Select last phrase and bold (⌘B).
     case boldThat
     /// Select last phrase and italicize (⌘I).
@@ -198,8 +204,19 @@ enum DictationCommand: Equatable, Sendable {
         case "select last word", "highlight last word",
              "select the last word", "highlight the last word":
             return .selectLastWord
+        case "select last sentence", "select previous sentence",
+             "select sentence", "highlight last sentence",
+             "highlight previous sentence", "highlight sentence":
+            return .selectLastSentence
+        case "select last paragraph", "select previous paragraph",
+             "select paragraph", "highlight last paragraph",
+             "highlight previous paragraph", "highlight paragraph":
+            return .selectLastParagraph
         case "select all", "highlight all", "select everything":
             return .selectAll
+        case "unselect that", "unselect", "deselect that", "clear selection",
+             "deselect":
+            return .unselectThat
         case "bold that", "bold it", "make that bold", "make it bold":
             return .boldThat
         case "italic that", "italicize that", "italics that",
@@ -250,10 +267,13 @@ enum DictationCommand: Equatable, Sendable {
         ("no space that", "Join last word without space"),
         ("select that", "Select last phrase"),
         ("select last word", "Select last word"),
+        ("select last sentence / previous sentence", "Select last sentence"),
+        ("select last paragraph / previous paragraph", "Select last paragraph"),
         ("select all", "Select all (⌘A)"),
-        ("bold that", "Select last phrase + bold (⌘B)"),
-        ("italic that", "Select last phrase + italic (⌘I)"),
-        ("underline that", "Select last phrase + underline (⌘U)"),
+        ("unselect that / deselect", "Collapse selection (caret to end)"),
+        ("bold that", "Select last phrase + bold (⌘B), then unselect"),
+        ("italic that", "Select last phrase + italic (⌘I), then unselect"),
+        ("underline that", "Select last phrase + underline (⌘U), then unselect"),
         ("cut that", "Select last phrase + cut (⌘X)"),
         ("move left / previous word", "Cursor left one word (⌥←)"),
         ("move right / next word", "Cursor right one word (⌥→)"),
@@ -265,5 +285,39 @@ enum DictationCommand: Equatable, Sendable {
         ("number one / next number", "Numbered list item"),
         ("end list / stop numbering", "Reset list counter"),
         ("dot com / at sign", "Domain & email bits"),
+        ("www / https colon slash slash", "Spoken URL bits"),
     ]
+}
+
+// MARK: - Transcript selection bounds (pure)
+
+/// Pure helpers for spoken select-last-sentence / select-last-paragraph.
+/// Return the trailing substring to feed `selectBackward(count:)` via `String.count`.
+enum TranscriptSelection {
+    /// Last sentence: segment after final `[.?!]` + whitespace, else whole buffer.
+    /// Includes the whitespace after the terminator (matches select-last-word style).
+    static func lastSentence(_ text: String) -> String {
+        guard !text.isEmpty else { return "" }
+        let pattern = try! NSRegularExpression(pattern: #"[.?!]\s+"#)
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard let last = matches.last, let matchRange = Range(last.range, in: text) else {
+            return text
+        }
+        // Start at first whitespace after punct so selection includes leading space.
+        let afterPunct = text.index(after: matchRange.lowerBound)
+        return String(text[afterPunct...])
+    }
+
+    /// Last paragraph: segment after final `\n\n` or `\n`, else whole buffer.
+    static func lastParagraph(_ text: String) -> String {
+        guard !text.isEmpty else { return "" }
+        if let r = text.range(of: "\n\n", options: .backwards) {
+            return String(text[r.upperBound...])
+        }
+        if let r = text.range(of: "\n", options: .backwards) {
+            return String(text[r.upperBound...])
+        }
+        return text
+    }
 }

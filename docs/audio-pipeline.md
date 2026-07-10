@@ -89,6 +89,9 @@ phones (`five five five one two one two`→`555-1212`; 10-digit `XXX-XXX-XXXX`;
 `john at mail dot google dot com`→`john@mail.google.com` (requires `dot`; bare
 `meet at noon` stays); local connectors `underscore`/`dot`/`plus`→`_`/`.`/`+`
 (`john underscore smith at example dot com`→`john_smith@example.com`).
+Spoken URLs: `www dot example dot com`→`www.example.com`,
+`w w w` / `double you double you double you`→`www`,
+`https colon slash slash`→`https://` (and `http` / `forward slash` variants).
 Spoken symbols: `slash`→`/`, `asterisk`→`*`,
 `underscore`→`_`, fractions `one half`→`½`. Lists: `bullet point` /
 `next bullet` → `•`; `number one` / `next number` → `1.` / `2.`;
@@ -118,10 +121,13 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **no space that** — join last word without leading space
 - **select that** / **highlight that** — select last phrase (shift+left)
 - **select last word** — select trailing word only
+- **select last sentence** / **select previous sentence** / **select sentence** — select trailing sentence
+- **select last paragraph** / **select previous paragraph** / **select paragraph** — select trailing paragraph
 - **select all** — select all (⌘A)
-- **bold that** / **make that bold** — select last phrase + bold (⌘B)
-- **italic that** / **italicize that** — select last phrase + italic (⌘I)
-- **underline that** — select last phrase + underline (⌘U)
+- **unselect that** / **deselect** / **clear selection** — collapse selection to end (→)
+- **bold that** / **make that bold** — select last phrase + bold (⌘B), then unselect
+- **italic that** / **italicize that** — select last phrase + italic (⌘I), then unselect
+- **underline that** — select last phrase + underline (⌘U), then unselect
 - **cut that** / **cut it** — select last phrase + cut (⌘X); drop buffer delta
 - **move left** / **previous word** — cursor left one word (⌥←)
 - **move right** / **next word** — cursor right one word (⌥→)

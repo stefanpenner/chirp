@@ -193,6 +193,20 @@ final class TextInserter: TextInserting {
         postCommandKey(key)
     }
 
+    /// Collapse selection to its end via right-arrow (0x7C) without shift.
+    /// Standard macOS text behavior: unshifted right-arrow leaves the caret
+    /// at the trailing edge of the former selection.
+    func clearSelection() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let rightArrow: CGKeyCode = 0x7C // kVK_RightArrow
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: rightArrow, keyDown: true) {
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        }
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: rightArrow, keyDown: false) {
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+
     /// Cut selection via ⌘X (0x07 / kVK_ANSI_X).
     func cutSelection() {
         postCommandKey(0x07) // kVK_ANSI_X

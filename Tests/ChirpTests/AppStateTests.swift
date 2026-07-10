@@ -902,6 +902,72 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select last word"))
     }
 
+    @Test("select last sentence selects trailing sentence only")
+    func selectLastSentenceCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello. World now"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World now" { break }
+        }
+
+        await mock.setFeedAudioResult(["select last sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello. World now")
+        #expect(inserter.selectBackwardCounts.last == " World now".count)
+        #expect(!inserter.typedTexts.contains("select last sentence"))
+    }
+
+    @Test("select last paragraph selects trailing paragraph only")
+    func selectLastParagraphCommand() async throws {
+        let mock = MockTranscriber()
+        // Pipeline types "new paragraph" as \n\n between segments when spoken;
+        // seed buffer with explicit paragraphs via one segment.
+        await mock.setFeedAudioResult(["Para one\n\nPara two"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("Para two") { break }
+        }
+
+        await mock.setFeedAudioResult(["select last paragraph"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+
+        #expect(state.transcribedText.hasSuffix("Para two") || state.transcribedText.contains("Para two"))
+        #expect(inserter.selectBackwardCounts.last == "Para two".count)
+        #expect(!inserter.typedTexts.contains("select last paragraph"))
+    }
+
     @Test("select all posts selectAll without changing buffer")
     func selectAllCommand() async throws {
         let mock = MockTranscriber()

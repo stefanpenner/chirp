@@ -203,6 +203,10 @@ final class MockTextInserter: TextInserting {
         appliedFormats.append(style)
     }
 
+    func clearSelection() {
+        // Format collapse / unselect that — no buffer side effects in tests.
+    }
+
     func cutSelection() {
         cutCallCount += 1
     }
