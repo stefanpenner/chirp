@@ -48,6 +48,45 @@ enum SpellTransform {
         return pack(rest)
     }
 
+    /// Pack consecutive single English-letter tokens into an uppercase acronym.
+    /// `"a p i"` → `"API"`, `"call the a p i please"` → `"call the API please"`.
+    /// Min run length 2. Does not pack bare `"I"`/`"a"`, multi-letter words, or NATO.
+    /// Trailing punct on the last letter is kept: `"a p i."` → `"API."`.
+    /// Preserves newlines and other non-token text (no full re-join).
+    static func packAcronyms(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+        // Runs of ≥2 single letters separated by spaces/tabs only (not newlines).
+        // Optional trailing sentence punct on the last letter is kept on the acronym.
+        let pattern = try! NSRegularExpression(
+            pattern: #"(?<![A-Za-z])([A-Za-z][.!?,]*)(?:[ \t]+[A-Za-z][.!?,]*)+(?![A-Za-z])"#
+        )
+        let full = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: full)
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            guard let range = Range(match.range, in: result) else { continue }
+            let run = String(result[range])
+            let parts = run.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            var letters: [Character] = []
+            var trailing = ""
+            for (idx, part) in parts.enumerated() {
+                guard let p = singleLetterParts(String(part)) else {
+                    letters = []
+                    break
+                }
+                letters.append(p.letter)
+                if idx == parts.count - 1 {
+                    trailing = p.trailing
+                }
+            }
+            guard letters.count >= 2 else { continue }
+            result.replaceSubrange(range, with: String(letters).uppercased() + trailing)
+        }
+        return result
+    }
+
     private static let oneShotPattern: NSRegularExpression = {
         try! NSRegularExpression(pattern: #"^spell as\s+(.+)$"#, options: .caseInsensitive)
     }()
@@ -78,6 +117,16 @@ enum SpellTransform {
                     i += 2
                     continue
                 }
+                // After packAcronyms: "capital JOHN" → "John"
+                if isPureUpperLetterRun(raw[i + 1]) {
+                    let run = raw[i + 1]
+                    pieces.append(.atom(String(run.first!)))
+                    for ch in run.dropFirst() {
+                        pieces.append(.atom(String(ch).lowercased()))
+                    }
+                    i += 2
+                    continue
+                }
             }
 
             // "space bar"
@@ -99,6 +148,15 @@ enum SpellTransform {
                 continue
             }
 
+            // Already acronym-packed ("AB"/"API") → re-split for sticky spell / one-shot
+            if isPureUpperLetterRun(raw[i]) {
+                for ch in raw[i] {
+                    pieces.append(.atom(String(ch).lowercased()))
+                }
+                i += 1
+                continue
+            }
+
             if let d = digitValue(t) {
                 pieces.append(.atom(d))
                 i += 1
@@ -116,6 +174,25 @@ enum SpellTransform {
         }
 
         return joinPieces(pieces)
+    }
+
+    /// Single ASCII letter optionally followed by trailing sentence punct.
+    private static func singleLetterParts(_ token: String) -> (letter: Character, trailing: String)? {
+        guard !token.isEmpty else { return nil }
+        var core = token
+        var trailing = ""
+        while let last = core.last, ".!?,".contains(last) {
+            trailing = String(last) + trailing
+            core.removeLast()
+        }
+        guard core.count == 1, let c = core.first, c.isLetter, c.isASCII else { return nil }
+        return (c, trailing)
+    }
+
+    /// Pure uppercase letter run (length ≥ 2) produced by `packAcronyms`.
+    private static func isPureUpperLetterRun(_ token: String) -> Bool {
+        guard token.count >= 2 else { return false }
+        return token.allSatisfy { $0.isASCII && $0.isLetter && $0.isUppercase }
     }
 
     private static func joinPieces(_ pieces: [Piece]) -> String {

@@ -43,6 +43,20 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("press tab") == .pressTab)
     }
 
+    @Test("recognizes press space variants")
+    func pressSpace() {
+        #expect(DictationCommand.parse("press space") == .pressSpace)
+        #expect(DictationCommand.parse("hit space") == .pressSpace)
+        #expect(DictationCommand.parse("press space bar") == .pressSpace)
+        #expect(DictationCommand.parse("hit space bar") == .pressSpace)
+        #expect(DictationCommand.parse("press spacebar") == .pressSpace)
+        #expect(DictationCommand.parse("space key") == .pressSpace)
+        #expect(DictationCommand.parse("Press Space.") == .pressSpace)
+        #expect(DictationCommand.parse("please press space") == .pressSpace)
+        // Content mid-sentence is not a whole-utterance command
+        #expect(DictationCommand.parse("hit the space bar hard") == .none)
+    }
+
     @Test("recognizes press backspace without stealing delete that")
     func pressBackspace() {
         #expect(DictationCommand.parse("press backspace") == .pressBackspace)
@@ -246,6 +260,37 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("please go to end") == .moveToEnd)
     }
 
+    @Test("recognizes duplicate that")
+    func duplicateThatCommands() {
+        #expect(DictationCommand.parse("duplicate that") == .duplicateThat)
+        #expect(DictationCommand.parse("Duplicate that.") == .duplicateThat)
+        #expect(DictationCommand.parse("duplicate it") == .duplicateThat)
+        #expect(DictationCommand.parse("dupe that") == .duplicateThat)
+        #expect(DictationCommand.parse("copy paste that") == .duplicateThat)
+        #expect(DictationCommand.parse("please duplicate that") == .duplicateThat)
+    }
+
+    @Test("recognizes go to previous / next sentence (not select)")
+    func moveSentenceCommands() {
+        #expect(DictationCommand.parse("go to previous sentence") == .moveToPreviousSentence)
+        #expect(DictationCommand.parse("previous sentence") == .moveToPreviousSentence)
+        #expect(DictationCommand.parse("move to previous sentence") == .moveToPreviousSentence)
+        #expect(DictationCommand.parse("back a sentence") == .moveToPreviousSentence)
+        #expect(DictationCommand.parse("Previous sentence.") == .moveToPreviousSentence)
+        #expect(DictationCommand.parse("please go to previous sentence") == .moveToPreviousSentence)
+
+        #expect(DictationCommand.parse("go to next sentence") == .moveToNextSentence)
+        #expect(DictationCommand.parse("next sentence") == .moveToNextSentence)
+        #expect(DictationCommand.parse("move to next sentence") == .moveToNextSentence)
+        #expect(DictationCommand.parse("forward a sentence") == .moveToNextSentence)
+        #expect(DictationCommand.parse("please next sentence") == .moveToNextSentence)
+
+        // Select phrases must not be stolen by move
+        #expect(DictationCommand.parse("select previous sentence") == .selectLastSentence)
+        #expect(DictationCommand.parse("select last sentence") == .selectLastSentence)
+        #expect(DictationCommand.parse("highlight previous sentence") == .selectLastSentence)
+    }
+
     @Test("normal text is not a command")
     func normalText() {
         #expect(DictationCommand.parse("hello world") == .none)
@@ -271,6 +316,9 @@ struct DictationCommandTests {
         #expect(says.contains(where: { $0.lowercased().contains("italic") }))
         #expect(says.contains(where: { $0.lowercased().contains("underline") }))
         #expect(says.contains(where: { $0.lowercased().contains("cut that") }))
+        #expect(says.contains(where: { $0.lowercased().contains("duplicate") }))
+        #expect(says.contains(where: { $0.lowercased().contains("previous sentence") }))
+        #expect(says.contains(where: { $0.lowercased().contains("next sentence") }))
     }
 
     @Test("spell as is content not a sticky command")

@@ -642,12 +642,16 @@ public final class AppState {
                         self.performKeyInsert("\n", typesIncrementally: false)
                     case .pressTab:
                         self.performKeyInsert("\t", typesIncrementally: false)
+                    case .pressSpace:
+                        self.performKeyInsert(" ", typesIncrementally: false)
                     case .pressBackspace:
                         self.performPressBackspace()
                     case .copyThat:
                         self.performCopyThat()
                     case .pasteThat:
                         self.performPasteThat(typesIncrementally: false)
+                    case .duplicateThat:
+                        self.performDuplicateThat(typesIncrementally: false)
                     case .redoThat:
                         self.performRedoThat(typesIncrementally: false)
                     case .setCapsMode(let mode):
@@ -711,6 +715,10 @@ public final class AppState {
                         self.performMoveToLineStart()
                     case .moveToEnd:
                         self.performMoveToLineEnd()
+                    case .moveToPreviousSentence:
+                        self.performMoveToPreviousSentence()
+                    case .moveToNextSentence:
+                        self.performMoveToNextSentence()
                     case .none:
                         // One-shot type: replace buffer + stack so scratch undoes the
                         // whole batch (mid-session segments were not typed/pushed).
@@ -759,12 +767,16 @@ public final class AppState {
             performKeyInsert("\n", typesIncrementally: typesIncrementally)
         case .pressTab:
             performKeyInsert("\t", typesIncrementally: typesIncrementally)
+        case .pressSpace:
+            performKeyInsert(" ", typesIncrementally: typesIncrementally)
         case .pressBackspace:
             performPressBackspace()
         case .copyThat:
             performCopyThat()
         case .pasteThat:
             performPasteThat(typesIncrementally: typesIncrementally)
+        case .duplicateThat:
+            performDuplicateThat(typesIncrementally: typesIncrementally)
         case .redoThat:
             performRedoThat(typesIncrementally: typesIncrementally)
         case .setCapsMode(let mode):
@@ -813,6 +825,10 @@ public final class AppState {
             performMoveToLineStart()
         case .moveToEnd:
             performMoveToLineEnd()
+        case .moveToPreviousSentence:
+            performMoveToPreviousSentence()
+        case .moveToNextSentence:
+            performMoveToNextSentence()
         case .none:
             // Multi-step replace: undo last phrase, then insert replacement.
             if ReplaceDecision.shouldUndoBeforeCommit(awaitingReplace: awaitingReplace) {
@@ -1008,6 +1024,25 @@ public final class AppState {
             editStack.push(clip)
             lastCommittedNormalized = ""
         }
+    }
+
+    /// Duplicate last phrase (prefer EditStack top), else whole session buffer.
+    /// Copies to clipboard, appends to buffer + stack; types only when incremental.
+    private func performDuplicateThat(typesIncrementally: Bool) {
+        let text: String
+        if let delta = editStack.lastDelta, !delta.isEmpty {
+            text = delta
+        } else {
+            guard !transcribedText.isEmpty else { return }
+            text = transcribedText
+        }
+        textInserter.copyToClipboard(text)
+        transcribedText += text
+        editStack.push(text)
+        if typesIncrementally {
+            textInserter.typeText(text)
+        }
+        lastCommittedNormalized = ""
     }
 
     /// Undo the last typed segment (multi-level; Dragon-style "scratch that").
@@ -1222,6 +1257,20 @@ public final class AppState {
 
     /// Move cursor to line end (⌘→). Buffer unchanged.
     private func performMoveToLineEnd() {
+        textInserter.moveToLineEnd()
+    }
+
+    /// Move cursor to start of last sentence (plain ← × n). Assumes caret at end.
+    private func performMoveToPreviousSentence() {
+        let selected = TranscriptSelection.lastSentence(transcribedText)
+        guard !selected.isEmpty else { return }
+        textInserter.moveBackward(count: selected.count)
+    }
+
+    /// Best-effort "next sentence" without caret tracking: land at line end (⌘→).
+    /// Hold-to-talk usually leaves the caret at end; after previous sentence this
+    /// advances past the current line / last sentence.
+    private func performMoveToNextSentence() {
         textInserter.moveToLineEnd()
     }
 

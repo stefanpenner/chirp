@@ -29,6 +29,9 @@ enum TextPostProcessor {
         // "slash slash"→"slash") can destroy them.
         result = packSpokenURL(result)
         result = removeFillersAndRepetitions(result)
+        // Spoken single-letter runs → acronyms ("a p i" → "API") before phrase
+        // fixes / ITN. Sticky spell + "spell as" re-split pure uppercase runs.
+        result = SpellTransform.packAcronyms(result)
         result = applyPhraseFixes(result)
         result = applySpokenTerminalPunct(result)
         if FormatSettings.expandNumberedLists {

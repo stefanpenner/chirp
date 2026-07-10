@@ -115,6 +115,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **spell that** / **spell it** / **spell last** — select last phrase + enter spell mode (does not delete)
 - **spell as a b c** — one-shot pack (`SpellTransform.oneShot`); does not enable sticky spell mode
   (e.g. `spell as capital j o h n` → `John`)
+- Spoken single-letter runs pack to uppercase acronyms without sticky spell (`a p i` → `API` via `SpellTransform.packAcronyms`)
 - **cap that / all caps that / no caps that** — transform last word
 - **title case that** — title-case last phrase (stack delta)
 - **sentence case that** — sentence-case last phrase
@@ -133,12 +134,15 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **move right** / **next word** — cursor right one word (⌥→)
 - **go to start** / **beginning of line** — cursor to line start (⌘←)
 - **go to end** / **end of line** — cursor to line end (⌘→)
+- **previous sentence** / **go to previous sentence** / **back a sentence** — cursor to start of last sentence (plain ← × n; assumes caret at end)
+- **next sentence** / **go to next sentence** / **forward a sentence** — best-effort without caret tracking: line end (⌘→). Does **not** steal **select previous sentence**
 - Overlay badge shows sticky caps / spell mode when active
 - When spell mode is on, caps transform is skipped and multi-segment joins glue without spaces
 - **clear all** — wipe session transcript
-- **press enter** / **press tab** — key inserts
+- **press enter** / **press tab** / **press space** — key inserts
 - **press backspace** / **delete key** — Backspace once (keyboard only; buffer unchanged)
 - **copy that** / **paste that** — clipboard
+- **duplicate that** / **dupe that** / **copy paste that** — copy last phrase (or whole buffer) and append again
 First segment auto-capitalizes. Consecutive duplicate segments skipped.
 When sherpa provides token log-probs, `ConfidenceGate` rejects extreme
 low-confidence dumps with length-aware thresholds (short hyps stricter;

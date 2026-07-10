@@ -69,6 +69,19 @@ struct TextInserterTests {
         #expect(inserter.moveToLineEndCalled)
     }
 
+    @Test("moveBackward / moveForward record positive counts; zero is no-op")
+    func moveByCount() {
+        let inserter = MockTextInserter()
+        inserter.moveBackward(count: 0)
+        inserter.moveForward(count: 0)
+        #expect(inserter.moveBackwardCounts.isEmpty)
+        #expect(inserter.moveForwardCounts.isEmpty)
+        inserter.moveBackward(count: 4)
+        inserter.moveForward(count: 2)
+        #expect(inserter.moveBackwardCounts == [4])
+        #expect(inserter.moveForwardCounts == [2])
+    }
+
     @Test("applyFormat records bold / italic / underline")
     func applyFormat() {
         let inserter = MockTextInserter()

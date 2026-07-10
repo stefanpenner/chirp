@@ -76,4 +76,56 @@ struct SpellModeTests {
         ].joined(separator: " ")
         #expect(SpellTransform.apply(spoken, mode: .on) == "abcdefghijklmnopqrstuvwxyz")
     }
+
+    @Test("one-shot spell as packs letters")
+    func oneShotPacksLetters() {
+        #expect(SpellTransform.oneShot("spell as a b c") == "abc")
+        #expect(SpellTransform.oneShot("Spell as A B C") == "abc")
+    }
+
+    @Test("one-shot spell as capital john")
+    func oneShotCapitalJohn() {
+        #expect(SpellTransform.oneShot("spell as capital j o h n") == "John")
+    }
+
+    @Test("one-shot nil when not spell as")
+    func oneShotNonMatch() {
+        #expect(SpellTransform.oneShot("a b c") == nil)
+        #expect(SpellTransform.oneShot("spell mode on") == nil)
+        #expect(SpellTransform.oneShot("") == nil)
+        #expect(SpellTransform.oneShot("spell as") == nil)
+        #expect(SpellTransform.oneShot("spell as   ") == nil)
+    }
+
+    @Test("packAcronyms joins single-letter runs uppercase")
+    func packAcronymsBasic() {
+        #expect(SpellTransform.packAcronyms("a p i") == "API")
+        #expect(SpellTransform.packAcronyms("u r l") == "URL")
+        #expect(SpellTransform.packAcronyms("i d") == "ID")
+        #expect(SpellTransform.packAcronyms("A P I") == "API")
+    }
+
+    @Test("packAcronyms preserves surrounding words and trailing punct")
+    func packAcronymsContext() {
+        #expect(SpellTransform.packAcronyms("call the a p i please") == "call the API please")
+        #expect(SpellTransform.packAcronyms("open the u r l now") == "open the URL now")
+        #expect(SpellTransform.packAcronyms("a p i.") == "API.")
+        #expect(SpellTransform.packAcronyms("use the a p i.") == "use the API.")
+    }
+
+    @Test("packAcronyms leaves bare I/a, multi-letter, and NATO alone")
+    func packAcronymsNoFalsePack() {
+        #expect(SpellTransform.packAcronyms("I am fine") == "I am fine")
+        #expect(SpellTransform.packAcronyms("a") == "a")
+        #expect(SpellTransform.packAcronyms("I") == "I")
+        #expect(SpellTransform.packAcronyms("alpha bravo") == "alpha bravo")
+        #expect(SpellTransform.packAcronyms("hello world") == "hello world")
+        #expect(SpellTransform.packAcronyms("") == "")
+    }
+
+    @Test("packAcronyms preserves newlines between paragraphs")
+    func packAcronymsPreservesNewlines() {
+        #expect(SpellTransform.packAcronyms("Para one\n\nPara two") == "Para one\n\nPara two")
+        #expect(SpellTransform.packAcronyms("use a p i\nnext line") == "use API\nnext line")
+    }
 }

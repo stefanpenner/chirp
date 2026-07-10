@@ -64,6 +64,10 @@ enum TextFormatStyle: Equatable, Sendable {
     func moveToLineStart()
     /// Move cursor to line end (⌘+right). Spoken "go to end".
     func moveToLineEnd()
+    /// Move cursor left `count` times (plain left arrow, no modifiers).
+    func moveBackward(count: Int)
+    /// Move cursor right `count` times (plain right arrow, no modifiers).
+    func moveForward(count: Int)
     /// Apply rich-text format to the current selection (⌘B / ⌘I / ⌘U).
     func applyFormat(_ style: TextFormatStyle)
     /// Collapse selection to its end (right-arrow without shift). Spoken "unselect that".
@@ -84,6 +88,8 @@ extension TextInserting {
     func moveWord(direction: MoveDirection) {}
     func moveToLineStart() {}
     func moveToLineEnd() {}
+    func moveBackward(count: Int) {}
+    func moveForward(count: Int) {}
     func applyFormat(_ style: TextFormatStyle) {}
     func clearSelection() {}
     func cutSelection() {}

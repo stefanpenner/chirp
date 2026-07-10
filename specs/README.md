@@ -28,6 +28,7 @@ tlc specs/PipelineRebuild.tla
 | `DecodeReject` | energy/silence + log-prob composite reject (Parakeet nil scores) | `DecodeReject` |
 | `ClipboardCommands` | copy that / paste that vs session buffer | `DictationCommand` |
 | `FormatCommands` | format path collapses selection so next type does not replace | `AppState.performFormatThat` + clearSelection |
+| `TranscriptSelection` | last-sentence / last-paragraph lengths ≤ total buffer | `TranscriptSelection` + select last sentence/para |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |
 
@@ -48,6 +49,7 @@ tlc specs/DecodeReject.tla
 tlc specs/EditCommands.tla
 tlc specs/EditStack.tla
 tlc specs/FormatCommands.tla
+tlc specs/TranscriptSelection.tla
 tlc specs/ListCounter.tla
 tlc specs/PeekCommit.tla
 tlc specs/PipelineRebuild.tla
@@ -68,6 +70,7 @@ tlc -c DecodeReject_bait.cfg specs/DecodeReject.tla
 tlc -c EditCommands_bait.cfg specs/EditCommands.tla
 tlc -c EditStack_bait.cfg specs/EditStack.tla
 tlc -c FormatCommands_bait.cfg specs/FormatCommands.tla
+tlc -c TranscriptSelection_bait.cfg specs/TranscriptSelection.tla
 tlc -c ListCounter_bait.cfg specs/ListCounter.tla
 tlc -c PeekCommit_bait.cfg specs/PeekCommit.tla
 tlc -c PipelineRebuild_bait.cfg specs/PipelineRebuild.tla
@@ -90,6 +93,7 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | `EditCommands_bait` | lastTyped may exceed textLen | `LastTypedWithinText` |
 | `EditStack_bait` | typed length may diverge from text | `TypedMatchesText` |
 | `FormatCommands_bait` | format may leave selection active | `FormatImpliesCollapsed` |
+| `TranscriptSelection_bait` | last segment may exceed total | `LastWithinTotal` |
 | `ListCounter_bait` | end/reset may leave n ≠ 1 | `EndOrResetYieldsOne` |
 | `PeekCommit_bait` | speculative text may appear while idle | `SpecOnlyWhileRecording` |
 | `PipelineRebuild_bait` | type bounds may fail | `TypeOK` |

@@ -18,12 +18,16 @@ enum DictationCommand: Equatable, Sendable {
     case pressEnter
     /// Insert a tab.
     case pressTab
+    /// Insert a space character.
+    case pressSpace
     /// Press Backspace / Delete once. Keyboard-only; buffer unchanged.
     case pressBackspace
     /// Copy session transcript to the clipboard.
     case copyThat
     /// Paste from the clipboard into the focused app.
     case pasteThat
+    /// Duplicate last phrase (or whole buffer): copy + append again.
+    case duplicateThat
     /// Redo the last scratched segment.
     case redoThat
     /// Set sticky capitalization mode for following commits.
@@ -72,6 +76,10 @@ enum DictationCommand: Equatable, Sendable {
     case moveToStart
     /// Move cursor to line end (⌘→). Buffer unchanged.
     case moveToEnd
+    /// Move cursor to start of last sentence (plain ← × n). Buffer unchanged.
+    case moveToPreviousSentence
+    /// Move cursor toward next sentence. Without caret tracking, lands at line end (⌘→).
+    case moveToNextSentence
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -150,6 +158,11 @@ enum DictationCommand: Equatable, Sendable {
             return .pressEnter
         case "press tab", "hit tab", "press tab key", "press the tab key":
             return .pressTab
+        // Explicit press/hit only — bare "space bar" is content ITN → " ".
+        case "press space", "hit space", "press space bar", "hit space bar",
+             "press spacebar", "hit spacebar", "space key", "press space key",
+             "hit space key":
+            return .pressSpace
         // Keyboard backspace only — do not match "delete that" / "delete it"
         // (those remain scratchThat) or "delete last" (deleteLastWord).
         case "press backspace", "hit backspace", "backspace",
@@ -159,6 +172,8 @@ enum DictationCommand: Equatable, Sendable {
             return .copyThat
         case "paste that", "paste it", "paste this", "paste here":
             return .pasteThat
+        case "duplicate that", "duplicate it", "dupe that", "copy paste that":
+            return .duplicateThat
         case "redo that", "redo it", "restore that", "undo undo",
              "redo last", "put it back":
             return .redoThat
@@ -236,6 +251,13 @@ enum DictationCommand: Equatable, Sendable {
             return .moveToStart
         case "go to end", "end of line":
             return .moveToEnd
+        // Navigation — do not match "select previous sentence" (selectLastSentence).
+        case "go to previous sentence", "previous sentence",
+             "move to previous sentence", "back a sentence":
+            return .moveToPreviousSentence
+        case "go to next sentence", "next sentence",
+             "move to next sentence", "forward a sentence":
+            return .moveToNextSentence
         default:
             return nil
         }
@@ -252,9 +274,11 @@ enum DictationCommand: Equatable, Sendable {
         ("clear all", "Wipe session text"),
         ("press enter", "Insert Return"),
         ("press tab", "Insert Tab"),
+        ("press space / hit space", "Insert Space"),
         ("press backspace / delete key", "Press Backspace once (keyboard only)"),
         ("copy that", "Copy session to clipboard"),
         ("paste that", "Paste clipboard (⌘V)"),
+        ("duplicate that / dupe that", "Copy last phrase and paste again"),
         ("caps on / all caps on / no caps on", "Sticky capitalization mode"),
         ("caps off", "Back to normal casing"),
         ("spell mode / start spelling", "Sticky spell mode (letter packing)"),
@@ -279,6 +303,8 @@ enum DictationCommand: Equatable, Sendable {
         ("move right / next word", "Cursor right one word (⌥→)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),
         ("go to end / end of line", "Cursor to line end (⌘→)"),
+        ("previous sentence / go to previous sentence", "Cursor to start of last sentence (← × n)"),
+        ("next sentence / go to next sentence", "Cursor to line end (no caret track; best-effort)"),
         ("period / comma / …", "Spoken punctuation"),
         ("new line / new paragraph", "Line breaks"),
         ("bullet point / next bullet", "Bulleted list item"),

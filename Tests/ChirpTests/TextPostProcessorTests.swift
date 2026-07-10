@@ -48,6 +48,15 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("when i go i'll be fine") == "when I go I'll be fine")
     }
 
+    @Test("Packs spoken single-letter acronyms")
+    func packSpokenAcronyms() {
+        #expect(TextPostProcessor.process("a p i") == "API")
+        #expect(TextPostProcessor.process("open the u r l now") == "open the URL now")
+        #expect(TextPostProcessor.process("I am fine") == "I am fine")
+        #expect(TextPostProcessor.process("call the a p i please") == "call the API please")
+        #expect(TextPostProcessor.process("a p i.") == "API.")
+    }
+
     @Test("Does not capitalize i inside words")
     func noCapitalizeInWords() {
         #expect(TextPostProcessor.process("inside this") == "inside this")

@@ -142,8 +142,11 @@ final class MockTextInserter: TextInserting {
     var moveWordDirections: [MoveDirection] = []
     var moveToLineStartCalled = false
     var moveToLineEndCalled = false
+    var moveBackwardCounts: [Int] = []
+    var moveForwardCounts: [Int] = []
     var appliedFormats: [TextFormatStyle] = []
     var cutCallCount = 0
+    var clearSelectionCallCount = 0
     var clipboard: String = ""
     var pasteCallCount = 0
     var copyCallCount = 0
@@ -199,12 +202,23 @@ final class MockTextInserter: TextInserting {
         moveToLineEndCalled = true
     }
 
+    func moveBackward(count: Int) {
+        guard count > 0 else { return }
+        moveBackwardCounts.append(count)
+    }
+
+    func moveForward(count: Int) {
+        guard count > 0 else { return }
+        moveForwardCounts.append(count)
+    }
+
     func applyFormat(_ style: TextFormatStyle) {
         appliedFormats.append(style)
     }
 
     func clearSelection() {
         // Format collapse / unselect that — no buffer side effects in tests.
+        clearSelectionCallCount += 1
     }
 
     func cutSelection() {
