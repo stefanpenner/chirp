@@ -133,6 +133,10 @@ public final class AppState {
     /// Observable for overlay badge when non-normal.
     private(set) var capsMode: CapsMode = .normal
 
+    /// Multi-step "replace that": next content undoes last phrase then inserts.
+    /// Observable for overlay badge. Dual of specs/ReplaceThat.tla.
+    private(set) var awaitingReplace = false
+
     /// Normalized form of the last committed non-command segment (dedup echoes).
     private var lastCommittedNormalized = ""
 
@@ -530,6 +534,7 @@ public final class AppState {
         commitGen = 0
         editStack.clear()
         capsMode = .normal
+        awaitingReplace = false
         lastCommittedNormalized = ""
         recordingSession &+= 1
         let session = recordingSession
@@ -618,10 +623,15 @@ public final class AppState {
                     // Commands still mutate buffer/stack; do not force incremental typing.
                     switch DictationCommand.parse(remaining) {
                     case .scratchThat:
+                        self.awaitingReplace = false
                         self.performScratchThat(typesIncrementally: false)
+                    case .replaceThat:
+                        self.performArmReplace()
                     case .deleteLastWord:
+                        self.awaitingReplace = false
                         self.performDeleteLastWord(typesIncrementally: false)
                     case .clearAll:
+                        self.awaitingReplace = false
                         self.performClearAll(typesIncrementally: false)
                     case .pressEnter:
                         self.performKeyInsert("\n", typesIncrementally: false)
@@ -665,6 +675,7 @@ public final class AppState {
                     case .none:
                         // One-shot type: replace buffer + stack so scratch undoes the
                         // whole batch (mid-session segments were not typed/pushed).
+                        self.awaitingReplace = false
                         let text = CapsTransform.apply(remaining, mode: self.capsMode)
                         self.editStack.clear()
                         self.transcribedText = text
@@ -695,10 +706,15 @@ public final class AppState {
     private func applyCommittedText(_ text: String, typesIncrementally: Bool) {
         switch DictationCommand.parse(text) {
         case .scratchThat:
+            awaitingReplace = false
             performScratchThat(typesIncrementally: typesIncrementally)
+        case .replaceThat:
+            performArmReplace()
         case .deleteLastWord:
+            awaitingReplace = false
             performDeleteLastWord(typesIncrementally: typesIncrementally)
         case .clearAll:
+            awaitingReplace = false
             performClearAll(typesIncrementally: typesIncrementally)
         case .pressEnter:
             performKeyInsert("\n", typesIncrementally: typesIncrementally)
@@ -725,6 +741,11 @@ public final class AppState {
         case .noSpaceThat:
             performNoSpaceThat(typesIncrementally: typesIncrementally)
         case .none:
+            // Multi-step replace: undo last phrase, then insert replacement.
+            if ReplaceDecision.shouldUndoBeforeCommit(awaitingReplace: awaitingReplace) {
+                awaitingReplace = false
+                performScratchThat(typesIncrementally: typesIncrementally)
+            }
             // Skip consecutive identical segments (VAD/ASR echo under noise)
             let shaped = CapsTransform.apply(text, mode: capsMode)
             let norm = TranscriptNormalize.key(shaped)
@@ -740,6 +761,12 @@ public final class AppState {
             editStack.push(joined.delta)
             lastCommittedNormalized = norm
         }
+    }
+
+    /// Arm multi-step replace; text stays until the next content phrase arrives.
+    private func performArmReplace() {
+        guard ReplaceDecision.canArm(hasLastPhrase: editStack.canUndo) else { return }
+        awaitingReplace = true
     }
 
     /// One-shot transform of the last typed phrase (EditStack top delta).

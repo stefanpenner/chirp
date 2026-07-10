@@ -8,6 +8,8 @@ enum DictationCommand: Equatable, Sendable {
     case none
     /// Undo the most recently typed segment (and its join separator).
     case scratchThat
+    /// Arm multi-step replace: next content undoes last phrase then inserts.
+    case replaceThat
     /// Delete the last whitespace-delimited word.
     case deleteLastWord
     /// Clear the entire session transcript and typed text.
@@ -92,10 +94,13 @@ enum DictationCommand: Equatable, Sendable {
              "scrap that", // common mis-hear of "scratch"
              "scratch hat", // ASR near-miss
              "go back", "go back that",
-             // SOTA correction synonyms (Microsoft / Dragon / DictaFlow-style)
-             "correct that", "fix that", "replace that",
-             "correct it", "fix it", "replace it":
+             // Immediate undo synonyms
+             "correct that", "fix that",
+             "correct it", "fix it":
             return .scratchThat
+        case "replace that", "replace it", "replace last",
+             "swap that", "change that":
+            return .replaceThat
         case "delete last word", "scratch last word", "scratch word",
              "delete word", "undo word",
              "delete the last word", "scratch the last word",
@@ -153,7 +158,8 @@ enum DictationCommand: Equatable, Sendable {
 
     /// User-facing command catalog for Settings / help (say → effect).
     static let helpCatalog: [(say: String, effect: String)] = [
-        ("scratch that / correct that / replace that", "Undo last phrase (multi-level)"),
+        ("scratch that / correct that", "Undo last phrase (multi-level)"),
+        ("replace that", "Next phrase replaces last (multi-step)"),
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
         ("clear all", "Wipe session text"),

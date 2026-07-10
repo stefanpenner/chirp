@@ -242,6 +242,17 @@ struct IslandView: View {
                             )
                             .accessibilityLabel("Capitalization mode: \(capsLabel)")
                     }
+                    if appState.awaitingReplace {
+                        Text("Replace…")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.orange.opacity(0.85))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule().fill(.orange.opacity(0.12))
+                            )
+                            .accessibilityLabel("Waiting for replacement phrase")
+                    }
                 }
                 .padding(.top, 10)
                 .transition(.opacity)

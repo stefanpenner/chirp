@@ -230,6 +230,56 @@ struct AppStateTests {
         #expect(inserter.typedTexts == ["Hello", " world"])
     }
 
+    @Test("replace that arms then next phrase swaps last segment")
+    func replaceThatMultiStep() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["wrong words"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+        #expect(state.transcribedText.contains("wrong") || state.transcribedText.contains("Wrong"))
+        #expect(!state.awaitingReplace)
+
+        // Arm replace — text stays until next phrase
+        await mock.setFeedAudioResult(["replace that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.awaitingReplace { break }
+        }
+        #expect(state.awaitingReplace)
+        #expect(state.transcribedText.contains("wrong") || state.transcribedText.contains("Wrong"))
+
+        // Replacement phrase undoes last and inserts new
+        await mock.setFeedAudioResult(["right words"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.awaitingReplace && state.transcribedText.contains("right") { break }
+        }
+        #expect(!state.awaitingReplace)
+        #expect(
+            state.transcribedText.contains("right") || state.transcribedText.contains("Right"),
+            "expected replacement, got \"\(state.transcribedText)\""
+        )
+        #expect(
+            !state.transcribedText.lowercased().contains("wrong"),
+            "old phrase should be gone, got \"\(state.transcribedText)\""
+        )
+    }
+
     @Test("all caps on forces uppercase on following segment")
     func allCapsModeSticky() async throws {
         let mock = MockTranscriber()

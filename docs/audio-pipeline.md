@@ -65,7 +65,8 @@ Spoken `new line` / `new paragraph` rewrite in `TextPostProcessor`;
 newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
 (built-in tech phrases + UserDefaults `chirp.dictationDictionary`).
 Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
-- **scratch that** / **correct that** / **replace that** — multi-level undo (`EditStack`)
+- **scratch that** / **correct that** — multi-level undo (`EditStack`)
+- **replace that** — next phrase replaces last (text stays until then; HUD “Replace…”)
 - **redo that** — restore last scratched / word-deleted segment
 - **delete last word** — drop trailing word (stack-aware; redo restores)
 - **caps on / all caps on / no caps on** — sticky casing (`CapsMode`)
