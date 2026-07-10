@@ -727,6 +727,8 @@ public final class AppState {
     }
 
     /// Delete the last whitespace-delimited word from the session transcript.
+    /// Prefers adjusting EditStack so prior segments remain undoable and
+    /// "redo that" can restore the deleted word.
     private func performDeleteLastWord(typesIncrementally: Bool) {
         let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -739,11 +741,15 @@ public final class AppState {
         guard let lastSpace = buffer.lastIndex(where: { $0.isWhitespace }) else {
             // Single word — clear all
             let remove = transcribedText.count
+            let removed = transcribedText
             transcribedText = ""
             if typesIncrementally, remove > 0 {
                 textInserter.deleteBackward(count: remove)
             }
-            editStack.clear()
+            if !editStack.dropTrailingSuffix(removed) {
+                editStack.clear()
+            }
+            lastCommittedNormalized = ""
             return
         }
         let wordStart = buffer.index(after: lastSpace)
@@ -755,13 +761,16 @@ public final class AppState {
                 start = before
             }
         }
-        let remove = transcribedText.distance(from: start, to: transcribedText.endIndex)
+        let removed = String(transcribedText[start...])
+        let remove = removed.count
         transcribedText = String(transcribedText[..<start])
         if typesIncrementally, remove > 0 {
             textInserter.deleteBackward(count: remove)
         }
-        // Destructive edit — stack no longer matches buffer offsets
-        editStack.clear()
+        // Keep multi-level undo when stack explains the deleted suffix
+        if !editStack.dropTrailingSuffix(removed) {
+            editStack.clear()
+        }
         lastCommittedNormalized = ""
     }
 

@@ -387,6 +387,67 @@ struct AppStateTests {
         #expect(inserter.deletedCounts.last == 6) // " world"
     }
 
+    @Test("delete last word keeps multi-level undo; redo restores word")
+    func deleteLastWordPreservesStack() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello" { break }
+        }
+
+        await mock.setFeedAudioResult(["world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        // Delete last word → "Hello" (stack still has first segment)
+        await mock.setFeedAudioResult(["delete the last word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello" { break }
+        }
+        #expect(state.transcribedText == "Hello")
+
+        // Redo restores deleted word
+        await mock.setFeedAudioResult(["redo that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+        #expect(state.transcribedText == "Hello world")
+
+        // Delete word again, then scratch first segment
+        await mock.setFeedAudioResult(["delete last word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello" { break }
+        }
+        await mock.setFeedAudioResult(["scratch that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.isEmpty { break }
+        }
+        #expect(state.transcribedText.isEmpty)
+    }
+
     @Test("duplicate consecutive segments are skipped")
     func duplicateSegmentsSkipped() async throws {
         let mock = MockTranscriber()

@@ -119,4 +119,39 @@ struct EditStackTests {
         #expect(s.undo() == " world")
         #expect(s.undo() == "Hello")
     }
+
+    @Test("dropTrailingSuffix peels top delta and enables redo")
+    func dropTrailingSuffixPartialTop() {
+        var s = EditStack()
+        s.push("Hello world")
+        let ok = s.dropTrailingSuffix(" world")
+        #expect(ok)
+        #expect(s.canRedo)
+        #expect(s.redo() == " world")
+        // Stack is now ["Hello", " world"] after redo
+        #expect(s.undo() == " world")
+        #expect(s.undo() == "Hello")
+    }
+
+    @Test("dropTrailingSuffix peels exact top delta; prior segment remains")
+    func dropTrailingSuffixExactTop() {
+        var s = EditStack()
+        s.push("Hello")
+        s.push(" world")
+        let ok = s.dropTrailingSuffix(" world")
+        #expect(ok)
+        // First segment still undoable
+        #expect(s.undo() == "Hello")
+        #expect(s.canRedo) // redo has " world" then "Hello" after undo
+    }
+
+    @Test("dropTrailingSuffix fails when stack cannot explain suffix")
+    func dropTrailingSuffixMismatch() {
+        var s = EditStack()
+        s.push("abc")
+        let ok = s.dropTrailingSuffix("xyz")
+        #expect(!ok)
+        // Stack unchanged on failure
+        #expect(s.undo() == "abc")
+    }
 }

@@ -84,13 +84,29 @@ RedoEmpty ==
   /\ Len(redo) = 0
   /\ UNCHANGED vars
 
-\* Destructive edits wipe both stacks (matches deleteLastWord / clearAll)
+\* clearAll / session reset — wipe both stacks
 Wipe ==
   /\ textLen > 0
   /\ textLen' = 0
   /\ typedToApp' = 0
   /\ undo' = <<>>
   /\ redo' = <<>>
+
+\* delete last word: drop a positive suffix length from text + undo stack.
+\* Models the happy path where the top delta fully covers the suffix
+\* (top >= k and we shrink or pop). redo becomes <<k>>.
+DropSuffix(k) ==
+  /\ k \in 1..MaxItem
+  /\ Len(undo) > 0
+  /\ LET top == undo[Len(undo)]
+     IN /\ top >= k
+        /\ textLen >= k
+        /\ textLen' = textLen - k
+        /\ typedToApp' = typedToApp - k
+        /\ redo' = <<k>>
+        /\ IF top = k
+           THEN undo' = SubSeq(undo, 1, Len(undo) - 1)
+           ELSE undo' = SubSeq(undo, 1, Len(undo) - 1) \o <<top - k>>
 
 \* New session
 Reset ==
@@ -106,6 +122,7 @@ Next ==
   \/ Redo
   \/ RedoEmpty
   \/ Wipe
+  \/ \E k \in 1..MaxItem: DropSuffix(k)
   \/ Reset
 
 Spec == Init /\ [][Next]_vars

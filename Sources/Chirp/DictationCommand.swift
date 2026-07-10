@@ -1,5 +1,6 @@
 // DictationCommand.swift — Spoken edit commands (SOTA dictation UX).
 // Pure parse; AppState executes against TextInserter + transcript buffer.
+// Tolerant of ASR trailing punctuation, politeness words, and common aliases.
 
 import Foundation
 
@@ -24,6 +25,17 @@ enum DictationCommand: Equatable, Sendable {
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
+        let candidates = normalizeCandidates(text)
+        for candidate in candidates {
+            if let cmd = matchExact(candidate) {
+                return cmd
+            }
+        }
+        return .none
+    }
+
+    /// Build match candidates: raw normalize, then strip politeness fillers.
+    private static func normalizeCandidates(_ text: String) -> [String] {
         var n = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
@@ -32,30 +44,65 @@ enum DictationCommand: Equatable, Sendable {
             n.removeLast()
         }
         n = n.trimmingCharacters(in: .whitespaces)
+        // Collapse internal whitespace
+        n = n.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+
+        var out: [String] = []
+        if !n.isEmpty { out.append(n) }
+
+        let stripped = stripPoliteness(n)
+        if stripped != n, !stripped.isEmpty {
+            out.append(stripped)
+        }
+        return out
+    }
+
+    /// Drop leading/trailing politeness that ASR often glues onto commands.
+    private static func stripPoliteness(_ s: String) -> String {
+        var tokens = s.split(separator: " ").map(String.init)
+        let fillers: Set<String> = ["please", "now", "thanks", "thank", "you"]
+        while let first = tokens.first, fillers.contains(first) {
+            tokens.removeFirst()
+        }
+        // "thank you" already handled token-wise; drop trailing fillers
+        while let last = tokens.last, fillers.contains(last) {
+            tokens.removeLast()
+        }
+        return tokens.joined(separator: " ")
+    }
+
+    private static func matchExact(_ n: String) -> DictationCommand? {
         switch n {
         case "scratch that", "delete that", "undo that",
              "scratch it", "delete it", "undo it",
-             "scrap that": // common mis-hear of "scratch"
+             "scrap that", // common mis-hear of "scratch"
+             "scratch hat", // ASR near-miss
+             "go back", "go back that":
             return .scratchThat
         case "delete last word", "scratch last word", "scratch word",
-             "delete word", "undo word":
+             "delete word", "undo word",
+             "delete the last word", "scratch the last word",
+             "delete last", "scratch last",
+             "remove last word", "remove the last word":
             return .deleteLastWord
         case "clear all", "delete all", "scratch all", "clear everything",
-             "start over", "delete everything":
+             "start over", "delete everything", "clear it all",
+             "wipe all", "wipe everything":
             return .clearAll
         case "press enter", "press return", "hit enter", "hit return",
-             "press return key":
+             "press return key", "press the enter key", "hit the enter key":
             return .pressEnter
-        case "press tab", "hit tab", "press tab key":
+        case "press tab", "hit tab", "press tab key", "press the tab key":
             return .pressTab
-        case "copy that", "copy all", "copy it", "copy this":
+        case "copy that", "copy all", "copy it", "copy this", "copy the text":
             return .copyThat
-        case "paste that", "paste it", "paste this":
+        case "paste that", "paste it", "paste this", "paste here":
             return .pasteThat
-        case "redo that", "redo it", "restore that", "undo undo":
+        case "redo that", "redo it", "restore that", "undo undo",
+             "redo last", "put it back":
             return .redoThat
         default:
-            return .none
+            return nil
         }
     }
 

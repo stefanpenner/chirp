@@ -51,12 +51,34 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("Redo it.") == .redoThat)
         #expect(DictationCommand.parse("restore that") == .redoThat)
         #expect(DictationCommand.parse("undo undo") == .redoThat)
+        #expect(DictationCommand.parse("put it back") == .redoThat)
+    }
+
+    @Test("tolerates please / now around commands")
+    func politenessTolerance() {
+        #expect(DictationCommand.parse("scratch that please") == .scratchThat)
+        #expect(DictationCommand.parse("please scratch that") == .scratchThat)
+        #expect(DictationCommand.parse("please undo that now") == .scratchThat)
+        #expect(DictationCommand.parse("clear all please") == .clearAll)
+        #expect(DictationCommand.parse("please copy that") == .copyThat)
+        #expect(DictationCommand.parse("redo that please") == .redoThat)
+    }
+
+    @Test("extra aliases and ASR near-misses")
+    func aliasesAndNearMisses() {
+        #expect(DictationCommand.parse("delete the last word") == .deleteLastWord)
+        #expect(DictationCommand.parse("remove the last word") == .deleteLastWord)
+        #expect(DictationCommand.parse("scratch last") == .deleteLastWord)
+        #expect(DictationCommand.parse("scratch hat") == .scratchThat)
+        #expect(DictationCommand.parse("go back") == .scratchThat)
+        #expect(DictationCommand.parse("press the enter key") == .pressEnter)
     }
 
     @Test("normal text is not a command")
     func normalText() {
         #expect(DictationCommand.parse("hello world") == .none)
         #expect(DictationCommand.parse("scratch the surface") == .none)
+        #expect(DictationCommand.parse("please send the report") == .none)
         #expect(DictationCommand.parse("") == .none)
     }
 

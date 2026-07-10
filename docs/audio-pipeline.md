@@ -58,8 +58,8 @@ keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
 (built-in tech phrases + UserDefaults `chirp.dictationDictionary`).
 Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** — multi-level undo of typed segments (`EditStack`)
-- **redo that** — restore last scratched segment
-- **delete last word** — drop trailing word (clears undo stack)
+- **redo that** — restore last scratched / word-deleted segment
+- **delete last word** — drop trailing word (stack-aware; redo restores)
 - **clear all** — wipe session transcript
 - **press enter** / **press tab** — key inserts
 - **copy that** / **paste that** — clipboard
