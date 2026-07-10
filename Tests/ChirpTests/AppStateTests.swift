@@ -1608,6 +1608,78 @@ struct AppStateTests {
         #expect(state.transcribedText == "")
     }
 
+    @Test("cancelSession resets sticky capsMode to normal")
+    func cancelSessionResetsCapsMode() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["all caps on"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.capsMode == .allCaps { break }
+        }
+        #expect(state.capsMode == .allCaps)
+
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after cancel, got \(state.status)")
+            return
+        }
+        #expect(state.capsMode == .normal)
+        #expect(!state.awaitingReplace)
+    }
+
+    @Test("cancelSession clears armed replace that")
+    func cancelSessionClearsAwaitingReplace() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["wrong words"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+        #expect(!state.awaitingReplace)
+
+        await mock.setFeedAudioResult(["replace that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.awaitingReplace { break }
+        }
+        #expect(state.awaitingReplace)
+
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after cancel, got \(state.status)")
+            return
+        }
+        #expect(!state.awaitingReplace)
+        #expect(state.capsMode == .normal)
+    }
+
     @Test("cancelSession is no-op from ready")
     func cancelSessionNoOpFromReady() {
         let (state, _, _, _) = makeAppState()

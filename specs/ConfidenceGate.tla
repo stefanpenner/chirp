@@ -62,4 +62,7 @@ Inv ==
   /\ NoScoresAccept
   /\ ScoresPolicy
 
+\* Bait: negation of a real safety property (must FAIL under TLC)
+BaitInv == ~NoScoresAccept
+
 ====

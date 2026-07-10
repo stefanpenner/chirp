@@ -175,7 +175,10 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("john at example dot com") == "john@example.com")
         #expect(TextPostProcessor.process("Jane at Acme dot org") == "Jane@Acme.org")
         #expect(TextPostProcessor.process("dev at foo dot io") == "dev@foo.io")
-        // "at" without trailing "dot TLD" stays conversational
+        // Multi-label domains
+        #expect(TextPostProcessor.process("john at mail dot google dot com") == "john@mail.google.com")
+        #expect(TextPostProcessor.process("dev at example dot co dot uk") == "dev@example.co.uk")
+        // "at" without trailing "dot …" stays conversational
         #expect(TextPostProcessor.process("meet at noon") == "meet at noon")
         #expect(TextPostProcessor.process("look at this") == "look at this")
     }
@@ -226,6 +229,51 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("one more thing") == "one more thing")
     }
 
+    @Test("Light ITN formats clock times with minutes")
+    func lightITNClockMinutes() {
+        let thirty = TextPostProcessor.process("Meeting at three thirty pm")
+        #expect(thirty.contains("3:30"), "expected 3:30 in \"\(thirty)\"")
+        #expect(thirty.contains("p.m.") || thirty.lowercased().contains("pm"),
+                "expected pm/p.m. in \"\(thirty)\"")
+
+        let dotted = TextPostProcessor.process("call at three thirty p.m.")
+        #expect(dotted.contains("3:30"), "expected 3:30 in \"\(dotted)\"")
+
+        let fifteen = TextPostProcessor.process("ten fifteen am")
+        #expect(fifteen.contains("10:15"), "expected 10:15 in \"\(fifteen)\"")
+        #expect(fifteen.contains("a.m.") || fifteen.lowercased().contains("am"),
+                "expected am/a.m. in \"\(fifteen)\"")
+
+        let compound = TextPostProcessor.process("arrive at two forty five pm")
+        #expect(compound.contains("2:45"), "expected 2:45 in \"\(compound)\"")
+
+        let ohFive = TextPostProcessor.process("leave at seven oh five am")
+        #expect(ohFive.contains("7:05"), "expected 7:05 in \"\(ohFive)\"")
+
+        let zeroFive = TextPostProcessor.process("leave at seven zero five am")
+        #expect(zeroFive.contains("7:05"), "expected 7:05 in \"\(zeroFive)\"")
+
+        // Digit form after cardinal ITN (or already-digit input)
+        let digits = TextPostProcessor.process("meet at 3 30 pm")
+        #expect(digits.contains("3:30"), "expected 3:30 in \"\(digits)\"")
+
+        // Bare hour regression
+        #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")
+
+        // Non-times unchanged
+        #expect(TextPostProcessor.process("meet at noon") == "meet at noon")
+        #expect(TextPostProcessor.process("first of all") == "first of all")
+    }
+
+    @Test("Light ITN formats o'clock times")
+    func lightITNOClock() {
+        #expect(TextPostProcessor.process("three o'clock") == "3:00")
+        #expect(TextPostProcessor.process("three oclock") == "3:00")
+        #expect(TextPostProcessor.process("three o'clock pm") == "3:00 p.m.")
+        #expect(TextPostProcessor.process("nine oclock a.m.") == "9:00 a.m.")
+        #expect(TextPostProcessor.process("Meeting at twelve o'clock") == "Meeting at 12:00")
+    }
+
     @Test("Light ITN formats percent and dollars")
     func lightITNPercentCurrency() {
         #expect(TextPostProcessor.process("about 50 percent done") == "about 50% done")
@@ -236,6 +284,24 @@ struct TextPostProcessorTests {
         // Bare numbers / words without unit stay put
         #expect(TextPostProcessor.process("one more thing") == "one more thing")
         #expect(TextPostProcessor.process("percent of cases") == "percent of cases")
+    }
+
+    @Test("Light ITN multi-currency euros pounds yen cents")
+    func lightITNMultiCurrency() {
+        #expect(TextPostProcessor.process("costs 20 euros") == "costs €20")
+        #expect(TextPostProcessor.process("pay twenty euros now") == "pay €20 now")
+        #expect(TextPostProcessor.process("costs 20 euro") == "costs €20")
+        #expect(TextPostProcessor.process("costs 20 pounds") == "costs £20")
+        #expect(TextPostProcessor.process("pay twenty pound now") == "pay £20 now")
+        #expect(TextPostProcessor.process("costs 20 yen") == "costs ¥20")
+        #expect(TextPostProcessor.process("50 cents") == "50¢")
+        #expect(TextPostProcessor.process("twenty cents") == "20¢")
+        // Compound dollars + cents → $N.CC
+        #expect(TextPostProcessor.process("20 dollars and 50 cents") == "$20.50")
+        #expect(TextPostProcessor.process("twenty dollars and fifty cents") == "$20.50")
+        #expect(TextPostProcessor.process("5 dollars and 5 cents") == "$5.05")
+        // Existing dollars path still works after number ITN
+        #expect(TextPostProcessor.process("costs one hundred dollars") == "costs $100")
     }
 
 

@@ -207,13 +207,31 @@ enum SpokenNumberITN {
     }
 
     /// Concatenate single-digit units, preserving leading zeros ("oh" → 0).
+    /// Phone-length runs (7 / 10 / 11-with-leading-1) get dashes.
     private static func formatDigitRun(_ words: [String]) -> String? {
         var digits = ""
         for w in words {
             guard let u = units[w], u < 10 else { return nil }
             digits.append(String(u))
         }
-        return digits.isEmpty ? nil : digits
+        guard !digits.isEmpty else { return nil }
+        return formatPhoneDigits(digits)
+    }
+
+    /// Optional phone dashes: 7 → XXX-XXXX, 10 → XXX-XXX-XXXX, 11+leading 1 → 1-XXX-XXX-XXXX.
+    /// Other lengths (years, short codes) stay plain digits.
+    private static func formatPhoneDigits(_ digits: String) -> String {
+        let chars = Array(digits)
+        switch chars.count {
+        case 7:
+            return "\(String(chars[0..<3]))-\(String(chars[3..<7]))"
+        case 10:
+            return "\(String(chars[0..<3]))-\(String(chars[3..<6]))-\(String(chars[6..<10]))"
+        case 11 where chars[0] == "1":
+            return "1-\(String(chars[1..<4]))-\(String(chars[4..<7]))-\(String(chars[7..<11]))"
+        default:
+            return digits
+        }
     }
 
     private static func shouldConvert(_ words: [String]) -> Bool {

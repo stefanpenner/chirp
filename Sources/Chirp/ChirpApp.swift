@@ -1085,6 +1085,8 @@ public final class AppState {
         transcribedText = ""
         speculativeText = ""
         editStack.clear()
+        capsMode = .normal
+        awaitingReplace = false
         lastCommittedNormalized = ""
         audioLevel = 0
         processingPhase = .none

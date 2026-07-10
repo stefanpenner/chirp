@@ -61,14 +61,19 @@ typed segments; flush joins with `SegmentJoiner`, post-processes once, and
 AppState types a single delta (`EditStack.FlushReplace`).
 Multi-utterance joins use `SegmentJoiner` (insert ". " when a new
 capitalized clause follows bare text; suppress before proper nouns /
-dict products like GitHub). Light ITN: times, spoken cardinals (`one hundred`→`100`,
-`twenty five`→`25`, `three point five`→`3.5`), ordinals (`twenty first`
-→`21st`, `first of all` stays), dates (`march fifth twenty twenty four`
-→`March 5, 2024`, `tomorrow`/`next monday` → absolute dates, weekdays →
-`Monday`, bare `may I` stays), `50 percent`→`50%`, `20 dollars`→`$20`.
+dict products like GitHub). Light ITN: times (`three pm`→`3 p.m.`,
+`three thirty pm`→`3:30 p.m.`, `three o'clock`→`3:00`), spoken cardinals
+(`one hundred`→`100`, `twenty five`→`25`, `three point five`→`3.5`), ordinals
+(`twenty first`→`21st`, `first of all` stays), dates (`march fifth twenty
+twenty four`→`March 5, 2024`, `tomorrow`/`next monday` → absolute dates,
+weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
+(`20 dollars`→`$20`, `20 euros`→`€20`, `20 pounds`→`£20`, `20 yen`→`¥20`,
+`50 cents`→`50¢`, `20 dollars and 50 cents`→`$20.50`).
 Bare `one`/`two` stay words. Digit runs (≥3 single digits) concatenate for
-phones (`five five five one two one two`→`5551212`; `oh`→`0`). Spoken email:
-`john at example dot com`→`john@example.com` (requires `dot` + TLD; bare
+phones (`five five five one two one two`→`555-1212`; 10-digit `XXX-XXX-XXXX`;
+11-digit leading-1 `1-XXX-XXX-XXXX`; `oh`→`0`). Spoken email:
+`john at example dot com`→`john@example.com`, multi-dot
+`john at mail dot google dot com`→`john@mail.google.com` (requires `dot`; bare
 `meet at noon` stays). Spoken symbols: `slash`→`/`, `asterisk`→`*`,
 `underscore`→`_`, fractions `one half`→`½`. Lists: `bullet point` /
 `next bullet` → `•`; `number one` / `next number` → `1.` / `2.`;

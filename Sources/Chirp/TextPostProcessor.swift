@@ -141,9 +141,7 @@ enum TextPostProcessor {
             (#"\bthree quarters\b"#, "¾"),
             (#"\bone third\b"#, "⅓"),
             (#"\btwo thirds\b"#, "⅔"),
-            // Spoken email before bare domain fragments so "at … dot com" becomes @ not "at … .com"
-            (#"\b(\w+)\s+at\s+(\w+)\s+dot\s+(com|org|net|io|edu|gov|co)\b"#, "$1@$2.$3"),
-            // Spoken web/domain fragments
+            // Spoken web/domain fragments (email "local at host dots" handled in applySpokenEmail)
             (#"\s+dot com\b"#, ".com"),
             (#"\s+dot org\b"#, ".org"),
             (#"\s+dot net\b"#, ".net"),
@@ -156,6 +154,15 @@ enum TextPostProcessor {
             (#"\s+at symbol\s*"#, "@"),
         ]
         return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
+    }()
+
+    /// "john at example dot com" / "john at mail dot google dot com" → email.
+    /// Requires ≥1 spoken "dot" so "meet at noon" stays conversational.
+    private static let spokenEmailPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(\w+)\s+at\s+((?:\w+\s+dot\s+)+\w+)\b"#,
+            options: .caseInsensitive
+        )
     }()
 
     /// Utterances Parakeet/Whisper-class models often emit from silence/noise alone.
@@ -215,6 +222,8 @@ enum TextPostProcessor {
 
     private static func applyPhraseFixes(_ text: String) -> String {
         var result = text
+        // Email before bare "dot com" so multi-label hosts become @ not partial .com
+        result = applySpokenEmail(result)
         for (pattern, replacement) in phraseFixes {
             let range = NSRange(result.startIndex..., in: result)
             result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
@@ -224,6 +233,29 @@ enum TextPostProcessor {
                 let range = NSRange(result.startIndex..., in: result)
                 result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
             }
+        }
+        return result
+    }
+
+    /// "local at label [dot label]+" → local@label.label… (multi-dot domains + co.uk).
+    private static func applySpokenEmail(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = spokenEmailPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let localRange = Range(match.range(at: 1), in: result),
+                  let hostRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let local = String(result[localRange])
+            let hostSpoken = String(result[hostRange])
+            let host = hostSpoken.replacingOccurrences(
+                of: #"\s+dot\s+"#,
+                with: ".",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            result.replaceSubrange(fullRange, with: "\(local)@\(host)")
         }
         return result
     }
@@ -354,14 +386,36 @@ enum TextPostProcessor {
         return parts.first.map(String.init)
     }
 
-    /// Light inverse text normalization for dictation readability.
-    /// Parakeet often already emits digits; this catches remaining spoken forms
-    /// for clock times without a full ITN grammar.
-    /// Ordinals like "first" are left alone — too many false positives
-    /// ("first of all" must not become "1st of all").
+    // MARK: - Light ITN (times)
+
+    /// Clock hour: spoken 1–12 or 1–2 digit numeral.
+    private static let hourToken = #"(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})"#
+
+    /// Safe spoken minutes (00–59). Skips bare unit words ("three five pm" stays)
+    /// to avoid ambiguity; uses oh/zero + unit, teens, tens, tens+unit.
+    private static let spokenMinuteToken =
+        #"(?:(?:oh|zero)\s+(?:zero|one|two|three|four|five|six|seven|eight|nine)|(?:ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)|(?:twenty|thirty|forty|fifty)(?:\s+(?:one|two|three|four|five|six|seven|eight|nine))?)"#
+
+    /// "three thirty pm" / "ten fifteen a.m." → hour:minutes + meridiem
+    private static let timeWithMinutesPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(\#(hourToken))\s+(\#(spokenMinuteToken)|\d{1,2})\s*([ap])\.?\s*m\.?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "three o'clock" / "three oclock pm" → 3:00 / 3:00 p.m.
+    private static let oclockPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(\#(hourToken))\s+o'?clock(?:\s*([ap])\.?\s*m\.?)?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Bare hour + am/pm: "three pm" → "3 p.m."
     private static let timeITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})\s*([ap])\.?\s*m\.?\b"#,
+            pattern: #"\b(\#(hourToken))\s*([ap])\.?\s*m\.?\b"#,
             options: .caseInsensitive
         )
     }()
@@ -378,6 +432,7 @@ enum TextPostProcessor {
     }
 
     private static func applyLightITN(_ text: String) -> String {
+        // Times before cardinals so "three thirty pm" is not eaten as 33.
         var result = applyTimeITN(text)
         // Dates before cardinals so "twenty twenty four" is not split into 20 24
         result = SpokenDateITN.apply(result)
@@ -385,13 +440,89 @@ enum TextPostProcessor {
         result = SpokenNumberITN.apply(result)
         // Second date pass: "march 15th" after ordinal ITN → "March 15"
         result = SpokenDateITN.apply(result)
+        // Digit clock form after numbers: "3 30 pm" → "3:30 p.m."
+        result = applyTimeITN(result)
         // %/$ after numbers so "one hundred dollars" → "100 dollars" → "$100"
         result = applyPercentITN(result)
         result = applyCurrencyITN(result)
         return result
     }
 
+    /// Clock ITN: minutes+am/pm, o'clock, bare hour+am/pm. Idempotent.
     private static func applyTimeITN(_ text: String) -> String {
+        var result = applyTimeWithMinutesITN(text)
+        result = applyOClockITN(result)
+        result = applyBareHourITN(result)
+        return result
+    }
+
+    private static func formatHour(_ raw: String) -> String {
+        let lower = raw.lowercased()
+        return spokenNumbers[lower] ?? raw
+    }
+
+    private static func formatMeridiem(_ ap: Substring) -> String {
+        "\(ap.lowercased()).m."
+    }
+
+    /// Parse spoken or digit minutes into 0…59, zero-padded "MM".
+    private static func formatMinutes(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if let n = Int(trimmed), (0...59).contains(n) {
+            return String(format: "%02d", n)
+        }
+        let words = trimmed.lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard let value = SpokenNumberITN.parsePhrase(words) else { return nil }
+        let n = Int(value.rounded())
+        guard (0...59).contains(n) else { return nil }
+        return String(format: "%02d", n)
+    }
+
+    private static func applyTimeWithMinutesITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = timeWithMinutesPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 4,
+                  let hourRange = Range(match.range(at: 1), in: result),
+                  let minRange = Range(match.range(at: 2), in: result),
+                  let apRange = Range(match.range(at: 3), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let hour = formatHour(String(result[hourRange]))
+            guard let mins = formatMinutes(String(result[minRange])) else { continue }
+            let mer = formatMeridiem(result[apRange])
+            result.replaceSubrange(fullRange, with: "\(hour):\(mins) \(mer)")
+        }
+        return result
+    }
+
+    private static func applyOClockITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = oclockPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let hourRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let hour = formatHour(String(result[hourRange]))
+            var out = "\(hour):00"
+            if match.numberOfRanges >= 3,
+               match.range(at: 2).location != NSNotFound,
+               let apRange = Range(match.range(at: 2), in: result) {
+                out += " \(formatMeridiem(result[apRange]))"
+            }
+            result.replaceSubrange(fullRange, with: out)
+        }
+        return result
+    }
+
+    private static func applyBareHourITN(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         let matches = timeITNPattern.matches(in: text, range: range)
         guard !matches.isEmpty else { return text }
@@ -402,10 +533,16 @@ enum TextPostProcessor {
                   let hourRange = Range(match.range(at: 1), in: result),
                   let apRange = Range(match.range(at: 2), in: result),
                   let fullRange = Range(match.range, in: result) else { continue }
-            let hourRaw = String(result[hourRange]).lowercased()
-            let hour = spokenNumbers[hourRaw] ?? hourRaw
-            let ap = result[apRange].lowercased()
-            result.replaceSubrange(fullRange, with: "\(hour) \(ap).m.")
+            // Skip already-normalized "3:30 p.m." — colon hour is not in hourToken digits-only
+            // but "30 p.m." inside "3:30 p.m." must not rematch: word boundary after ':' is ok
+            // for \d{1,2}. Guard: if char before match is ':', leave alone.
+            if fullRange.lowerBound > result.startIndex {
+                let prev = result[result.index(before: fullRange.lowerBound)]
+                if prev == ":" { continue }
+            }
+            let hour = formatHour(String(result[hourRange]))
+            let mer = formatMeridiem(result[apRange])
+            result.replaceSubrange(fullRange, with: "\(hour) \(mer)")
         }
         return result
     }
@@ -442,26 +579,102 @@ enum TextPostProcessor {
         return result
     }
 
-    /// "20 dollars" / "twenty dollars" / "100 dollars" → "$20" / "$100".
-    private static let currencyITNPattern: NSRegularExpression = {
+    /// Number token shared by currency patterns (digits preferred after SpokenNumberITN).
+    private static let currencyNumberToken =
+        #"(\d{1,9}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"#
+
+    /// "20 dollars and 50 cents" → "$20.50" (apply before simple dollar/cent rules).
+    /// "and" is optional: number ITN may consume "and fifty" → "50".
+    private static let compoundDollarsCentsPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(\d{1,9}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\s+dollars?\b"#,
+            pattern: #"\b"# + currencyNumberToken + #"\s+dollars?\s+(?:and\s+)?"# + currencyNumberToken + #"\s+cents?\b"#,
             options: .caseInsensitive
         )
     }()
 
+    /// "20 dollars|euros|pounds|yen" → currency symbol + digits.
+    private static let simpleCurrencyPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + currencyNumberToken + #"\s+(dollars?|euros?|pounds?|yen)\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "50 cents" → "50¢" (standalone; compound handled above).
+    private static let centsITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + currencyNumberToken + #"\s+cents?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static func currencyDigits(from raw: String) -> String {
+        let key = raw.lowercased()
+        return extendedSpokenNumbers[key] ?? raw
+    }
+
     private static func applyCurrencyITN(_ text: String) -> String {
+        var result = applyCompoundDollarsCents(text)
+        result = applySimpleCurrency(result)
+        result = applyCentsITN(result)
+        return result
+    }
+
+    private static func applyCompoundDollarsCents(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
-        let matches = currencyITNPattern.matches(in: text, range: range)
+        let matches = compoundDollarsCentsPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let dollarsRange = Range(match.range(at: 1), in: result),
+                  let centsRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let dollars = currencyDigits(from: String(result[dollarsRange]))
+            var cents = currencyDigits(from: String(result[centsRange]))
+            // Pad single-digit cents: "5 cents" → ".05"
+            if cents.count == 1 { cents = "0" + cents }
+            result.replaceSubrange(fullRange, with: "$\(dollars).\(cents)")
+        }
+        return result
+    }
+
+    private static func applySimpleCurrency(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = simpleCurrencyPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let unitRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let digits = currencyDigits(from: String(result[numRange]))
+            let unit = String(result[unitRange]).lowercased()
+            let symbol: String
+            switch unit {
+            case "dollar", "dollars": symbol = "$"
+            case "euro", "euros": symbol = "€"
+            case "pound", "pounds": symbol = "£"
+            case "yen": symbol = "¥"
+            default: continue
+            }
+            result.replaceSubrange(fullRange, with: "\(symbol)\(digits)")
+        }
+        return result
+    }
+
+    private static func applyCentsITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = centsITNPattern.matches(in: text, range: range)
         guard !matches.isEmpty else { return text }
         var result = text
         for match in matches.reversed() {
             guard match.numberOfRanges >= 2,
                   let numRange = Range(match.range(at: 1), in: result),
                   let fullRange = Range(match.range, in: result) else { continue }
-            let raw = String(result[numRange]).lowercased()
-            let digits = extendedSpokenNumbers[raw] ?? raw
-            result.replaceSubrange(fullRange, with: "$\(digits)")
+            let digits = currencyDigits(from: String(result[numRange]))
+            result.replaceSubrange(fullRange, with: "\(digits)¢")
         }
         return result
     }

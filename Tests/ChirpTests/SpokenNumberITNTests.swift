@@ -62,10 +62,10 @@ struct SpokenNumberITNTests {
 
     @Test("digit runs concatenate single-digit units (phone-style)")
     func digitRuns() {
-        // ≥3 single digits → concatenate, not sum
+        // ≥3 single digits → concatenate, not sum; 7-digit formats with dash
         let phone = SpokenNumberITN.apply("call five five five one two one two")
-        #expect(phone.contains("5551212"), "expected 5551212 in \"\(phone)\"")
-        // Leading zero ("oh") preserved
+        #expect(phone.contains("555-1212"), "expected 555-1212 in \"\(phone)\"")
+        // Leading zero ("oh") preserved; 4-digit runs stay unformatted
         #expect(SpokenNumberITN.apply("oh five five five") == "0555")
         // Compounds still sum / parse as numbers
         #expect(SpokenNumberITN.apply("twenty five") == "25")
@@ -74,6 +74,27 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("one more thing") == "one more thing")
         #expect(SpokenNumberITN.apply("one two") == "one two")
         #expect(SpokenNumberITN.apply("five five") == "five five")
+    }
+
+    @Test("formats phone-length digit runs with dashes")
+    func phoneDashFormatting() {
+        // 7 digits: XXX-XXXX
+        #expect(SpokenNumberITN.apply("five five five one two one two") == "555-1212")
+        // 10 digits: XXX-XXX-XXXX
+        #expect(
+            SpokenNumberITN.apply("five five five one two three four five six seven")
+                == "555-123-4567"
+        )
+        // 11 starting with 1: 1-XXX-XXX-XXXX
+        #expect(
+            SpokenNumberITN.apply("one eight zero zero five five five one two one two")
+                == "1-800-555-1212"
+        )
+        // Non-phone lengths stay plain digits
+        #expect(SpokenNumberITN.apply("five five five") == "555")
+        #expect(SpokenNumberITN.apply("oh five five five") == "0555")
+        // Years / short codes stay plain
+        #expect(SpokenNumberITN.apply("two zero two four") == "2024")
     }
 }
 

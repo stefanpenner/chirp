@@ -29,4 +29,27 @@ tlc specs/PipelineRebuild.tla
 
 Bait configs (`*_bait.cfg`) must **fail** — they prove the real invariants are checked.
 
+Config path is relative to the **spec directory** (TLC’s cwd), not the repo root:
+
+```bash
+# real Inv must pass
+tlc specs/CancelVoid.tla
+tlc specs/ConfidenceGate.tla
+tlc specs/SessionMachine.tla
+tlc specs/TranscriberBuffer.tla
+
+# bait Inv must fail (error expected)
+tlc -c CancelVoid_bait.cfg specs/CancelVoid.tla
+tlc -c ConfidenceGate_bait.cfg specs/ConfidenceGate.tla
+tlc -c SessionMachine_bait.cfg specs/SessionMachine.tla
+tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
+```
+
+| Bait config | Weakened claim | Real property negated |
+|-------------|----------------|------------------------|
+| `CancelVoid_bait` | ready may keep session text | `ReadyIsVoided` |
+| `ConfidenceGate_bait` | no-scores may reject | `NoScoresAccept` |
+| `SessionMachine_bait` | ready may not be idle | `ReadyIsIdle` |
+| `TranscriberBuffer_bait` | commits never use pending | `lastCommitSrc = "none"` |
+
 `specgen` (Go) is not used here: production is Swift. Dual-test pure gates instead.
