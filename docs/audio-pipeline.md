@@ -58,9 +58,11 @@ Multi-utterance joins use `SegmentJoiner` (insert ". " when a new
 capitalized clause follows bare text; suppress before proper nouns /
 dict products like GitHub). Light ITN: times, spoken cardinals (`one hundred`→`100`,
 `twenty five`→`25`, `three point five`→`3.5`), ordinals (`twenty first`
-→`21st`, `first of all` stays), `50 percent`→`50%`, `20 dollars`→`$20`.
-Bare `one`/`two` stay words. Spoken terminal punct works mid-segment
-(`hello period next` → `hello. Next`) with content-word guards.
+→`21st`, `first of all` stays), dates (`march fifth twenty twenty four`
+→`March 5, 2024`, bare `may I` stays), `50 percent`→`50%`,
+`20 dollars`→`$20`. Bare `one`/`two` stay words. Spoken terminal punct
+works mid-segment (`hello period next` → `hello. Next`) with content-word
+guards.
 Spoken `new line` / `new paragraph` rewrite in `TextPostProcessor`;
 newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
 (built-in tech phrases + UserDefaults `chirp.dictationDictionary`).

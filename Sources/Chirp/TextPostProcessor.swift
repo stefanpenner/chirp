@@ -130,11 +130,30 @@ enum TextPostProcessor {
 
     // MARK: - Transforms
 
+    /// Number words that legitimately repeat in speech ("twenty twenty four" = 2024).
+    private static let repetitionKeepWords: Set<String> = [
+        "twenty", "thirty", "forty", "fourty", "fifty", "sixty", "seventy",
+        "eighty", "ninety", "hundred", "thousand", "million",
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+        "ten", "eleven", "twelve",
+    ]
+
     private static func removeFillersAndRepetitions(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         var result = fillerPattern.stringByReplacingMatches(in: text, range: range, withTemplate: "")
-        let range2 = NSRange(result.startIndex..., in: result)
-        result = repetitionPattern.stringByReplacingMatches(in: result, range: range2, withTemplate: "$1")
+        // Collapse "the the" but keep "twenty twenty four" for year ITN
+        let matches = repetitionPattern.matches(
+            in: result,
+            range: NSRange(result.startIndex..., in: result)
+        )
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let wordRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let word = String(result[wordRange]).lowercased()
+            if repetitionKeepWords.contains(word) { continue }
+            result.replaceSubrange(fullRange, with: result[wordRange])
+        }
         return result
     }
 
@@ -291,10 +310,20 @@ enum TextPostProcessor {
         "eleven": "11", "twelve": "12",
     ]
 
+    /// Exposed for tests — light ITN pipeline only.
+    static func applyLightITNForTesting(_ text: String) -> String {
+        applyLightITN(text)
+    }
+
     private static func applyLightITN(_ text: String) -> String {
         var result = applyTimeITN(text)
-        // Cardinals before %/$ so "one hundred dollars" → "100 dollars" → "$100"
+        // Dates before cardinals so "twenty twenty four" is not split into 20 24
+        result = SpokenDateITN.apply(result)
+        // Cardinals/ordinals (and remaining "march 15th" if date missed spoken day words)
         result = SpokenNumberITN.apply(result)
+        // Second date pass: "march 15th" after ordinal ITN → "March 15"
+        result = SpokenDateITN.apply(result)
+        // %/$ after numbers so "one hundred dollars" → "100 dollars" → "$100"
         result = applyPercentITN(result)
         result = applyCurrencyITN(result)
         return result
