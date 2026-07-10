@@ -1468,6 +1468,85 @@ struct AppStateTests {
         #expect(state.audioLevel == 0)
     }
 
+    @Test("cancelSession voids already-typed text in the focused app (incremental)")
+    func cancelSessionVoidsTypedText() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello")
+        #expect(inserter.typedTexts == ["Hello"])
+        #expect(state.pipelineTypesIncrementally)
+        let typedLen = state.transcribedText.count
+
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after cancel, got \(state.status)")
+            return
+        }
+        #expect(state.transcribedText == "")
+        #expect(inserter.deletedCounts == [typedLen],
+                "cancel must deleteBackward typed length, got \(inserter.deletedCounts)")
+    }
+
+    @Test("cancelSession in batch mode does not delete in app")
+    func cancelSessionBatchDoesNotDelete() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+
+        struct BatchPP: TextPostProcessing {
+            func process(_ text: String) async throws -> String { text }
+        }
+        let batchPipeline = OfflineTranscriptionPipeline(
+            transcriber: mock,
+            postProcessor: BatchPP()
+        )
+        state.installPipelineForTesting(batchPipeline, typesIncrementally: false)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+
+        // Mid-session: batch path types nothing
+        recorder.lastOnSamples?([0.1])
+        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(inserter.typedTexts.isEmpty)
+        #expect(!state.pipelineTypesIncrementally)
+
+        // Even if buffer had text, batch cancel must not deleteBackward
+        state.cancelSession()
+
+        guard case .ready = state.status else {
+            Issue.record("Expected .ready after cancel, got \(state.status)")
+            return
+        }
+        #expect(state.transcribedText == "")
+        #expect(inserter.deletedCounts.isEmpty,
+                "batch cancel must not deleteBackward, got \(inserter.deletedCounts)")
+    }
+
     @Test("cancelSession from transcribing → ready")
     func cancelSessionFromTranscribing() async throws {
         let mock = MockTranscriber()

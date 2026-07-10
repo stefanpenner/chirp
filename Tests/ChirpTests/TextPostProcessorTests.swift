@@ -165,6 +165,19 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("visit example dot com") == "visit example.com")
         #expect(TextPostProcessor.process("mail me at sign you") == "mail me@you")
         #expect(TextPostProcessor.process("site dot io") == "site.io")
+        #expect(TextPostProcessor.process("visit site dot co") == "visit site.co")
+        // "dot company" must not become ".company"
+        #expect(TextPostProcessor.process("dot company").contains("company"))
+    }
+
+    @Test("Spoken email-ish rewrite")
+    func spokenEmail() {
+        #expect(TextPostProcessor.process("john at example dot com") == "john@example.com")
+        #expect(TextPostProcessor.process("Jane at Acme dot org") == "Jane@Acme.org")
+        #expect(TextPostProcessor.process("dev at foo dot io") == "dev@foo.io")
+        // "at" without trailing "dot TLD" stays conversational
+        #expect(TextPostProcessor.process("meet at noon") == "meet at noon")
+        #expect(TextPostProcessor.process("look at this") == "look at this")
     }
 
     @Test("Expanded spoken punctuation")

@@ -70,7 +70,7 @@ hotkey press/release          microphone
 
 AppState owns all transitions. User-initiated transitions: `ready → recording` (fn press), `recording → transcribing` (fn release), `recording/transcribing → ready` (ESC cancel), and `transcribing → recording` (fn press rejoin). The rest are automatic.
 
-**Recording sessions**: `recording ↔ transcribing` can cycle via fn press/release within the same session — text accumulates across cycles. A session ends naturally (flush + linger timeout) or immediately via ESC cancel. Cancel clears all accumulated text and hides the overlay; already-typed keystrokes are not undone.
+**Recording sessions**: `recording ↔ transcribing` can cycle via fn press/release within the same session — text accumulates across cycles. A session ends naturally (flush + linger timeout) or immediately via ESC cancel. Cancel clears all accumulated text and hides the overlay; when typing incrementally, ESC also voids already-typed session keystrokes in the focused app (`CancelDecision` / `CancelVoid.tla`).
 
 Cancelling a download transitions to `needsModel` (clean idle state); from there, pressing fn re-enters `downloading`. If model files disappear after reaching `ready`, pressing fn re-triggers the download/load flow instead of recording. Pressing fn during `downloading` or `loadingModel` triggers a brief scale-pulse nudge on the overlay (via `downloadNudge`) instead of silently ignoring the press.
 
@@ -78,7 +78,7 @@ Cancelling a download transitions to `needsModel` (clean idle state); from there
 
 AppState delegates to a `TranscriptionPipeline` protocol instead of calling the transcriber and post-processor directly. Two implementations exist:
 
-**OfflineTranscriptionPipeline** wraps the existing `Transcriber` + post-processor. In regex-only mode, it streams segments incrementally (existing behavior: text typed as you speak, speculative preview every 400ms). In LLM mode, it accumulates regex-cleaned segments internally, then runs the LLM on the full text during flush — no text is typed until the user releases the hotkey.
+**OfflineTranscriptionPipeline** wraps the existing `Transcriber` + post-processor. In regex-only mode, it streams segments incrementally (existing behavior: text typed as you speak, speculative preview ~250ms active / ~500ms idle via `DecodePolicy.peekSleepNs`). In LLM mode, it accumulates regex-cleaned segments internally, then runs the LLM on the full text during flush — no text is typed until the user releases the hotkey.
 
 **CloudTranscriptionPipeline** accumulates raw audio during recording, then sends it to a cloud STT service on flush. Post-processing (regex, LLM, or chained) runs after cloud STT returns. The overlay shows "Processing..." during the cloud call. The pipeline also feeds the local transcriber in parallel for speculative preview — users see live local preview while recording, but the final typed text comes from the higher-quality cloud STT.
 
@@ -145,7 +145,7 @@ API keys are stored in the macOS **Keychain** via `KeychainHelper`, never in Use
 
 3. **Transcription** — Offline recognizer (Parakeet TDT 0.6b v3 int8, multilingual) runs greedy-search decoding on CPU by default (`InferenceProvider`; optional `CHIRP_ASR_PROVIDER=coreml`). The `Transcriber` actor serializes all C API access.
 
-4. **Speculative preview** — Every 400ms, `peekTranscription()` runs inference on `pendingAudio` (last 5 seconds, gated on VAD speech detection). A generation counter (`commitGen`) discards stale previews when a real segment commits. Disabled when `pipelineSupportsPreview` is false (cloud or LLM modes).
+4. **Speculative preview** — Adaptive cadence (`DecodePolicy.peekIntervalActiveNs` ≈ 250ms while speech is active; `peekIntervalIdleNs` ≈ 500ms after consecutive idle peeks). `peekTranscription()` runs inference on `pendingAudio` (last 5 seconds, gated on VAD speech detection). A generation counter (`commitGen`) discards stale previews when a real segment commits. Disabled when `pipelineSupportsPreview` is false (cloud or LLM modes).
 
 5. **Flush** — When recording stops, `flush()` transcribes remaining `pendingAudio` (same source as peek and mid-recording commit). Guarded by requiring both VAD flush segments and sufficient `pendingAudio` to prevent hallucinated words from post-commit noise.
 

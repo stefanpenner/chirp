@@ -22,13 +22,13 @@ actor Transcriber: TranscriberProtocol {
     // MARK: - Initialization
 
     /// Configures the offline recognizer and VAD from model files on disk.
-    /// Tries CoreML first (Apple Neural Engine), then CPU.
-    /// Returns false if either fails to initialize.
+    /// Tries `InferenceProvider.asrCandidates` in order (CPU by default;
+    /// optional CoreML via `CHIRP_ASR_PROVIDER`). Returns false if all fail.
     func initialize(paths: ModelPaths) -> Bool {
         let modelDir = paths.modelDir
 
         guard createRecognizer(modelDir: modelDir) else {
-            Log.transcription.error("Failed to create offline recognizer (coreml+cpu)")
+            Log.transcription.error("Failed to create offline recognizer (ASR providers)")
             return false
         }
 

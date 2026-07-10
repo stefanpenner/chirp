@@ -4,6 +4,8 @@
 // Safe by design:
 // - Bare "one"/"two"/… alone are NOT converted ("one more thing" stays)
 // - Needs compound (twenty five), teen, magnitude (hundred/thousand), or "point"
+// - Digit runs: ≥3 consecutive single-digit units → concatenate ("five five five" → "555")
+//   Short pure runs ("one two") stay words; "oh" → 0 (leading zeros kept)
 // - Ordinals: "first" blocked before of/all/class; "twenty first" → 21st always
 // Dual-tested via SpokenNumberITNTests (no TLA — pure String→String).
 
@@ -105,7 +107,7 @@ enum SpokenNumberITN {
                 }
             }
 
-            // Cardinal multi-token / teen / decade
+            // Cardinal multi-token / teen / decade / digit-run
             if numberWords.contains(core) {
                 var j = i
                 var words: [String] = []
@@ -119,7 +121,19 @@ enum SpokenNumberITN {
                         break
                     }
                 }
-                if let value = parsePhrase(words), shouldConvert(words) {
+                // Phone-style: consecutive single-digit units (≥3) → concatenate
+                // "five five five one two one two" → "5551212", "oh five five five" → "0555"
+                // Short runs ("one two") stay conversational words.
+                if isDigitRun(words) {
+                    if words.count >= 3, let digits = formatDigitRun(words) {
+                        let lastRaw = parts[j - 1]
+                        let trailing = trailingPunctuation(lastRaw)
+                        out.append(digits + trailing)
+                        i = j
+                        continue
+                    }
+                    // length < 3 pure digit run: leave tokens as words
+                } else if let value = parsePhrase(words), shouldConvert(words) {
                     let lastRaw = parts[j - 1]
                     let trailing = trailingPunctuation(lastRaw)
                     out.append(formatValue(value) + trailing)
@@ -181,6 +195,26 @@ enum SpokenNumberITN {
     }
 
     // MARK: - Internals
+
+    /// True when every word is a single digit unit (0–9), including "oh"/"zero".
+    /// Used for phone-style digit runs; tens/teens/magnitudes/"and"/"point" fail.
+    private static func isDigitRun(_ words: [String]) -> Bool {
+        guard !words.isEmpty else { return false }
+        for w in words {
+            guard let u = units[w], u < 10 else { return false }
+        }
+        return true
+    }
+
+    /// Concatenate single-digit units, preserving leading zeros ("oh" → 0).
+    private static func formatDigitRun(_ words: [String]) -> String? {
+        var digits = ""
+        for w in words {
+            guard let u = units[w], u < 10 else { return nil }
+            digits.append(String(u))
+        }
+        return digits.isEmpty ? nil : digits
+    }
 
     private static func shouldConvert(_ words: [String]) -> Bool {
         if words.count >= 2 { return true }

@@ -24,6 +24,13 @@ enum DictationDictionary {
         "i phone": "iPhone",
         "i pad": "iPad",
         "i cloud": "iCloud",
+        "type script": "TypeScript",
+        "java script": "JavaScript",
+        "name space": "namespace",
+        "k eight s": "k8s",
+        "graph ql": "GraphQL",
+        "post gres": "PostgreSQL",
+        "postgres ql": "PostgreSQL",
     ]
 
     /// Load user replacements from UserDefaults (keys stored lowercase).

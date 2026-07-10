@@ -66,7 +66,10 @@ dict products like GitHub). Light ITN: times, spoken cardinals (`one hundred`→
 →`21st`, `first of all` stays), dates (`march fifth twenty twenty four`
 →`March 5, 2024`, `tomorrow`/`next monday` → absolute dates, weekdays →
 `Monday`, bare `may I` stays), `50 percent`→`50%`, `20 dollars`→`$20`.
-Bare `one`/`two` stay words. Spoken symbols: `slash`→`/`, `asterisk`→`*`,
+Bare `one`/`two` stay words. Digit runs (≥3 single digits) concatenate for
+phones (`five five five one two one two`→`5551212`; `oh`→`0`). Spoken email:
+`john at example dot com`→`john@example.com` (requires `dot` + TLD; bare
+`meet at noon` stays). Spoken symbols: `slash`→`/`, `asterisk`→`*`,
 `underscore`→`_`, fractions `one half`→`½`. Lists: `bullet point` /
 `next bullet` → `•`; `number one` / `next number` → `1.` / `2.`;
 `end list` resets numbering. Session list counter resets each recording.
@@ -111,7 +114,7 @@ list: Settings → Audio → Voice Commands.
 │  Audio   │──────────────►│ Transcriber │──segments───►│ AppState │──┘
 │ Recorder │  AsyncStream  │   (actor)   │              │(MainActor│
 └──────────┘               │             │◄──peek───────│  consumer│
- I/O thread                │  VAD + ASR  │  every 400ms │  + peek) │
+ I/O thread                │  VAD + ASR  │  ~250/500ms  │  + peek) │
                            └─────────────┘              └──────────┘
                                                               │
                                                               ▼
@@ -144,11 +147,12 @@ time, so **transcribing** covers that gap. During transcribing:
 
 - **fn press** → rejoin (new stream + consumer; old stream is closed
   and can't accept data). Text accumulates.
-- **ESC** → cancel. No flush, no typing, text discarded.
+- **ESC** → cancel. No flush; voids already-typed session text when incremental
+  (`CancelDecision` / `deleteBackward`); overlay/session text discarded.
 
 Recording runs two parallel tasks:
 - **Consumer** — drains stream, feeds transcriber, types committed text
-- **Peek** — polls transcriber every 400ms for speculative preview
+- **Peek** — polls transcriber ~250ms active / ~500ms idle (`DecodePolicy`)
 
 
 ## Audio Capture

@@ -1063,6 +1063,16 @@ public final class AppState {
         guard let phase = SessionDecision.phase(from: status),
               SessionDecision.canCancel(phase) else { return }
 
+        // Void already-typed session text (Dragon-style). Dual: CancelVoid.tla /
+        // CancelDecision — batch mode deletes nothing (nothing typed mid-session).
+        let n = CancelDecision.appCharsToDelete(
+            typedLength: transcribedText.count,
+            typesIncrementally: pipelineTypesIncrementally
+        )
+        if n > 0 {
+            textInserter.deleteBackward(count: n)
+        }
+
         audioConsumerTask?.cancel()
         audioConsumerTask = nil
         peekTask?.cancel()

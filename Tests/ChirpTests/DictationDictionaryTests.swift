@@ -21,6 +21,13 @@ struct DictationDictionaryTests {
             #expect(DictationDictionary.apply("I use vs code") == "I use VS Code")
             #expect(DictationDictionary.apply("build with swift ui") == "build with SwiftUI")
             #expect(DictationDictionary.apply("on mac os") == "on macOS")
+            #expect(DictationDictionary.apply("write type script") == "write TypeScript")
+            #expect(DictationDictionary.apply("learn java script") == "learn JavaScript")
+            #expect(DictationDictionary.apply("use name space") == "use namespace")
+            #expect(DictationDictionary.apply("deploy k eight s") == "deploy k8s")
+            #expect(DictationDictionary.apply("query graph ql") == "query GraphQL")
+            #expect(DictationDictionary.apply("run post gres") == "run PostgreSQL")
+            #expect(DictationDictionary.apply("use postgres ql") == "use PostgreSQL")
         }
     }
 

@@ -59,6 +59,22 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("first class cabin") == "first class cabin")
         #expect(SpokenNumberITN.apply("first time here") == "first time here")
     }
+
+    @Test("digit runs concatenate single-digit units (phone-style)")
+    func digitRuns() {
+        // ≥3 single digits → concatenate, not sum
+        let phone = SpokenNumberITN.apply("call five five five one two one two")
+        #expect(phone.contains("5551212"), "expected 5551212 in \"\(phone)\"")
+        // Leading zero ("oh") preserved
+        #expect(SpokenNumberITN.apply("oh five five five") == "0555")
+        // Compounds still sum / parse as numbers
+        #expect(SpokenNumberITN.apply("twenty five") == "25")
+        #expect(SpokenNumberITN.apply("one hundred") == "100")
+        // Bare unit and short runs stay conversational
+        #expect(SpokenNumberITN.apply("one more thing") == "one more thing")
+        #expect(SpokenNumberITN.apply("one two") == "one two")
+        #expect(SpokenNumberITN.apply("five five") == "five five")
+    }
 }
 
 @Suite("TextPostProcessor number ITN")

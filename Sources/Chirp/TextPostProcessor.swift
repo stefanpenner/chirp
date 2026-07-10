@@ -141,6 +141,8 @@ enum TextPostProcessor {
             (#"\bthree quarters\b"#, "¾"),
             (#"\bone third\b"#, "⅓"),
             (#"\btwo thirds\b"#, "⅔"),
+            // Spoken email before bare domain fragments so "at … dot com" becomes @ not "at … .com"
+            (#"\b(\w+)\s+at\s+(\w+)\s+dot\s+(com|org|net|io|edu|gov|co)\b"#, "$1@$2.$3"),
             // Spoken web/domain fragments
             (#"\s+dot com\b"#, ".com"),
             (#"\s+dot org\b"#, ".org"),
@@ -148,6 +150,8 @@ enum TextPostProcessor {
             (#"\s+dot io\b"#, ".io"),
             (#"\s+dot edu\b"#, ".edu"),
             (#"\s+dot gov\b"#, ".gov"),
+            // "dot co" with word boundary — must not match "dot company"
+            (#"\s+dot co\b"#, ".co"),
             (#"\s+at sign\s*"#, "@"),
             (#"\s+at symbol\s*"#, "@"),
         ]

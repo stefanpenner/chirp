@@ -12,6 +12,7 @@ tlc specs/PipelineRebuild.tla
 | Spec | Purpose | Swift dual |
 |------|---------|------------|
 | `SessionMachine` | ready / recording / transcribing lifecycle | `SessionDecision` |
+| `CancelVoid` | ESC cancel voids typed text when incremental | `CancelDecision` |
 | `TranscriberBuffer` | pendingAudio is decode source; empty commit keeps buffer | `DecodePolicy` |
 | `PeekCommit` | stale peeks discarded via commitGen | `AppState` peek loop |
 | `PipelineRebuild` | defer pipeline rebuild mid-session | `PipelineRebuildDecision` |
