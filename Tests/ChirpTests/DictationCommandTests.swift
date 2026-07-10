@@ -16,6 +16,20 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("delete it") == .scratchThat)
     }
 
+    @Test("recognizes delete last word")
+    func deleteLastWord() {
+        #expect(DictationCommand.parse("delete last word") == .deleteLastWord)
+        #expect(DictationCommand.parse("scratch word") == .deleteLastWord)
+        #expect(DictationCommand.parse("undo word.") == .deleteLastWord)
+    }
+
+    @Test("recognizes clear all")
+    func clearAll() {
+        #expect(DictationCommand.parse("clear all") == .clearAll)
+        #expect(DictationCommand.parse("start over") == .clearAll)
+        #expect(DictationCommand.parse("delete everything!") == .clearAll)
+    }
+
     @Test("normal text is not a command")
     func normalText() {
         #expect(DictationCommand.parse("hello world") == .none)

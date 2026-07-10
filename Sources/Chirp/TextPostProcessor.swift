@@ -82,6 +82,13 @@ enum TextPostProcessor {
             (#"\s+new line\s*"#, "\n"),
             (#"\s+newline\s*"#, "\n"),
             (#"\s+new paragraph\s*"#, "\n\n"),
+            // Spoken web/domain fragments
+            (#"\s+dot com\b"#, ".com"),
+            (#"\s+dot org\b"#, ".org"),
+            (#"\s+dot net\b"#, ".net"),
+            (#"\s+dot io\b"#, ".io"),
+            (#"\s+at sign\s*"#, "@"),
+            (#"\s+at symbol\s*"#, "@"),
         ]
         return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
     }()

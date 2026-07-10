@@ -17,6 +17,7 @@ tlc specs/PipelineRebuild.tla
 | `PipelineRebuild` | defer pipeline rebuild mid-session | `PipelineRebuildDecision` |
 | `SegmentJoin` | multi-utterance separators (space vs ". ") | `SegmentJoiner` |
 | `ScratchUndo` | spoken "scratch that" undoes last segment | `DictationCommand` |
+| `EditCommands` | scratch / delete-word / clear-all over transcript | `DictationCommand` |
 
 Bait configs (`*_bait.cfg`) must **fail** — they prove the real invariants are checked.
 

@@ -112,7 +112,8 @@ struct AppStateTests {
             if await mock.flushCalled { break }
         }
         #expect(await mock.flushCalled)
-        #expect(inserter.typedTexts.contains("hello world"))
+        // First segment of session is auto-capitalized
+        #expect(inserter.typedTexts.contains("Hello world"))
     }
 
     // MARK: - Audio level
@@ -264,6 +265,68 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("scratch that"))
     }
 
+    @Test("delete last word removes trailing word only")
+    func deleteLastWordCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["delete last word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello" { break }
+        }
+
+        #expect(state.transcribedText == "Hello")
+        #expect(inserter.deletedCounts.last == 6) // " world"
+    }
+
+    @Test("clear all wipes the session transcript")
+    func clearAllCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["clear all"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.isEmpty { break }
+        }
+
+        #expect(state.transcribedText.isEmpty)
+        #expect(inserter.deletedCounts.last == 11)
+    }
+
     @Test("Committed segment clears speculativeText")
     func committedSegmentClearsSpeculative() async throws {
         let mock = MockTranscriber()
@@ -323,8 +386,8 @@ struct AppStateTests {
             if case .ready = state.status { break }
         }
 
-        #expect(state.transcribedText == "hello goodbye")
-        #expect(inserter.typedTexts == ["hello", " goodbye"])
+        #expect(state.transcribedText == "Hello goodbye")
+        #expect(inserter.typedTexts == ["Hello", " goodbye"])
     }
 
     @Test("stopRecording empty flush is no-op")
@@ -470,7 +533,7 @@ struct AppStateTests {
             return
         }
         #expect(await mock.flushCalled)
-        #expect(inserter.typedTexts.contains("final words"))
+        #expect(inserter.typedTexts.contains("Final words"))
     }
 
     @Test("startRecording cancels pending consumer task")
@@ -586,7 +649,7 @@ struct AppStateTests {
             Issue.record("Expected .transcribing during linger, got \(state.status)")
             return
         }
-        #expect(state.transcribedText == "hello")
+        #expect(state.transcribedText == "Hello")
 
         // Wait for linger to expire
         for _ in 0..<30 {

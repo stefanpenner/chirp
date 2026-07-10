@@ -597,9 +597,14 @@ public final class AppState {
                     self.applyCommittedText(remaining, typesIncrementally: true)
                 } else {
                     // Non-incremental: pipeline returns full processed text on flush
-                    if DictationCommand.parse(remaining) == .scratchThat {
+                    switch DictationCommand.parse(remaining) {
+                    case .scratchThat:
                         self.performScratchThat(typesIncrementally: true)
-                    } else {
+                    case .deleteLastWord:
+                        self.performDeleteLastWord(typesIncrementally: true)
+                    case .clearAll:
+                        self.performClearAll(typesIncrementally: true)
+                    case .none:
                         self.transcribedText = remaining
                         self.textInserter.typeText(remaining)
                         self.lastTypedCount = remaining.count
@@ -626,15 +631,17 @@ public final class AppState {
         switch DictationCommand.parse(text) {
         case .scratchThat:
             performScratchThat(typesIncrementally: typesIncrementally)
+        case .deleteLastWord:
+            performDeleteLastWord(typesIncrementally: typesIncrementally)
+        case .clearAll:
+            performClearAll(typesIncrementally: typesIncrementally)
         case .none:
             let joined = SegmentJoiner.append(existing: transcribedText, next: text)
             transcribedText = joined.full
             if typesIncrementally {
                 textInserter.typeText(joined.delta)
-                lastTypedCount = joined.delta.count
-            } else {
-                lastTypedCount = joined.delta.count
             }
+            lastTypedCount = joined.delta.count
         }
     }
 
@@ -644,11 +651,59 @@ public final class AppState {
         let remove = min(lastTypedCount, transcribedText.count)
         if remove > 0 {
             transcribedText = String(transcribedText.dropLast(remove))
-            // Trim orphaned trailing separator if join left "foo. " then we
-            // already removed the full delta including ". ".
             if typesIncrementally {
                 textInserter.deleteBackward(count: remove)
             }
+        }
+        lastTypedCount = 0
+    }
+
+    /// Delete the last whitespace-delimited word from the session transcript.
+    private func performDeleteLastWord(typesIncrementally: Bool) {
+        let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        // Drop trailing spaces from buffer, then the last word
+        var buffer = transcribedText
+        while buffer.last?.isWhitespace == true {
+            buffer.removeLast()
+        }
+        guard let lastSpace = buffer.lastIndex(where: { $0.isWhitespace }) else {
+            // Single word — clear all
+            let remove = transcribedText.count
+            transcribedText = ""
+            if typesIncrementally, remove > 0 {
+                textInserter.deleteBackward(count: remove)
+            }
+            lastTypedCount = 0
+            return
+        }
+        let wordStart = buffer.index(after: lastSpace)
+        let removeCount = transcribedText.distance(from: wordStart, to: transcribedText.endIndex)
+        // Also remove one trailing space before the word if present
+        var start = wordStart
+        if start > transcribedText.startIndex {
+            let before = transcribedText.index(before: start)
+            if transcribedText[before].isWhitespace {
+                start = before
+            }
+        }
+        let remove = transcribedText.distance(from: start, to: transcribedText.endIndex)
+        transcribedText = String(transcribedText[..<start])
+        if typesIncrementally, remove > 0 {
+            textInserter.deleteBackward(count: remove)
+        }
+        lastTypedCount = 0
+        _ = removeCount
+    }
+
+    /// Clear the entire session transcript (spoken "clear all").
+    private func performClearAll(typesIncrementally: Bool) {
+        let remove = transcribedText.count
+        guard remove > 0 else { return }
+        transcribedText = ""
+        if typesIncrementally {
+            textInserter.deleteBackward(count: remove)
         }
         lastTypedCount = 0
     }

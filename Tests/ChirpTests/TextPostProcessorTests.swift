@@ -131,6 +131,13 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("line newline break") == "line\nbreak")
     }
 
+    @Test("Spoken domain and at-sign fragments")
+    func spokenDomain() {
+        #expect(TextPostProcessor.process("visit example dot com") == "visit example.com")
+        #expect(TextPostProcessor.process("mail me at sign you") == "mail me@you")
+        #expect(TextPostProcessor.process("site dot io") == "site.io")
+    }
+
     @Test("Light ITN formats spoken times")
     func lightITN() {
         #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")

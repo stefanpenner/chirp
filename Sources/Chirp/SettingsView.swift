@@ -128,7 +128,7 @@ struct AudioSettingsTab: View {
 
             Section("Dictation Dictionary") {
                 DictationDictionaryEditor()
-                Text("Replace misheard phrases (e.g. “get hub” → “GitHub”). Built-in tech terms are included. Say “scratch that” to undo the last phrase.")
+                Text("Replace misheard phrases (e.g. “get hub” → “GitHub”). Built-ins included. Voice: “scratch that”, “delete last word”, “clear all”.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

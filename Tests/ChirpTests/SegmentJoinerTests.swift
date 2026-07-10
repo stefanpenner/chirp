@@ -13,6 +13,13 @@ struct SegmentJoinerTests {
         #expect(j.delta == "Hello world")
     }
 
+    @Test("first segment capitalizes leading lowercase")
+    func firstSegmentCapitalizes() {
+        let j = SegmentJoiner.append(existing: "", next: "hello world")
+        #expect(j.full == "Hello world")
+        #expect(j.delta == "Hello world")
+    }
+
     @Test("lowercase continuation gets a single space")
     func lowercaseContinuation() {
         let j = SegmentJoiner.append(existing: "Hello", next: "world")

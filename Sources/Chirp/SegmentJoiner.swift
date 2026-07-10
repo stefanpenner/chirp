@@ -8,11 +8,13 @@ import Foundation
 enum SegmentJoiner {
     /// Join `next` onto `existing`. Returns the full text and the delta to type.
     static func append(existing: String, next: String) -> (full: String, delta: String) {
-        let piece = next.trimmingCharacters(in: .whitespacesAndNewlines)
+        var piece = next.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !piece.isEmpty else {
             return (existing, "")
         }
         if existing.isEmpty {
+            // First segment of a session: capitalize leading letter if ASR left it lower.
+            piece = capitalizeFirstLetter(piece)
             return (piece, piece)
         }
 
@@ -50,5 +52,12 @@ enum SegmentJoiner {
         // Existing should end with a letter/digit (not already punct)
         guard let last = existing.last, last.isLetter || last.isNumber else { return false }
         return true
+    }
+
+    /// Capitalize the first Unicode letter in `text` if it is lowercase.
+    static func capitalizeFirstLetter(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        guard first.isLetter, first.isLowercase else { return text }
+        return first.uppercased() + text.dropFirst()
     }
 }

@@ -39,8 +39,12 @@ capitalized segment follows bare text). Spoken `new line` / `new
 paragraph` rewrite in `TextPostProcessor`; newlines type as Return
 keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
 (built-in tech phrases + UserDefaults `chirp.dictationDictionary`).
-Spoken **scratch that** / **delete that** undoes the last typed segment
-(`DictationCommand` + `ScratchUndo.tla`). Edit phrases in Settings → Audio.
+Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
+- **scratch that** — undo last segment
+- **delete last word** — drop trailing word
+- **clear all** — wipe session transcript
+First segment auto-capitalizes. Spoken `dot com` / `at sign` rewrites.
+Edit custom phrases in Settings → Audio.
 
 
 ## Components
