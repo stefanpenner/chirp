@@ -1,8 +1,8 @@
 // TextPostProcessor.swift — Light cleanup of raw transcription output.
 // Removes filler words (um, uh, er…), deduplicates stuttered words,
 // collapses whitespace, capitalizes standalone "I", applies high-confidence
-// dictation phrase fixes, and drops common silence-hallucination-only
-// utterances.
+// dictation phrase fixes, light inverse text normalization (times), and
+// drops common silence-hallucination-only utterances.
 // Pure String→String transform, no state, sub-millisecond.
 // Applied by AppState at all three text insertion points.
 //
@@ -17,6 +17,7 @@ enum TextPostProcessor {
         var result = text
         result = removeFillersAndRepetitions(result)
         result = applyPhraseFixes(result)
+        result = applyLightITN(result)
         result = cleanWhitespace(result)
         result = capitalizeI(result)
         result = result.trimmingCharacters(in: .whitespaces)
@@ -74,15 +75,18 @@ enum TextPostProcessor {
 
     /// Utterances Parakeet/Whisper-class models often emit from silence/noise alone.
     /// Only dropped when the *entire* cleaned segment matches — never mid-sentence.
-    /// Keep this list tight: single-word dictation of "yes"/"okay"/"goodbye" is valid.
+    ///
+    /// Do NOT list bare function words ("the", "a", "to"): a false VAD endpoint can
+    /// legitimately decode only an onset word; dropping it loses real speech when
+    /// pendingAudio was already committed. Keep multi-word / punctuated artifacts only.
     private static let silenceHallucinations: Set<String> = [
-        // Function words that almost never appear as intentional one-word dictation
-        "you", "the", "a", "to", "and", "of", "in", "it", "is",
-        // Classic Whisper/Parakeet silence artifacts (usually with trailing punct)
+        // Classic Whisper/Parakeet silence artifacts
         "thank you.", "thanks.", "thank you for watching.",
-        "subscribe.", "please subscribe.",
-        // Pure vocalizations already partially handled as fillers; keep as whole-utterance drop
+        "thanks for watching.", "thank you for watching",
+        "subscribe.", "please subscribe.", "please subscribe",
+        // Pure vocalizations (also handled as fillers mid-sentence)
         "hmm", "hm", "mm", "mhm", "uh", "um", "ah", "er",
+        "you", // common lone garbage token from noise; rarely intentional alone
     ]
 
     // MARK: - Transforms
@@ -100,6 +104,42 @@ enum TextPostProcessor {
         for (pattern, replacement) in phraseFixes {
             let range = NSRange(result.startIndex..., in: result)
             result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
+        }
+        return result
+    }
+
+    /// Light inverse text normalization for dictation readability.
+    /// Parakeet often already emits digits; this catches remaining spoken forms
+    /// for times of day without a full ITN grammar.
+    private static let timeITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})\s*([ap])\.?\s*m\.?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let spokenNumbers: [String: String] = [
+        "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+        "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+        "eleven": "11", "twelve": "12",
+    ]
+
+    private static func applyLightITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = timeITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        // Replace from the end so ranges stay valid
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let hourRange = Range(match.range(at: 1), in: result),
+                  let apRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let hourRaw = String(result[hourRange]).lowercased()
+            let hour = spokenNumbers[hourRaw] ?? hourRaw
+            let ap = result[apRange].lowercased()
+            result.replaceSubrange(fullRange, with: "\(hour) \(ap).m.")
         }
         return result
     }

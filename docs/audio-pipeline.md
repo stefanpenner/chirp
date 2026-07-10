@@ -26,8 +26,8 @@ bazel test //:TranscriberIntegrationTests --test_output=all
 
 Scoring helpers live in `Tests/ChirpTests/TranscriptionScoring.swift`
 (always-on unit tests via `//:TextTests`). Generation is
-`SpeechAudioGenerator` (`say` + `afconvert`). Budgets: mean WER ≤ 35%
-on clean TTS; silence must not hallucinate.
+`SpeechAudioGenerator` (`say` + `afconvert`). Budgets: mean WER ≤ 15%,
+median ≤ 10% on clean TTS; silence must not hallucinate.
 
 
 ## Components
@@ -133,8 +133,9 @@ Shared source for peek, mid-recording commit, and flush — so preview,
 incremental typing, and final text share one decode path.
 
 **VAD** — emits segments on ≥0.5s silence (or 15s max). Segment audio is
-*not* decoded; VAD is the endpointing signal only. Formal model:
-`specs/TranscriberBuffer.tla` (TLC-checked).
+*not* decoded; VAD is the endpointing signal only. Empty ASR on a VAD
+endpoint keeps `pendingAudio` (false endpoint must not wipe speech).
+Formal model: `specs/TranscriberBuffer.tla` (TLC-checked).
 
 
 ### Peek Safeguards

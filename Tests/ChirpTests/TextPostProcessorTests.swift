@@ -86,7 +86,6 @@ struct TextPostProcessorTests {
     @Test("Drops silence-hallucination-only utterances")
     func silenceHallucinations() {
         #expect(TextPostProcessor.process("you") == "")
-        #expect(TextPostProcessor.process("the") == "")
         #expect(TextPostProcessor.process("thank you.") == "")
         #expect(TextPostProcessor.process("Thank you for watching.") == "")
         #expect(TextPostProcessor.process("hmm") == "")
@@ -113,5 +112,22 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("I need new nodes") == "I need new notes")
         // Unrelated "node" must stay
         #expect(TextPostProcessor.process("graph node") == "graph node")
+    }
+
+    @Test("Light ITN formats spoken times")
+    func lightITN() {
+        #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")
+        #expect(TextPostProcessor.process("Call me at 9 am") == "Call me at 9 a.m.")
+        #expect(TextPostProcessor.process("see you at twelve p.m.") == "see you at 12 p.m.")
+        // Non-time "one" must stay
+        #expect(TextPostProcessor.process("one more thing") == "one more thing")
+    }
+
+    @Test("Does not drop bare function words as whole utterance")
+    func keepsBareFunctionWords() {
+        // Early VAD endpoints can decode a single onset word; dropping it loses speech.
+        #expect(TextPostProcessor.process("the") == "the")
+        #expect(TextPostProcessor.process("a") == "a")
+        #expect(TextPostProcessor.process("to") == "to")
     }
 }

@@ -172,17 +172,24 @@ actor Transcriber: TranscriberProtocol {
             return []
         }
 
-        // Min length guard: too-short buffers are unreliable and may hallucinate.
+        // Min length guard: too-short buffers are unreliable. Keep pendingAudio —
+        // a false VAD endpoint must not wipe speech that continues after.
         guard pendingAudio.count >= 1600 else {
-            Log.transcription.debug("feedAudio: pendingAudio=\(self.pendingAudio.count) too short — skipped commit")
-            pendingAudio.removeAll()
+            Log.transcription.debug("feedAudio: pendingAudio=\(self.pendingAudio.count) too short — keep buffer")
             return []
         }
 
         let text = transcribeSamples(pendingAudio)
+        // Empty ASR on a VAD endpoint is usually a false end (noise / mid-pause).
+        // Keep pendingAudio so the next commit/flush still sees the full utterance.
+        guard !text.isEmpty else {
+            Log.transcription.debug("feedAudio: empty ASR on VAD endpoint — keep pendingAudio=\(self.pendingAudio.count)")
+            return []
+        }
+
         pendingAudio.removeAll()
         Log.transcription.debug("feedAudio: committed pendingAudio text=\(text)")
-        return text.isEmpty ? [] : [text]
+        return [text]
     }
 
     /// Returns a speculative transcription of pending (uncommitted) audio,

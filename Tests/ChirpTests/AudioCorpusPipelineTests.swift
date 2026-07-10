@@ -27,11 +27,12 @@ struct AudioCorpusPipelineTests {
     ]
 
     /// Mean WER ceiling for clean TTS → Parakeet on this corpus.
-    /// Tight enough to catch regressions; loose enough for TTS/ASR mismatch.
-    private static let maxMeanWER: Double = 0.35
-    private static let maxMedianWER: Double = 0.30
-    /// No single phrase may be a total miss (WER ≥ 1.0) on clean audio.
-    private static let maxPerPhraseWER: Double = 0.85
+    /// Tight enough to catch regressions (onset clips, bad post-process);
+    /// loose enough for occasional TTS/ASR confusions (e.g. the/a).
+    private static let maxMeanWER: Double = 0.15
+    private static let maxMedianWER: Double = 0.10
+    /// No single phrase may be a near-total miss on clean audio.
+    private static let maxPerPhraseWER: Double = 0.50
 
     // MARK: - Model discovery (shared logic with TranscriberIntegrationTests)
 
