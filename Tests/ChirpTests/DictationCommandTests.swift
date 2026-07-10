@@ -14,6 +14,10 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("UNDO THAT!") == .scratchThat)
         #expect(DictationCommand.parse("scrap that") == .scratchThat)
         #expect(DictationCommand.parse("delete it") == .scratchThat)
+        #expect(DictationCommand.parse("correct that") == .scratchThat)
+        #expect(DictationCommand.parse("fix that") == .scratchThat)
+        #expect(DictationCommand.parse("replace that") == .scratchThat)
+        #expect(DictationCommand.parse("please correct that") == .scratchThat)
     }
 
     @Test("recognizes delete last word")

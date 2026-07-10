@@ -131,10 +131,10 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("stop full stop go on") == "stop. Go on")
         #expect(TextPostProcessor.process("are you there question mark yes") == "are you there? Yes")
         #expect(TextPostProcessor.process("wow exclamation mark great") == "wow! Great")
-        // Multi-clause one breath
+        // Multi-clause one breath (avoid ordinal words first/second)
         #expect(
-            TextPostProcessor.process("first clause period second clause period")
-                == "first clause. Second clause."
+            TextPostProcessor.process("alpha clause period beta clause period")
+                == "alpha clause. Beta clause."
         )
     }
 

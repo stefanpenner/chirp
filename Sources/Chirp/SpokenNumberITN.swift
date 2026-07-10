@@ -1,10 +1,11 @@
-// SpokenNumberITN.swift — Light inverse text normalization for cardinal numbers.
+// SpokenNumberITN.swift — Light inverse text normalization for cardinals + ordinals.
 // Converts multi-token spoken numbers to digits without a full WFST grammar.
 //
 // Safe by design:
 // - Bare "one"/"two"/… alone are NOT converted ("one more thing" stays)
 // - Needs compound (twenty five), teen, magnitude (hundred/thousand), or "point"
-// Dual-tested via TextPostProcessorTests (no TLA — pure String→String).
+// - Ordinals: "first" blocked before of/all/class; "twenty first" → 21st always
+// Dual-tested via SpokenNumberITNTests (no TLA — pure String→String).
 
 import Foundation
 
@@ -29,6 +30,33 @@ enum SpokenNumberITN {
         "million": 1_000_000,
     ]
 
+    /// Single-word ordinals → cardinal value (suffix applied later).
+    private static let ordinals: [String: Int] = [
+        "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+        "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+        "eleventh": 11, "twelfth": 12, "thirteenth": 13, "fourteenth": 14,
+        "fifteenth": 15, "sixteenth": 16, "seventeenth": 17, "eighteenth": 18,
+        "nineteenth": 19,
+        "twentieth": 20, "thirtieth": 30, "fortieth": 40, "fiftieth": 50,
+        "sixtieth": 60, "seventieth": 70, "eightieth": 80, "ninetieth": 90,
+        "hundredth": 100, "thousandth": 1_000,
+    ]
+
+    /// Unit part of compound ordinals: twenty first → 21st
+    private static let ordinalUnits: [String: Int] = [
+        "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+        "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9,
+    ]
+
+    /// After bare first/second/third, do not convert (discourse / idioms).
+    private static let ordinalBlockNext: Set<String> = [
+        "of", "all", "class", "person", "aid", "responder", "lady", "gentleman",
+        "mate", "base", "hand", "light", "name", "draft", "impression",
+        "glance", "place", // "first place" kept as words? actually 1st place is fine
+        "priority", "thing", "things", "time", // "first time" often better as words
+        "step", "steps", "round", // keep conversational
+    ]
+
     private static let numberWords: Set<String> = {
         var s = Set(units.keys)
         s.formUnion(tens.keys)
@@ -38,9 +66,8 @@ enum SpokenNumberITN {
         return s
     }()
 
-    /// Rewrite multi-token spoken numbers in `text` to digit form.
+    /// Rewrite multi-token spoken numbers and safe ordinals in `text`.
     static func apply(_ text: String) -> String {
-        // Tokenize preserving separators (spaces/punct) via simple split on whitespace
         let parts = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         guard !parts.isEmpty else { return text }
 
@@ -54,16 +81,37 @@ enum SpokenNumberITN {
                 i += 1
                 continue
             }
+
+            // Compound ordinal: twenty first → 21st
+            if let t = tens[core], i + 1 < parts.count {
+                let nextCore = normalizeToken(parts[i + 1])
+                if let u = ordinalUnits[nextCore] {
+                    let value = t + u
+                    let trailing = trailingPunctuation(parts[i + 1])
+                    out.append(formatOrdinal(value) + trailing)
+                    i += 2
+                    continue
+                }
+            }
+
+            // Single ordinal word with discourse guard
+            if let ord = ordinals[core] {
+                let nextCore = (i + 1 < parts.count) ? normalizeToken(parts[i + 1]) : ""
+                if shouldConvertOrdinal(value: ord, word: core, next: nextCore) {
+                    let trailing = trailingPunctuation(token)
+                    out.append(formatOrdinal(ord) + trailing)
+                    i += 1
+                    continue
+                }
+            }
+
+            // Cardinal multi-token / teen / decade
             if numberWords.contains(core) {
-                // Collect consecutive number-ish tokens (skip empty/punct-only gaps? keep simple: only space-split tokens)
                 var j = i
                 var words: [String] = []
                 while j < parts.count {
                     let c = normalizeToken(parts[j])
-                    if c.isEmpty {
-                        // empty from double spaces — stop number run
-                        break
-                    }
+                    if c.isEmpty { break }
                     if numberWords.contains(c) {
                         words.append(c)
                         j += 1
@@ -72,7 +120,6 @@ enum SpokenNumberITN {
                     }
                 }
                 if let value = parsePhrase(words), shouldConvert(words) {
-                    // Preserve trailing punctuation from last token of the span
                     let lastRaw = parts[j - 1]
                     let trailing = trailingPunctuation(lastRaw)
                     out.append(formatValue(value) + trailing)
@@ -80,6 +127,7 @@ enum SpokenNumberITN {
                     continue
                 }
             }
+
             out.append(token)
             i += 1
         }
@@ -90,7 +138,6 @@ enum SpokenNumberITN {
     static func parsePhrase(_ words: [String]) -> Double? {
         guard !words.isEmpty else { return nil }
 
-        // Decimal: N point M  (M is digit sequence as fractional)
         if let pointIdx = words.firstIndex(of: "point"), pointIdx > 0 {
             let left = Array(words[..<pointIdx])
             let right = Array(words[(pointIdx + 1)...])
@@ -115,16 +162,43 @@ enum SpokenNumberITN {
         return nil
     }
 
+    /// Format n as 1st / 2nd / 3rd / 4th …
+    static func formatOrdinal(_ n: Int) -> String {
+        let absN = abs(n)
+        let mod100 = absN % 100
+        let suffix: String
+        if mod100 >= 11 && mod100 <= 13 {
+            suffix = "th"
+        } else {
+            switch absN % 10 {
+            case 1: suffix = "st"
+            case 2: suffix = "nd"
+            case 3: suffix = "rd"
+            default: suffix = "th"
+            }
+        }
+        return "\(n)\(suffix)"
+    }
+
     // MARK: - Internals
 
     private static func shouldConvert(_ words: [String]) -> Bool {
         if words.count >= 2 { return true }
         guard let w = words.first else { return false }
-        // Single token: only teens / tens / magnitudes (not bare one–twelve)
         if tens[w] != nil { return true }
         if magnitudes[w] != nil { return true }
-        if let u = units[w], u >= 13 { return true } // teens
+        if let u = units[w], u >= 13 { return true }
         return false
+    }
+
+    private static func shouldConvertOrdinal(value: Int, word: String, next: String) -> Bool {
+        // Always convert multi-decade ordinals (twentieth) and teens ordinals
+        if value >= 10 { return true }
+        // first/second/third… blocked before discourse words
+        if !next.isEmpty, ordinalBlockNext.contains(next) {
+            return false
+        }
+        return true
     }
 
     private static func parseIntegerPhrase(_ words: [String]) -> Int? {
@@ -135,7 +209,7 @@ enum SpokenNumberITN {
 
         for w in words {
             if w == "and" {
-                continue // "one hundred and five"
+                continue
             }
             if let u = units[w] {
                 current += u
@@ -144,7 +218,7 @@ enum SpokenNumberITN {
                 current += t
                 sawNumber = true
             } else if let mag = magnitudes[w] {
-                if current == 0 { current = 1 } // "hundred" alone → 100
+                if current == 0 { current = 1 }
                 current *= mag
                 if mag >= 1000 {
                     total += current
@@ -163,7 +237,6 @@ enum SpokenNumberITN {
         if value.rounded() == value, value >= Double(Int.min), value <= Double(Int.max) {
             return String(Int(value))
         }
-        // Trim trailing zeros for decimals
         var s = String(value)
         if s.contains(".") {
             while s.last == "0" { s.removeLast() }

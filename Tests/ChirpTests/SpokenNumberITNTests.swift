@@ -43,6 +43,22 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.parsePhrase(["one"]) == 1) // parse ok; apply() refuses convert
         #expect(SpokenNumberITN.parsePhrase(["point", "five"]) == nil)
     }
+
+    @Test("ordinals convert with discourse guards")
+    func ordinals() {
+        #expect(SpokenNumberITN.formatOrdinal(1) == "1st")
+        #expect(SpokenNumberITN.formatOrdinal(2) == "2nd")
+        #expect(SpokenNumberITN.formatOrdinal(3) == "3rd")
+        #expect(SpokenNumberITN.formatOrdinal(11) == "11th")
+        #expect(SpokenNumberITN.formatOrdinal(21) == "21st")
+        #expect(SpokenNumberITN.apply("came in first") == "came in 1st")
+        #expect(SpokenNumberITN.apply("twenty first birthday") == "21st birthday")
+        #expect(SpokenNumberITN.apply("the fifteenth floor") == "the 15th floor")
+        // Discourse idioms stay words
+        #expect(SpokenNumberITN.apply("first of all") == "first of all")
+        #expect(SpokenNumberITN.apply("first class cabin") == "first class cabin")
+        #expect(SpokenNumberITN.apply("first time here") == "first time here")
+    }
 }
 
 @Suite("TextPostProcessor number ITN")

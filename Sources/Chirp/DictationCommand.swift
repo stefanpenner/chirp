@@ -91,7 +91,10 @@ enum DictationCommand: Equatable, Sendable {
              "scratch it", "delete it", "undo it",
              "scrap that", // common mis-hear of "scratch"
              "scratch hat", // ASR near-miss
-             "go back", "go back that":
+             "go back", "go back that",
+             // SOTA correction synonyms (Microsoft / Dragon / DictaFlow-style)
+             "correct that", "fix that", "replace that",
+             "correct it", "fix it", "replace it":
             return .scratchThat
         case "delete last word", "scratch last word", "scratch word",
              "delete word", "undo word",
@@ -150,7 +153,7 @@ enum DictationCommand: Equatable, Sendable {
 
     /// User-facing command catalog for Settings / help (say → effect).
     static let helpCatalog: [(say: String, effect: String)] = [
-        ("scratch that", "Undo last phrase (multi-level)"),
+        ("scratch that / correct that / replace that", "Undo last phrase (multi-level)"),
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
         ("clear all", "Wipe session text"),
