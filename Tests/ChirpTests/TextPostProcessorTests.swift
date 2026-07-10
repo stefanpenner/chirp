@@ -335,6 +335,14 @@ struct TextPostProcessorTests {
         // Digit hours (after number ITN or already digits)
         #expect(TextPostProcessor.process("from 3 to 5 pm") == "from 3-5 p.m.")
         #expect(TextPostProcessor.process("3 to 5 p.m.") == "3-5 p.m.")
+        // First side with minutes + shared meridiem
+        #expect(TextPostProcessor.process("three thirty to five pm") == "3:30-5 p.m.")
+        #expect(TextPostProcessor.process("from three thirty to five pm") == "from 3:30-5 p.m.")
+        #expect(TextPostProcessor.process("2 45 to 6 pm") == "2:45-6 p.m.")
+        // Dual meridiem
+        #expect(TextPostProcessor.process("nine am to five pm") == "9 a.m.-5 p.m.")
+        #expect(TextPostProcessor.process("from nine am to five pm") == "from 9 a.m.-5 p.m.")
+        #expect(TextPostProcessor.process("9 a.m. to 5 p.m.") == "9 a.m.-5 p.m.")
         // Bare hour regression (must not break)
         #expect(TextPostProcessor.process("meeting at three pm") == "meeting at 3 p.m.")
         #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")
@@ -545,6 +553,20 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("feet of snow") == "feet of snow")
     }
 
+    @Test("Light ITN height feet-inches composite")
+    func lightITNHeight() {
+        // Compact feet'inches"
+        #expect(TextPostProcessor.process("five foot ten") == "5'10\"")
+        #expect(TextPostProcessor.process("5 feet 10 inches") == "5'10\"")
+        #expect(TextPostProcessor.process("six foot two inches") == "6'2\"")
+        #expect(TextPostProcessor.process("six foot two") == "6'2\"")
+        #expect(TextPostProcessor.process("5 ft 10 in") == "5'10\"")
+        #expect(TextPostProcessor.process("he is five foot eleven tall") == "he is 5'11\" tall")
+        // Bare feet alone still abbreviates (not composite)
+        #expect(TextPostProcessor.process("ten feet") == "10 ft")
+        #expect(TextPostProcessor.process("1 foot") == "1 ft")
+    }
+
     @Test("Light ITN temperature scale after degrees")
     func lightITNTemperature() {
         #expect(TextPostProcessor.process("72 degrees fahrenheit") == "72°F")
@@ -553,6 +575,15 @@ struct TextPostProcessorTests {
             == "about 100°F outside")
         // Plain degrees (no scale) still → °
         #expect(TextPostProcessor.process("90 degrees") == "90°")
+        #expect(TextPostProcessor.process("ninety degrees") == "90°")
+        // Spoken multi-word numbers before degrees (after SpokenNumberITN)
+        #expect(TextPostProcessor.process("seventy two degrees fahrenheit") == "72°F")
+        #expect(TextPostProcessor.process("seventy two degrees celsius") == "72°C")
+        #expect(TextPostProcessor.process("one hundred degrees fahrenheit") == "100°F")
+        // Scale without explicit "degrees"
+        #expect(TextPostProcessor.process("72 fahrenheit") == "72°F")
+        #expect(TextPostProcessor.process("72 celsius") == "72°C")
+        #expect(TextPostProcessor.process("seventy two fahrenheit") == "72°F")
     }
 
     @Test("Does not drop bare function words as whole utterance")

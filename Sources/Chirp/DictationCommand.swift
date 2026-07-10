@@ -12,6 +12,12 @@ enum DictationCommand: Equatable, Sendable {
     case replaceThat
     /// Delete the last whitespace-delimited word.
     case deleteLastWord
+    /// Delete the last sentence (after [.?!] + whitespace).
+    case deleteLastSentence
+    /// Delete the last paragraph (after \n\n or \n).
+    case deleteLastParagraph
+    /// Delete the last line (after final \n).
+    case deleteLastLine
     /// Clear the entire session transcript and typed text.
     case clearAll
     /// Insert a newline (Return key).
@@ -163,6 +169,17 @@ enum DictationCommand: Equatable, Sendable {
              "delete last", "scratch last",
              "remove last word", "remove the last word":
             return .deleteLastWord
+        // Delete sentence/paragraph/line — listed after delete last word so
+        // "delete last word" is not stolen. Do not match "delete that".
+        case "delete last sentence", "delete previous sentence", "delete sentence",
+             "remove last sentence", "remove previous sentence", "remove sentence":
+            return .deleteLastSentence
+        case "delete last paragraph", "delete previous paragraph", "delete paragraph",
+             "remove last paragraph", "remove previous paragraph", "remove paragraph":
+            return .deleteLastParagraph
+        case "delete last line", "delete previous line", "delete line",
+             "remove last line", "remove previous line", "remove line":
+            return .deleteLastLine
         case "clear all", "delete all", "scratch all", "clear everything",
              "start over", "delete everything", "clear it all",
              "wipe all", "wipe everything":
@@ -309,6 +326,9 @@ enum DictationCommand: Equatable, Sendable {
         ("replace that", "Next phrase replaces last (multi-step)"),
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
+        ("delete last sentence / previous sentence", "Remove last sentence"),
+        ("delete last paragraph / previous paragraph", "Remove last paragraph"),
+        ("delete last line / delete line", "Remove last line"),
         ("clear all", "Wipe session text"),
         ("press enter", "Insert Return"),
         ("press tab", "Insert Tab"),

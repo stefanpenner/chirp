@@ -29,6 +29,36 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("undo word.") == .deleteLastWord)
     }
 
+    @Test("recognizes delete last sentence / previous sentence")
+    func deleteLastSentenceCommands() {
+        #expect(DictationCommand.parse("delete last sentence") == .deleteLastSentence)
+        #expect(DictationCommand.parse("delete previous sentence") == .deleteLastSentence)
+        #expect(DictationCommand.parse("delete sentence") == .deleteLastSentence)
+        #expect(DictationCommand.parse("Delete last sentence.") == .deleteLastSentence)
+        #expect(DictationCommand.parse("please delete previous sentence") == .deleteLastSentence)
+        // Must not steal word delete or scratch
+        #expect(DictationCommand.parse("delete last word") == .deleteLastWord)
+        #expect(DictationCommand.parse("delete that") == .scratchThat)
+    }
+
+    @Test("recognizes delete last paragraph / previous paragraph")
+    func deleteLastParagraphCommands() {
+        #expect(DictationCommand.parse("delete last paragraph") == .deleteLastParagraph)
+        #expect(DictationCommand.parse("delete previous paragraph") == .deleteLastParagraph)
+        #expect(DictationCommand.parse("delete paragraph") == .deleteLastParagraph)
+        #expect(DictationCommand.parse("Delete last paragraph.") == .deleteLastParagraph)
+        #expect(DictationCommand.parse("please delete previous paragraph") == .deleteLastParagraph)
+    }
+
+    @Test("recognizes delete last line / previous line")
+    func deleteLastLineCommands() {
+        #expect(DictationCommand.parse("delete last line") == .deleteLastLine)
+        #expect(DictationCommand.parse("delete previous line") == .deleteLastLine)
+        #expect(DictationCommand.parse("delete line") == .deleteLastLine)
+        #expect(DictationCommand.parse("Delete last line.") == .deleteLastLine)
+        #expect(DictationCommand.parse("please delete previous line") == .deleteLastLine)
+    }
+
     @Test("recognizes clear all")
     func clearAll() {
         #expect(DictationCommand.parse("clear all") == .clearAll)
@@ -398,6 +428,9 @@ struct DictationCommandTests {
         #expect(says.contains(where: { $0.lowercased().contains("sentence") }))
         #expect(says.contains(where: { $0.lowercased().contains("paragraph") }))
         #expect(says.contains(where: { $0.lowercased().contains("select last line") || $0.lowercased().contains("select line") }))
+        #expect(says.contains(where: { $0.lowercased().contains("delete last sentence") || $0.lowercased().contains("delete sentence") }))
+        #expect(says.contains(where: { $0.lowercased().contains("delete last paragraph") || $0.lowercased().contains("delete paragraph") }))
+        #expect(says.contains(where: { $0.lowercased().contains("delete last line") || $0.lowercased().contains("delete line") }))
         #expect(says.contains(where: { $0.lowercased().contains("move up") || $0.lowercased().contains("line up") }))
         #expect(says.contains(where: { $0.lowercased().contains("move down") || $0.lowercased().contains("line down") }))
         #expect(says.contains(where: { $0.lowercased().contains("spell that") }))

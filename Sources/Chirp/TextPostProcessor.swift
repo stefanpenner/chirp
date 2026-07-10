@@ -142,8 +142,8 @@ enum TextPostProcessor {
             (#"\s+tilde\b"#, "~"),
             (#"\s+caret\b"#, "^"),
             (#"\s+degree sign\b"#, "°"),
-            // "ninety degrees" after a number/word — require number word or digit before
-            (#"\b(\d+|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|hundred)\s+degrees?\b"#, "$1°"),
+            // Degrees after numbers: handled in applyUnitsITN (after SpokenNumberITN)
+            // so multi-word compounds ("seventy two degrees") become digits first.
             // Common fractions
             (#"\bone half\b"#, "½"),
             (#"\bone quarter\b"#, "¼"),
@@ -479,11 +479,21 @@ enum TextPostProcessor {
         )
     }()
 
-    /// Time range with shared meridiem: "from three to five pm" → "from 3-5 p.m."
+    /// Dual-meridiem range: "nine am to five pm" → "9 a.m.-5 p.m."
+    /// Optional minutes on either side; optional leading "from".
+    private static let timeRangeDualMeridiemPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(from\s+)?(\#(hourToken))(?:\s+(\#(spokenMinuteToken)|\d{1,2}))?\s*([ap])\.?\s*m\.?\s+(?:to|through|until)\s+(\#(hourToken))(?:\s+(\#(spokenMinuteToken)|\d{1,2}))?\s*([ap])\.?\s*m\.?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Shared-meridiem range: "from three to five pm" → "from 3-5 p.m."
+    /// Optional first-side minutes: "three thirty to five pm" → "3:30-5 p.m."
     /// Optional leading "from"; connector to|through|until; spoken or digit hours.
     private static let timeRangePattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(from\s+)?(\#(hourToken))\s+(?:to|through|until)\s+(\#(hourToken))\s*([ap])\.?\s*m\.?\b"#,
+            pattern: #"\b(from\s+)?(\#(hourToken))(?:\s+(\#(spokenMinuteToken)|\d{1,2}))?\s+(?:to|through|until)\s+(\#(hourToken))\s*([ap])\.?\s*m\.?\b"#,
             options: .caseInsensitive
         )
     }()
@@ -545,10 +555,31 @@ enum TextPostProcessor {
         )
     }()
 
-    /// Temperature scale after degree symbol: "72° fahrenheit" → "72°F".
+    /// Height composite: "five foot ten" / "5 feet 10 inches" → 5'10"
+    /// Requires both feet and inches numbers so bare "ten feet" stays for unit abbrev.
+    /// Optional inches unit only consumes following space when present (keeps "  tall").
+    private static let heightCompositePattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + unitsNumberToken
+                + #"\s+(?:foot|feet|ft)\s+"#
+                + unitsNumberToken
+                + #"(?:\s*(?:inches?|in))?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "N degrees" → "N°" (digits or bare spoken unit/decade; compounds already digits).
+    private static let degreesITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + unitsNumberToken + #"\s+degrees?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Temperature scale: "72° fahrenheit" / "72 degrees fahrenheit" / "72 fahrenheit" → "72°F".
     private static let temperatureScalePattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(\d+(?:\.\d+)?)°\s*(fahrenheit|celsius)\b"#,
+            pattern: #"\b(\d+(?:\.\d+)?)(?:°|°?\s*degrees?)?\s*(fahrenheit|celsius)\b"#,
             options: .caseInsensitive
         )
     }()
@@ -571,8 +602,29 @@ enum TextPostProcessor {
     }
 
     private static func applyUnitsITN(_ text: String) -> String {
-        var result = applyUnitAbbreviations(text)
+        // Height before bare foot/feet/inch abbreviations.
+        var result = applyHeightCompositeITN(text)
+        result = applyUnitAbbreviations(result)
+        // Degrees → ° then scale letter (after SpokenNumberITN in light pipeline).
+        result = applyDegreesITN(result)
         result = applyTemperatureScale(result)
+        return result
+    }
+
+    private static func applyHeightCompositeITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = heightCompositePattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let feetRange = Range(match.range(at: 1), in: result),
+                  let inchRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let feet = unitDigits(from: String(result[feetRange]))
+            let inches = unitDigits(from: String(result[inchRange]))
+            result.replaceSubrange(fullRange, with: "\(feet)'\(inches)\"")
+        }
         return result
     }
 
@@ -589,6 +641,21 @@ enum TextPostProcessor {
             let num = unitDigits(from: String(result[numRange]))
             guard let abbr = unitAbbreviation(for: String(result[unitRange])) else { continue }
             result.replaceSubrange(fullRange, with: "\(num) \(abbr)")
+        }
+        return result
+    }
+
+    private static func applyDegreesITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = degreesITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let num = unitDigits(from: String(result[numRange]))
+            result.replaceSubrange(fullRange, with: "\(num)°")
         }
         return result
     }
@@ -620,7 +687,9 @@ enum TextPostProcessor {
     private static func applyTimeITN(_ text: String) -> String {
         var result = applyTimeWithMinutesITN(text)
         result = applyOClockITN(result)
-        // Ranges before bare hour so "three to five pm" is not partially rewritten.
+        // Dual-meridiem ranges before shared-meridiem; both before bare hour
+        // so "nine am to five pm" / "three to five pm" are not partially rewritten.
+        result = applyTimeRangeDualMeridiemITN(result)
         result = applyTimeRangeITN(result)
         result = applyBareHourITN(result)
         return result
@@ -692,6 +761,59 @@ enum TextPostProcessor {
         return result
     }
 
+    /// Format optional clock minutes group; nil if absent or unparseable.
+    private static func optionalMinutes(from match: NSTextCheckingResult, at index: Int, in text: String) -> String? {
+        guard match.numberOfRanges > index,
+              match.range(at: index).location != NSNotFound,
+              let minRange = Range(match.range(at: index), in: text) else { return nil }
+        return formatMinutes(String(text[minRange]))
+    }
+
+    private static func timeRangeFromPrefix(_ match: NSTextCheckingResult) -> String {
+        match.range(at: 1).location != NSNotFound ? "from " : ""
+    }
+
+    private static func formatClockSide(hour: String, minutes: String?) -> String {
+        if let minutes {
+            return "\(hour):\(minutes)"
+        }
+        return hour
+    }
+
+    private static func applyTimeRangeDualMeridiemITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = timeRangeDualMeridiemPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            // Groups: 1=from, 2=h1, 3=m1?, 4=ap1, 5=h2, 6=m2?, 7=ap2
+            guard match.numberOfRanges >= 8,
+                  let hour1Range = Range(match.range(at: 2), in: result),
+                  let ap1Range = Range(match.range(at: 4), in: result),
+                  let hour2Range = Range(match.range(at: 5), in: result),
+                  let ap2Range = Range(match.range(at: 7), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let fromPrefix = timeRangeFromPrefix(match)
+            let h1 = formatHour(String(result[hour1Range]))
+            let h2 = formatHour(String(result[hour2Range]))
+            let m1 = optionalMinutes(from: match, at: 3, in: result)
+            let m2 = optionalMinutes(from: match, at: 6, in: result)
+            // If minutes group was present but unparseable, skip rewrite.
+            if match.range(at: 3).location != NSNotFound && m1 == nil { continue }
+            if match.range(at: 6).location != NSNotFound && m2 == nil { continue }
+            let left = formatClockSide(hour: h1, minutes: m1)
+            let right = formatClockSide(hour: h2, minutes: m2)
+            let mer1 = formatMeridiem(result[ap1Range])
+            let mer2 = formatMeridiem(result[ap2Range])
+            result.replaceSubrange(
+                fullRange,
+                with: "\(fromPrefix)\(left) \(mer1)-\(right) \(mer2)"
+            )
+        }
+        return result
+    }
+
     private static func applyTimeRangeITN(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         let matches = timeRangePattern.matches(in: text, range: range)
@@ -699,21 +821,20 @@ enum TextPostProcessor {
 
         var result = text
         for match in matches.reversed() {
-            guard match.numberOfRanges >= 5,
+            // Groups: 1=from, 2=h1, 3=m1?, 4=h2, 5=ap
+            guard match.numberOfRanges >= 6,
                   let hour1Range = Range(match.range(at: 2), in: result),
-                  let hour2Range = Range(match.range(at: 3), in: result),
-                  let apRange = Range(match.range(at: 4), in: result),
+                  let hour2Range = Range(match.range(at: 4), in: result),
+                  let apRange = Range(match.range(at: 5), in: result),
                   let fullRange = Range(match.range, in: result) else { continue }
-            let fromPrefix: String
-            if match.range(at: 1).location != NSNotFound {
-                fromPrefix = "from "
-            } else {
-                fromPrefix = ""
-            }
+            let fromPrefix = timeRangeFromPrefix(match)
             let h1 = formatHour(String(result[hour1Range]))
             let h2 = formatHour(String(result[hour2Range]))
+            let m1 = optionalMinutes(from: match, at: 3, in: result)
+            if match.range(at: 3).location != NSNotFound && m1 == nil { continue }
+            let left = formatClockSide(hour: h1, minutes: m1)
             let mer = formatMeridiem(result[apRange])
-            result.replaceSubrange(fullRange, with: "\(fromPrefix)\(h1)-\(h2) \(mer)")
+            result.replaceSubrange(fullRange, with: "\(fromPrefix)\(left)-\(h2) \(mer)")
         }
         return result
     }

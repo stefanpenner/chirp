@@ -69,14 +69,20 @@ capitalized clause follows bare text; suppress before proper nouns /
 dict products like GitHub). Light ITN: times (`three pm`→`3 p.m.`,
 `three thirty pm`→`3:30 p.m.`, `three o'clock`→`3:00`, time ranges with shared
 meridiem: `from three to five pm`→`from 3-5 p.m.`, `three to five p.m.`→`3-5 p.m.`,
-`two through four pm` / `one until three a.m.` same form), spoken cardinals
+`two through four pm` / `one until three a.m.` same form; first-side minutes
+`three thirty to five pm`→`3:30-5 p.m.`; dual meridiem `nine am to five pm`→
+`9 a.m.-5 p.m.`), spoken cardinals
 (`one hundred`→`100`, `twenty five`→`25`, `three point five`→`3.5`), ordinals
 (`twenty first`→`21st`, `first of all` stays), dates (`march fifth twenty
 twenty four`→`March 5, 2024`, `tomorrow`/`next monday` → absolute dates,
 weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
 (`20 dollars`→`$20`, `20 euros`→`€20`, `20 yen`→`¥20`, `50 cents`→`50¢`,
 `20 dollars and 50 cents`→`$20.50`; bare `20 pounds`→`20 lb` weight;
-`20 pounds sterling` / `20 quid`→`£20`), street suffixes after a house number
+`20 pounds sterling` / `20 quid`→`£20`), compact units after numbers
+(`5 miles`→`5 mi`, `ten feet`→`10 ft`, `2 inches`→`2 in`), height composite
+(`five foot ten` / `5 feet 10 inches`→`5'10"`; bare `ten feet` still→`10 ft`),
+temperature (`72 degrees fahrenheit` / `seventy two degrees fahrenheit` /
+`72 fahrenheit`→`72°F`; `90 degrees`→`90°`), street suffixes after a house number
 (`35 Lexington avenue`→`35 Lexington Ave.`; `hit the road` stays), suite/room/
 floor/apt/unit/extension (`suite 12`→`Suite 12`, `room 101`→`Room 101`,
 `floor 5`→`Floor 5`, `extension 55` / `ext 55`→`ext. 55`, `apt 4`→`Apt. 4`;
@@ -116,6 +122,9 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **replace that** — next phrase replaces last (text stays until then; HUD “Replace…”)
 - **redo that** — restore last scratched / word-deleted segment
 - **delete last word** — drop trailing word (stack-aware; redo restores)
+- **delete last sentence** / **delete previous sentence** / **delete sentence** — drop trailing sentence (stack-aware; redo restores). Does **not** steal **delete last word** or **delete that**
+- **delete last paragraph** / **delete previous paragraph** / **delete paragraph** — drop trailing paragraph (stack-aware; redo restores)
+- **delete last line** / **delete previous line** / **delete line** — drop trailing line content after last `\n` (stack-aware; redo restores)
 - **caps on / all caps on / no caps on** — sticky casing (`CapsMode`)
 - **caps off** — back to normal casing
 - **spell mode** / **start spelling** / **spell on** — sticky spell mode (`SpellMode`); packs letters / NATO / digits

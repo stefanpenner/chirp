@@ -838,6 +838,105 @@ struct AppStateTests {
         #expect(inserter.deletedCounts.last == 6) // " world"
     }
 
+    @Test("delete last sentence leaves prior sentence and deletes in mock")
+    func deleteLastSentenceCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello. World now"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World now" { break }
+        }
+
+        await mock.setFeedAudioResult(["delete last sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello." { break }
+        }
+
+        #expect(state.transcribedText == "Hello.")
+        #expect(inserter.deletedCounts.last == " World now".count)
+        #expect(!inserter.typedTexts.contains("delete last sentence"))
+    }
+
+    @Test("delete last paragraph leaves prior paragraph and deletes in mock")
+    func deleteLastParagraphCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Para one\n\nPara two"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("Para two") { break }
+        }
+
+        let before = state.transcribedText
+        await mock.setFeedAudioResult(["delete last paragraph"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText != before { break }
+        }
+
+        #expect(state.transcribedText == "Para one\n\n" || state.transcribedText.hasPrefix("Para one"))
+        #expect(state.transcribedText.hasSuffix("Para one") || state.transcribedText == "Para one\n\n")
+        #expect(inserter.deletedCounts.last == "Para two".count)
+        #expect(!inserter.typedTexts.contains("delete last paragraph"))
+    }
+
+    @Test("delete last line leaves prior line and deletes in mock")
+    func deleteLastLineCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Line one\nLine two"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("Line two") { break }
+        }
+
+        let before = state.transcribedText
+        await mock.setFeedAudioResult(["delete last line"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText != before { break }
+        }
+
+        #expect(state.transcribedText == "Line one\n" || state.transcribedText.hasPrefix("Line one"))
+        #expect(inserter.deletedCounts.last == "Line two".count)
+        #expect(!inserter.typedTexts.contains("delete last line"))
+    }
+
     @Test("select that selects last stack delta without changing buffer")
     func selectThatCommand() async throws {
         let mock = MockTranscriber()

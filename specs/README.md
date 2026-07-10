@@ -31,6 +31,8 @@ tlc specs/PipelineRebuild.tla
 | `DuplicateCommand` | duplicate that: clipboard = lastDelta; buffer grows by lastDelta | `DictationCommand.duplicateThat` + `EditStack.lastDelta` |
 | `FormatCommands` | format path collapses selection so next type does not replace | `AppState.performFormatThat` + clearSelection |
 | `TranscriptSelection` | last-sentence / last-paragraph / last-line lengths ≤ total buffer | `TranscriptSelection` + select last sentence/para + line nav |
+| `DeleteSegment` | delete last sentence/para/line: totalLen shrinks by lastSegLen | last-segment delete length dual (`TranscriptSelection` + edit path) |
+| `PageScroll` | page up/down leaves session bufferLen unchanged | `DictationCommand.pageUp/pageDown` + `performScrollPage` |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |
 
@@ -54,6 +56,8 @@ tlc specs/EditCommands.tla
 tlc specs/EditStack.tla
 tlc specs/FormatCommands.tla
 tlc specs/TranscriptSelection.tla
+tlc specs/DeleteSegment.tla
+tlc specs/PageScroll.tla
 tlc specs/ListCounter.tla
 tlc specs/PeekCommit.tla
 tlc specs/PipelineRebuild.tla
@@ -77,6 +81,8 @@ tlc -c EditCommands_bait.cfg specs/EditCommands.tla
 tlc -c EditStack_bait.cfg specs/EditStack.tla
 tlc -c FormatCommands_bait.cfg specs/FormatCommands.tla
 tlc -c TranscriptSelection_bait.cfg specs/TranscriptSelection.tla
+tlc -c DeleteSegment_bait.cfg specs/DeleteSegment.tla
+tlc -c PageScroll_bait.cfg specs/PageScroll.tla
 tlc -c ListCounter_bait.cfg specs/ListCounter.tla
 tlc -c PeekCommit_bait.cfg specs/PeekCommit.tla
 tlc -c PipelineRebuild_bait.cfg specs/PipelineRebuild.tla
@@ -85,6 +91,7 @@ tlc -c SegmentJoin_bait.cfg specs/SegmentJoin.tla
 tlc -c SessionMachine_bait.cfg specs/SessionMachine.tla
 tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 ```
+
 
 | Bait config | Weakened claim | Real property negated |
 |-------------|----------------|------------------------|
@@ -102,6 +109,8 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | `EditStack_bait` | typed length may diverge from text | `TypedMatchesText` |
 | `FormatCommands_bait` | format may leave selection active | `FormatImpliesCollapsed` |
 | `TranscriptSelection_bait` | last segment may exceed total | `LastWithinTotal` |
+| `DeleteSegment_bait` | after delete total may ≠ old − lastSeg | `DeleteSubtracts` |
+| `PageScroll_bait` | scroll may change bufferLen | `ScrollPreservesBuffer` |
 | `ListCounter_bait` | end/reset may leave n ≠ 1 | `EndOrResetYieldsOne` |
 | `PeekCommit_bait` | speculative text may appear while idle | `SpecOnlyWhileRecording` |
 | `PipelineRebuild_bait` | type bounds may fail | `TypeOK` |

@@ -635,6 +635,24 @@ public final class AppState {
                     case .deleteLastWord:
                         self.awaitingReplace = false
                         self.performDeleteLastWord(typesIncrementally: false)
+                    case .deleteLastSentence:
+                        self.awaitingReplace = false
+                        self.performDeleteTrailingSelection(
+                            selected: TranscriptSelection.lastSentence(self.transcribedText),
+                            typesIncrementally: false
+                        )
+                    case .deleteLastParagraph:
+                        self.awaitingReplace = false
+                        self.performDeleteTrailingSelection(
+                            selected: TranscriptSelection.lastParagraph(self.transcribedText),
+                            typesIncrementally: false
+                        )
+                    case .deleteLastLine:
+                        self.awaitingReplace = false
+                        self.performDeleteTrailingSelection(
+                            selected: TranscriptSelection.lastLine(self.transcribedText),
+                            typesIncrementally: false
+                        )
                     case .clearAll:
                         self.awaitingReplace = false
                         self.performClearAll(typesIncrementally: false)
@@ -774,6 +792,24 @@ public final class AppState {
         case .deleteLastWord:
             awaitingReplace = false
             performDeleteLastWord(typesIncrementally: typesIncrementally)
+        case .deleteLastSentence:
+            awaitingReplace = false
+            performDeleteTrailingSelection(
+                selected: TranscriptSelection.lastSentence(transcribedText),
+                typesIncrementally: typesIncrementally
+            )
+        case .deleteLastParagraph:
+            awaitingReplace = false
+            performDeleteTrailingSelection(
+                selected: TranscriptSelection.lastParagraph(transcribedText),
+                typesIncrementally: typesIncrementally
+            )
+        case .deleteLastLine:
+            awaitingReplace = false
+            performDeleteTrailingSelection(
+                selected: TranscriptSelection.lastLine(transcribedText),
+                typesIncrementally: typesIncrementally
+            )
         case .clearAll:
             awaitingReplace = false
             performClearAll(typesIncrementally: typesIncrementally)
@@ -1092,6 +1128,34 @@ public final class AppState {
         transcribedText += delta
         if typesIncrementally {
             textInserter.typeText(delta)
+        }
+        lastCommittedNormalized = ""
+    }
+
+    /// Delete a trailing selection (sentence / paragraph / line) from the
+    /// session transcript. `selected` must be a suffix of `transcribedText`
+    /// (as returned by `TranscriptSelection`); if not exact, drop only when
+    /// the buffer ends with that suffix after best-effort match.
+    /// Stack-aware via `dropTrailingSuffix` so "redo that" can restore.
+    private func performDeleteTrailingSelection(selected: String, typesIncrementally: Bool) {
+        guard !selected.isEmpty else { return }
+
+        let removed: String
+        if transcribedText.hasSuffix(selected) {
+            removed = selected
+        } else if let range = transcribedText.range(of: selected, options: .backwards),
+                  range.upperBound == transcribedText.endIndex {
+            removed = String(transcribedText[range])
+        } else {
+            return
+        }
+
+        transcribedText = String(transcribedText.dropLast(removed.count))
+        if typesIncrementally {
+            textInserter.deleteBackward(count: removed.count)
+        }
+        if !editStack.dropTrailingSuffix(removed) {
+            editStack.clear()
         }
         lastCommittedNormalized = ""
     }
