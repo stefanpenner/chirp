@@ -36,6 +36,9 @@ struct AudioCorpusPipelineTests {
     private static let maxMedianWER: Double = 0.05
     /// No single phrase may be a near-total miss on clean audio.
     private static let maxPerPhraseWER: Double = 0.35
+    /// Real-time factor budget (decode_time / audio_duration). Offline Parakeet
+    /// on CPU is typically RTF ≈ 0.02–0.05; fail if we regress above 0.5.
+    private static let maxMeanRTF: Double = 0.50
 
     // MARK: - Model discovery (shared logic with TranscriberIntegrationTests)
 
@@ -217,6 +220,8 @@ struct AudioCorpusPipelineTests {
         }
 
         var pairs: [(id: String, reference: String, hypothesis: String)] = []
+        var rtfSum = 0.0
+        var rtfCount = 0
 
         for item in Self.corpus {
             let speech: [Float]
@@ -237,6 +242,8 @@ struct AudioCorpusPipelineTests {
             pairs.append((id: item.id, reference: item.text, hypothesis: hyp))
             let audioSec = Double(samples.count) / Double(DecodePolicy.sampleRate)
             let rtf = audioSec > 0 ? elapsed / audioSec : 0
+            rtfSum += rtf
+            rtfCount += 1
             print(String(format:
                 "corpus[%@] ref=\"%@\" hyp=\"%@\" samples=%d audio=%.2fs decode=%.2fs RTF=%.2f",
                 item.id, item.text, hyp, samples.count, audioSec, elapsed, rtf))
@@ -246,6 +253,8 @@ struct AudioCorpusPipelineTests {
 
         let ranking = TranscriptionScoring.rank(pairs)
         print(ranking.leaderboard)
+        let meanRTF = rtfCount > 0 ? rtfSum / Double(rtfCount) : 0
+        print(String(format: "mean RTF=%.3f (budget ≤ %.2f)", meanRTF, Self.maxMeanRTF))
 
         #expect(
             ranking.meanMajorWER <= Self.maxMeanMajorWER,
@@ -258,6 +267,10 @@ struct AudioCorpusPipelineTests {
         #expect(
             ranking.medianWER <= Self.maxMedianWER,
             "median WER \(ranking.medianWER) exceeds budget \(Self.maxMedianWER)\n\(ranking.leaderboard)"
+        )
+        #expect(
+            meanRTF <= Self.maxMeanRTF,
+            "mean RTF \(meanRTF) exceeds budget \(Self.maxMeanRTF)"
         )
         for s in ranking.scores {
             #expect(
@@ -465,5 +478,10 @@ struct AudioCorpusPipelineTests {
         let norm = TranscriptionScoring.normalize(hyp)
         #expect(norm.contains("hello") || norm.contains("world"), "missing first phrase in \"\(hyp)\"")
         #expect(norm.contains("note") || norm.contains("create"), "missing second phrase in \"\(hyp)\"")
+        // SegmentJoiner should insert a sentence break between capitalized utterances
+        #expect(
+            hyp.contains(". ") || hyp.contains("."),
+            "expected sentence boundary between multi-utterance phrases: \"\(hyp)\""
+        )
     }
 }

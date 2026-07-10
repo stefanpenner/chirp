@@ -142,6 +142,7 @@ swift_test(
     srcs = [
         "Tests/ChirpTests/TextPostProcessorTests.swift",
         "Tests/ChirpTests/TextInserterTests.swift",
+        "Tests/ChirpTests/SegmentJoinerTests.swift",
         "Tests/ChirpTests/TranscriptionScoring.swift",
         "Tests/ChirpTests/TranscriptionScoringTests.swift",
         "Tests/ChirpTests/Mocks.swift",

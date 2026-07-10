@@ -124,6 +124,13 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("the period is over") == "the period is over")
     }
 
+    @Test("Spoken new line and paragraph commands")
+    func spokenNewlines() {
+        #expect(TextPostProcessor.process("Hello new line world") == "Hello\nworld")
+        #expect(TextPostProcessor.process("One new paragraph Two") == "One\n\nTwo")
+        #expect(TextPostProcessor.process("line newline break") == "line\nbreak")
+    }
+
     @Test("Light ITN formats spoken times")
     func lightITN() {
         #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")

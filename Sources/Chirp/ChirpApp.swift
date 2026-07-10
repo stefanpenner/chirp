@@ -571,11 +571,10 @@ public final class AppState {
                     guard !text.isEmpty else { continue }
                     self.commitGen += 1
                     self.speculativeText = ""
-                    let needsSpace = !self.transcribedText.isEmpty
-                    if needsSpace { self.transcribedText += " " }
-                    self.transcribedText += text
+                    let joined = SegmentJoiner.append(existing: self.transcribedText, next: text)
+                    self.transcribedText = joined.full
                     if typesIncrementally {
-                        self.textInserter.typeText(needsSpace ? " \(text)" : text)
+                        self.textInserter.typeText(joined.delta)
                     }
                 }
             }
@@ -594,10 +593,9 @@ public final class AppState {
             self.speculativeText = ""
             if !remaining.isEmpty {
                 if typesIncrementally {
-                    let needsSpace = !self.transcribedText.isEmpty
-                    if needsSpace { self.transcribedText += " " }
-                    self.transcribedText += remaining
-                    self.textInserter.typeText(needsSpace ? " \(remaining)" : remaining)
+                    let joined = SegmentJoiner.append(existing: self.transcribedText, next: remaining)
+                    self.transcribedText = joined.full
+                    self.textInserter.typeText(joined.delta)
                 } else {
                     // Non-incremental: pipeline returns full processed text on flush
                     self.transcribedText = remaining

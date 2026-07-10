@@ -15,6 +15,7 @@ tlc specs/PipelineRebuild.tla
 | `TranscriberBuffer` | pendingAudio is decode source; empty commit keeps buffer | `DecodePolicy` |
 | `PeekCommit` | stale peeks discarded via commitGen | `AppState` peek loop |
 | `PipelineRebuild` | defer pipeline rebuild mid-session | `PipelineRebuildDecision` |
+| `SegmentJoin` | multi-utterance separators (space vs ". ") | `SegmentJoiner` |
 
 Bait configs (`*_bait.cfg`) must **fail** — they prove the real invariants are checked.
 
