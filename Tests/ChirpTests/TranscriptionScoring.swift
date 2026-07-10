@@ -86,8 +86,11 @@ enum TranscriptionScoring {
     /// map common spoken numbers / am-pm variants so TTS vs ASR ITN does not inflate WER.
     static func normalize(_ text: String) -> String {
         let lowered = text.lowercased()
+        // Keep $ / % so ITN forms ("$50", "20%") score equal to spoken forms.
         let stripped = lowered.unicodeScalars.map { scalar -> Character in
-            if CharacterSet.alphanumerics.contains(scalar) || scalar == " " || scalar == "'" {
+            if CharacterSet.alphanumerics.contains(scalar)
+                || scalar == " " || scalar == "'"
+                || scalar == "$" || scalar == "%" {
                 return Character(scalar)
             }
             return " "
@@ -101,10 +104,13 @@ enum TranscriptionScoring {
             "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
             "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
             "ten": "10", "eleven": "11", "twelve": "12",
+            "twenty": "20", "thirty": "30", "forty": "40", "fifty": "50",
+            "hundred": "100",
         ]
         tokens = tokens.map { numberWords[$0] ?? $0 }
 
         // "p.m." / "a.m." become ["p","m"] / ["a","m"] after punctuation→space.
+        // Also fold ITN forms: "20 percent" ↔ "20%", "$50" ↔ "50 dollars".
         var merged: [String] = []
         var i = 0
         while i < tokens.count {
@@ -114,12 +120,30 @@ enum TranscriptionScoring {
             } else if i + 1 < tokens.count, tokens[i] == "a", tokens[i + 1] == "m" {
                 merged.append("am")
                 i += 2
+            } else if i + 1 < tokens.count,
+                      tokens[i].allSatisfy(\.isNumber),
+                      tokens[i + 1] == "percent" || tokens[i + 1] == "%" {
+                merged.append(tokens[i] + "%")
+                i += 2
+            } else if i + 1 < tokens.count,
+                      tokens[i].allSatisfy(\.isNumber),
+                      tokens[i + 1] == "dollars" || tokens[i + 1] == "dollar" {
+                merged.append("$" + tokens[i])
+                i += 2
             } else {
                 let t = tokens[i]
                 switch t {
                 case "a.m", "am": merged.append("am")
                 case "p.m", "pm": merged.append("pm")
-                default: merged.append(t)
+                default:
+                    // "$50" already one token after alphanumerics keep; "%" suffix forms
+                    if t.hasSuffix("%"), t.dropLast().allSatisfy(\.isNumber) {
+                        merged.append(t)
+                    } else if t.hasPrefix("$"), t.dropFirst().allSatisfy(\.isNumber) {
+                        merged.append(t)
+                    } else {
+                        merged.append(t)
+                    }
                 }
                 i += 1
             }

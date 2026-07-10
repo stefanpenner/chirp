@@ -4,7 +4,8 @@ import Testing
 import Foundation
 @testable import Chirp
 
-@Suite("SpokenDateITN")
+// Serialized: static nowProvider / timeZoneProvider are process-global.
+@Suite("SpokenDateITN", .serialized)
 struct SpokenDateITNTests {
 
     @Test("month and day")

@@ -177,6 +177,7 @@ enum DictationCommand: Equatable, Sendable {
         ("new line / new paragraph", "Line breaks"),
         ("bullet point / next bullet", "Bulleted list item"),
         ("number one / next number", "Numbered list item"),
+        ("end list / stop numbering", "Reset list counter"),
         ("dot com / at sign", "Domain & email bits"),
     ]
 }

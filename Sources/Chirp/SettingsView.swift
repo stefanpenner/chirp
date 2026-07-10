@@ -126,6 +126,30 @@ struct AudioSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Auto-Formatting") {
+                Toggle("Expand relative dates", isOn: Binding(
+                    get: { FormatSettings.expandRelativeDates },
+                    set: { FormatSettings.expandRelativeDates = $0 }
+                ))
+                Text("“tomorrow”, “next Monday” → calendar dates in your timezone.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Numbered lists", isOn: Binding(
+                    get: { FormatSettings.expandNumberedLists },
+                    set: { FormatSettings.expandNumberedLists = $0 }
+                ))
+                Text("“number one” / “next number” / “end list” auto-numbering.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Bullet lists", isOn: Binding(
+                    get: { FormatSettings.expandBullets },
+                    set: { FormatSettings.expandBullets = $0 }
+                ))
+                Text("“bullet point” / “next bullet” → • items.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Dictation Dictionary") {
                 DictationDictionaryEditor()
                 Text("Replace misheard phrases (e.g. “get hub” → “GitHub”). Built-in tech terms included.")

@@ -42,6 +42,11 @@ Coverage:
 - **Continuous stream** — mid-session VAD commits, full-session rank
 - **Multi-voice** — same phrase across system voices
 - **Ranked report** — compact leaderboard for CI logs
+- **ITN numbers** — TTS → ASR → light ITN (times, %, $, cardinals); ranked WER + digit hits
+- **ITN dates** — month/day/weekday/relative dates with pinned clock; ranked
+- **ITN lists** — numbered + bullet voice commands; marker hit rate + ranked content
+- **AppState ITN E2E** — full pipeline typed text for ITN phrases
+- **Master ranked report** — clean + ITN phrases in one leaderboard
 
 Scoring helpers live in `Tests/ChirpTests/TranscriptionScoring.swift`
 (always-on unit tests via `//:TextTests`).
@@ -63,10 +68,12 @@ dict products like GitHub). Light ITN: times, spoken cardinals (`one hundred`→
 `Monday`, bare `may I` stays), `50 percent`→`50%`, `20 dollars`→`$20`.
 Bare `one`/`two` stay words. Spoken symbols: `slash`→`/`, `asterisk`→`*`,
 `underscore`→`_`, fractions `one half`→`½`. Lists: `bullet point` /
-`next bullet` → `•`; `number one` / `next number` → `1.` / `2.`
-(session counter resets each recording). Relative dates use the local
-timezone. Spoken terminal punct works mid-segment
-(`hello period next` → `hello. Next`) with content-word guards.
+`next bullet` → `•`; `number one` / `next number` → `1.` / `2.`;
+`end list` resets numbering. Session list counter resets each recording.
+Relative dates use the local timezone. Settings → Audio → Auto-Formatting
+toggles relative dates, numbered lists, and bullets. Spoken terminal punct
+works mid-segment (`hello period next` → `hello. Next`) with content-word
+guards.
 Spoken `new line` / `new paragraph` rewrite in `TextPostProcessor`;
 newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
 (built-in tech phrases + UserDefaults `chirp.dictationDictionary`).

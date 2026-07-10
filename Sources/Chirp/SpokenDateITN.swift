@@ -91,8 +91,9 @@ enum SpokenDateITN {
                 }
             }
 
-            // next/this/last + weekday → absolute date
-            if (core == "next" || core == "this" || core == "last"),
+            // next/this/last + weekday → absolute date (optional)
+            if FormatSettings.expandRelativeDates,
+               (core == "next" || core == "this" || core == "last"),
                i + 1 < parts.count,
                let wd = weekdayNumbers[normalize(parts[i + 1])] {
                 let date = relativeWeekday(wd, mode: core, from: now)
@@ -102,8 +103,9 @@ enum SpokenDateITN {
                 continue
             }
 
-            // today / tomorrow / yesterday → absolute date
-            if core == "today" || core == "tomorrow" || core == "yesterday" {
+            // today / tomorrow / yesterday → absolute date (optional)
+            if FormatSettings.expandRelativeDates,
+               core == "today" || core == "tomorrow" || core == "yesterday" {
                 let date = relativeDay(core, from: now)
                 let trailing = trailingPunct(parts[i])
                 out.append(formatAbsoluteDate(date) + trailing)

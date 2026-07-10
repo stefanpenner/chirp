@@ -9,7 +9,7 @@ EXTENDS Integers, TLC
 
 VARIABLES
   n,         \* next list index to emit (always >= 1)
-  lastOp     \* "none" | "next" | "set" | "reset"
+  lastOp     \* "none" | "next" | "set" | "end" | "reset"
 
 vars == <<n, lastOp>>
 
@@ -17,7 +17,7 @@ MaxN == 12
 
 TypeOK ==
   /\ n \in 1..MaxN
-  /\ lastOp \in {"none", "next", "set", "reset"}
+  /\ lastOp \in {"none", "next", "set", "end", "reset"}
 
 Init ==
   /\ n = 1
@@ -36,6 +36,11 @@ SetNumber(k) ==
   /\ n' = k + 1
   /\ lastOp' = "set"
 
+\* Spoken "end list" / "stop numbering" mid-session
+EndList ==
+  /\ n' = 1
+  /\ lastOp' = "end"
+
 \* New recording session
 Reset ==
   /\ n' = 1
@@ -44,6 +49,7 @@ Reset ==
 Next ==
   \/ NextNumber
   \/ \E k \in 1..(MaxN - 1): SetNumber(k)
+  \/ EndList
   \/ Reset
 
 Spec == Init /\ [][Next]_vars
@@ -52,6 +58,6 @@ Spec == Init /\ [][Next]_vars
 Inv ==
   /\ TypeOK
   /\ n >= 1
-  /\ lastOp = "reset" => n = 1
+  /\ lastOp \in {"reset", "end"} => n = 1
 
 ====

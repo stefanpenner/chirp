@@ -141,6 +141,10 @@ struct AudioCorpusPipelineTests {
             return ("", 0)
         }
 
+        // Fresh list counter per utterance (matches new recording).
+        // Do not reset FormatSettings here — callers pin ITN toggles for the suite.
+        TextPostProcessor.resetSessionFormatState()
+
         let t0 = Date()
         let chunkSize = DecodePolicy.streamChunkSamples
         var segments: [String] = []
@@ -154,9 +158,67 @@ struct AudioCorpusPipelineTests {
         if !flushed.isEmpty { segments.append(flushed) }
         let elapsed = Date().timeIntervalSince(t0)
 
-        // Apply same light post-process the product uses
-        let raw = segments.joined(separator: " ")
-        return (TextPostProcessor.process(raw), elapsed)
+        // Apply same light post-process the product uses (per segment, then join).
+        // Process segments individually so list counters advance like live sessions.
+        var processed: [String] = []
+        for seg in segments {
+            let p = TextPostProcessor.process(seg)
+            if !p.isEmpty { processed.append(p) }
+        }
+        let hyp = processed.joined(separator: " ")
+        return (hyp, elapsed)
+    }
+
+    /// Pick a working system TTS voice (US English preferred).
+    private static func workingVoice() -> String? {
+        let voices: [String?] = ["Samantha", "Alex", "Daniel", nil]
+        for v in voices {
+            do {
+                _ = try SpeechAudioGenerator.synthesize(text: "test", voice: v)
+                return v
+            } catch {
+                continue
+            }
+        }
+        return nil
+    }
+
+    /// Generate speech → trailing silence → transcribe → scored tuple + timing.
+    private static func runPhrase(
+        id: String,
+        spoken: String,
+        reference: String,
+        paths: ModelPaths,
+        voice: String?
+    ) async throws -> (
+        id: String,
+        reference: String,
+        hypothesis: String,
+        elapsed: TimeInterval,
+        sampleCount: Int
+    )? {
+        let speech: [Float]
+        do {
+            speech = try SpeechAudioGenerator.synthesize(text: spoken, voice: voice)
+        } catch {
+            Issue.record("TTS failed for \(id): \(error)")
+            return nil
+        }
+        let samples = SpeechAudioGenerator.withTrailingSilence(speech, seconds: 0.8)
+        #expect(samples.count > 1600, "Generated audio too short for \(id)")
+        let (hyp, elapsed) = try await transcribe(samples: samples, paths: paths)
+        let audioSec = Double(samples.count) / Double(DecodePolicy.sampleRate)
+        let rtf = audioSec > 0 ? elapsed / audioSec : 0
+        print(String(format:
+            "phrase[%@] spoken=\"%@\" ref=\"%@\" hyp=\"%@\" samples=%d audio=%.2fs decode=%.2fs RTF=%.2f",
+            id, spoken, reference, hyp, samples.count, audioSec, elapsed, rtf))
+        return (
+            id: id,
+            reference: reference,
+            hypothesis: hyp,
+            elapsed: elapsed,
+            sampleCount: samples.count
+        )
     }
 
     /// Full AppState path: MockAudioRecorder → pipeline → typed text.
@@ -221,47 +283,28 @@ struct AudioCorpusPipelineTests {
             return
         }
 
-        // Prefer a clear US English voice; fall back if missing.
-        let voices = ["Samantha", "Alex", "Daniel", nil]
-        var workingVoice: String? = "Samantha"
-        for v in voices {
-            do {
-                _ = try SpeechAudioGenerator.synthesize(text: "test", voice: v)
-                workingVoice = v
-                break
-            } catch {
-                continue
-            }
-        }
+        // Clean corpus scores ASR content words; ITN date expansion is ranked separately.
+        FormatSettings.testExpandRelativeDates = false
+        FormatSettings.testExpandNumberedLists = false
+        FormatSettings.testExpandBullets = false
+        defer { FormatSettings.resetTestOverrides() }
+
+        let workingVoice = Self.workingVoice()
 
         var pairs: [(id: String, reference: String, hypothesis: String)] = []
         var rtfSum = 0.0
         var rtfCount = 0
 
         for item in Self.corpus {
-            let speech: [Float]
-            do {
-                speech = try SpeechAudioGenerator.synthesize(
-                    text: item.text,
-                    voice: workingVoice
-                )
-            } catch {
-                Issue.record("TTS failed for \(item.id): \(error)")
-                continue
-            }
-            // Trailing silence so VAD can close the segment on flush
-            let samples = SpeechAudioGenerator.withTrailingSilence(speech, seconds: 0.8)
-            #expect(samples.count > 1600, "Generated audio too short for \(item.id)")
-
-            let (hyp, elapsed) = try await Self.transcribe(samples: samples, paths: paths)
-            pairs.append((id: item.id, reference: item.text, hypothesis: hyp))
-            let audioSec = Double(samples.count) / Double(DecodePolicy.sampleRate)
-            let rtf = audioSec > 0 ? elapsed / audioSec : 0
+            guard let run = try await Self.runPhrase(
+                id: item.id, spoken: item.text, reference: item.text,
+                paths: paths, voice: workingVoice
+            ) else { continue }
+            pairs.append((id: run.id, reference: run.reference, hypothesis: run.hypothesis))
+            let audioSec = Double(run.sampleCount) / Double(DecodePolicy.sampleRate)
+            let rtf = audioSec > 0 ? run.elapsed / audioSec : 0
             rtfSum += rtf
             rtfCount += 1
-            print(String(format:
-                "corpus[%@] ref=\"%@\" hyp=\"%@\" samples=%d audio=%.2fs decode=%.2fs RTF=%.2f",
-                item.id, item.text, hyp, samples.count, audioSec, elapsed, rtf))
         }
 
         #expect(pairs.count >= 5, "Too few corpus items transcribed (TTS or model failure)")
@@ -376,6 +419,10 @@ struct AudioCorpusPipelineTests {
             print("SKIP: model not found")
             return
         }
+
+        // Score ASR under noise; leave relative-date ITN off so "tomorrow" stays a word.
+        FormatSettings.testExpandRelativeDates = false
+        defer { FormatSettings.resetTestOverrides() }
 
         // Broader subset of clean corpus under additive noise (15 dB SNR).
         let phrases = [
@@ -757,5 +804,284 @@ struct AudioCorpusPipelineTests {
         for s in ranking.scores {
             #expect(!s.hypothesis.isEmpty, "empty hyp for \(s.id)")
         }
+    }
+
+    // MARK: - ITN audio corpus (generate → pipe → post-process → rank)
+
+    /// Spoken numbers / times / money through real ASR + light ITN.
+    /// Reference is the *normalized product* form we expect after post-process.
+    @Test("ITN numbers audio ranks under WER budget")
+    func rankedITNNumbers() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+        let voice = Self.workingVoice()
+
+        // (id, TTS spoken form, expected after ASR + ITN — content words for WER)
+        let items: [(id: String, spoken: String, reference: String)] = [
+            ("itn_time", "meeting at three pm", "meeting at 3 pm"),
+            ("itn_percent", "increase by fifty percent", "increase by 50 percent"),
+            ("itn_money", "costs twenty dollars", "costs 20 dollars"),
+            ("itn_cardinal", "send one hundred emails", "send 100 emails"),
+            ("itn_decimal", "about three point five miles", "about 3.5 miles"),
+        ]
+
+        var pairs: [(id: String, reference: String, hypothesis: String)] = []
+        for item in items {
+            guard let run = try await Self.runPhrase(
+                id: item.id, spoken: item.spoken, reference: item.reference,
+                paths: paths, voice: voice
+            ) else { continue }
+            pairs.append((id: run.id, reference: run.reference, hypothesis: run.hypothesis))
+        }
+
+        #expect(pairs.count >= 3, "too few ITN number phrases transcribed")
+        let ranking = TranscriptionScoring.rank(pairs)
+        print("\n========== ITN NUMBERS RANKED ==========")
+        print(ranking.leaderboard)
+        print("========================================\n")
+
+        // Clean TTS + ITN: allow ASR variance; content should mostly land.
+        #expect(
+            ranking.meanMajorWER <= 0.35,
+            "ITN numbers mean majorWER \(ranking.meanMajorWER) exceeds 0.35\n\(ranking.leaderboard)"
+        )
+        // At least one phrase should contain a digit (ITN or ASR digit form).
+        let digitHits = ranking.scores.filter { score in
+            score.hypothesis.rangeOfCharacter(from: .decimalDigits) != nil
+        }.count
+        #expect(
+            digitHits >= 1,
+            "expected at least one ITN digit rewrite in hypotheses"
+        )
+    }
+
+    /// Spoken dates through real ASR + date ITN.
+    @Test("ITN dates audio ranks under WER budget")
+    func rankedITNDates() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+        let voice = Self.workingVoice()
+
+        // Pin relative dates so scoring is deterministic against absolute forms.
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 7; comps.day = 8; comps.hour = 12
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let pinned = cal.date(from: comps)!
+        SpokenDateITN.nowProvider = { pinned }
+        SpokenDateITN.timeZoneProvider = { TimeZone(identifier: "UTC")! }
+        FormatSettings.testExpandRelativeDates = true
+        defer {
+            SpokenDateITN.resetClock()
+            SpokenDateITN.resetTimeZone()
+            FormatSettings.resetTestOverrides()
+        }
+
+        let items: [(id: String, spoken: String, reference: String)] = [
+            ("itn_month_day", "schedule for march fifth", "schedule for March 5"),
+            ("itn_weekday", "meet on monday please", "meet on Monday please"),
+            ("itn_tomorrow", "due tomorrow morning", "due July 9 2026 morning"),
+            ("itn_full_date", "on july fifteenth twenty twenty four", "on July 15 2024"),
+        ]
+
+        var pairs: [(id: String, reference: String, hypothesis: String)] = []
+        for item in items {
+            guard let run = try await Self.runPhrase(
+                id: item.id, spoken: item.spoken, reference: item.reference,
+                paths: paths, voice: voice
+            ) else { continue }
+            pairs.append((id: run.id, reference: run.reference, hypothesis: run.hypothesis))
+        }
+
+        #expect(pairs.count >= 2, "too few ITN date phrases transcribed")
+        let ranking = TranscriptionScoring.rank(pairs)
+        print("\n========== ITN DATES RANKED ==========")
+        print(ranking.leaderboard)
+        print("======================================\n")
+
+        #expect(
+            ranking.meanMajorWER <= 0.45,
+            "ITN dates mean majorWER \(ranking.meanMajorWER) exceeds 0.45\n\(ranking.leaderboard)"
+        )
+        // Month-name or weekday capitalization / rewrite smoke
+        let anyDateShape = ranking.scores.contains { s in
+            let h = s.hypothesis
+            return h.contains("March") || h.contains("Monday") || h.contains("July")
+                || h.contains("2024") || h.contains("2026")
+                || TranscriptionScoring.normalize(h).contains("march")
+                || TranscriptionScoring.normalize(h).contains("monday")
+        }
+        #expect(anyDateShape, "expected at least one date-like rewrite in hyp set")
+    }
+
+    /// Spoken list commands through real ASR + list ITN; rank content + check markers.
+    @Test("ITN lists audio ranks under WER budget")
+    func rankedITNLists() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+        let voice = Self.workingVoice()
+        FormatSettings.testExpandNumberedLists = true
+        FormatSettings.testExpandBullets = true
+        defer { FormatSettings.resetTestOverrides() }
+
+        // Reference is content after list rewrite (markers stripped by normalize for WER).
+        let items: [(id: String, spoken: String, reference: String, wantMarker: String)] = [
+            ("list_num1", "number one milk", "1 milk", "1."),
+            ("list_next", "number one apples next number oranges", "1 apples 2 oranges", "2."),
+            ("list_bullet", "bullet point first idea next bullet second idea", "first idea second idea", "•"),
+        ]
+
+        var pairs: [(id: String, reference: String, hypothesis: String)] = []
+        var markerHits = 0
+        for item in items {
+            guard let run = try await Self.runPhrase(
+                id: item.id, spoken: item.spoken, reference: item.reference,
+                paths: paths, voice: voice
+            ) else { continue }
+            pairs.append((id: run.id, reference: run.reference, hypothesis: run.hypothesis))
+            if run.hypothesis.contains(item.wantMarker) { markerHits += 1 }
+            print("list marker[\(item.id)] want=\"\(item.wantMarker)\" hit=\(run.hypothesis.contains(item.wantMarker))")
+        }
+
+        #expect(pairs.count >= 2, "too few list phrases transcribed")
+        let ranking = TranscriptionScoring.rank(pairs)
+        print("\n========== ITN LISTS RANKED ==========")
+        print(ranking.leaderboard)
+        print("marker hits: \(markerHits)/\(pairs.count)")
+        print("======================================\n")
+
+        // Content WER under relaxed budget (list commands are ASR-hard for TTS).
+        #expect(
+            ranking.meanMajorWER <= 0.50,
+            "ITN lists mean majorWER \(ranking.meanMajorWER) exceeds 0.50\n\(ranking.leaderboard)"
+        )
+        // At least one list marker should survive ASR + rewrite on clean TTS.
+        #expect(
+            markerHits >= 1,
+            "expected at least one list marker rewritten (got \(markerHits)/\(pairs.count))"
+        )
+        for s in ranking.scores {
+            #expect(!s.hypothesis.isEmpty, "empty hyp for \(s.id)")
+        }
+    }
+
+    /// End-to-end AppState path with generated ITN speech, ranked.
+    @Test("AppState ITN: generated audio → typed text ranked")
+    @MainActor
+    func rankedITNViaAppState() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+
+        let subset: [(id: String, spoken: String, reference: String)] = [
+            ("e2e_itn_time", "schedule a meeting for three pm", "schedule a meeting for 3 pm"),
+            ("e2e_itn_num", "number one milk next number eggs", "1 milk 2 eggs"),
+            ("e2e_itn_hello", "hello world period", "hello world"),
+        ]
+
+        var pairs: [(id: String, reference: String, hypothesis: String)] = []
+        for item in subset {
+            TextPostProcessor.resetSessionFormatState()
+            FormatSettings.testExpandNumberedLists = true
+            defer { FormatSettings.resetTestOverrides() }
+
+            let speech: [Float]
+            do {
+                speech = try SpeechAudioGenerator.synthesize(text: item.spoken, voice: "Samantha")
+            } catch {
+                speech = try SpeechAudioGenerator.synthesize(text: item.spoken, voice: nil)
+            }
+            let samples = SpeechAudioGenerator.withTrailingSilence(speech, seconds: 0.8)
+            let hyp = try await Self.transcribeViaAppState(samples: samples, paths: paths)
+            pairs.append((id: item.id, reference: item.reference, hypothesis: hyp))
+            print("e2e-itn[\(item.id)] spoken=\"\(item.spoken)\" hyp=\"\(hyp)\"")
+        }
+
+        let ranking = TranscriptionScoring.rank(pairs)
+        print("\n========== APPSTATE ITN RANKED ==========")
+        print(ranking.leaderboard)
+        print("=========================================\n")
+
+        #expect(pairs.count == subset.count)
+        #expect(
+            ranking.meanMajorWER <= 0.55,
+            "E2E ITN mean majorWER \(ranking.meanMajorWER) exceeds 0.55\n\(ranking.leaderboard)"
+        )
+        for s in ranking.scores {
+            #expect(!s.hypothesis.isEmpty, "empty hypothesis for \(s.id)")
+        }
+    }
+
+    /// Master ranked report: clean dictation + ITN phrases in one leaderboard.
+    @Test("Master ranked report: generate → pipe → score all categories")
+    func masterRankedReport() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+        let voice = Self.workingVoice()
+        FormatSettings.resetTestOverrides()
+        TextPostProcessor.resetSessionFormatState()
+
+        let all: [(id: String, spoken: String, reference: String)] = [
+            // Clean dictation
+            ("m_hello", "hello world", "hello world"),
+            ("m_note", "create a new note", "create a new note"),
+            ("m_meet", "schedule a meeting for three pm", "schedule a meeting for 3 pm"),
+            ("m_email", "send an email to the team", "send an email to the team"),
+            // ITN
+            ("m_percent", "save twenty percent", "save 20 percent"),
+            ("m_money", "pay fifty dollars", "pay 50 dollars"),
+            ("m_list", "number one milk", "1 milk"),
+            ("m_punct", "hello world period", "hello world"),
+        ]
+
+        var pairs: [(id: String, reference: String, hypothesis: String)] = []
+        var rtfSum = 0.0
+        for item in all {
+            guard let run = try await Self.runPhrase(
+                id: item.id, spoken: item.spoken, reference: item.reference,
+                paths: paths, voice: voice
+            ) else { continue }
+            pairs.append((id: run.id, reference: run.reference, hypothesis: run.hypothesis))
+            // Rough RTF from elapsed vs ~spoken length (samples not returned; use elapsed only log)
+            rtfSum += run.elapsed
+        }
+
+        #expect(pairs.count >= 5, "too few master-report phrases")
+        let ranking = TranscriptionScoring.rank(pairs)
+        print("\n========== CHIRP MASTER AUDIO RANKED REPORT ==========")
+        print(ranking.leaderboard)
+        print(String(format: "total decode wall=%.2fs over %d phrases", rtfSum, pairs.count))
+        print("======================================================\n")
+
+        #expect(
+            ranking.meanMajorWER <= 0.30,
+            "master mean majorWER \(ranking.meanMajorWER) exceeds 0.30\n\(ranking.leaderboard)"
+        )
+        #expect(
+            ranking.meanWER <= 0.40,
+            "master mean WER \(ranking.meanWER) exceeds 0.40\n\(ranking.leaderboard)"
+        )
+        // Best phrase should be near-perfect on clean TTS
+        if let best = ranking.best {
+            #expect(
+                best.majorWER <= 0.25,
+                "best phrase majorWER \(best.majorWER) too high: \"\(best.hypothesis)\""
+            )
+        }
+        // Worst should not be a total miss for the majority of corpus
+        let catastrophic = ranking.scores.filter { $0.majorWER > 0.75 }.count
+        #expect(
+            catastrophic <= pairs.count / 2,
+            "too many catastrophic phrases (\(catastrophic)/\(pairs.count))\n\(ranking.leaderboard)"
+        )
     }
 }

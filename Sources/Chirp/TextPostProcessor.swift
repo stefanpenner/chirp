@@ -28,7 +28,9 @@ enum TextPostProcessor {
         result = removeFillersAndRepetitions(result)
         result = applyPhraseFixes(result)
         result = applySpokenTerminalPunct(result)
-        result = SpokenListITN.apply(result, counter: &sessionListCounter)
+        if FormatSettings.expandNumberedLists {
+            result = SpokenListITN.apply(result, counter: &sessionListCounter)
+        }
         result = DictationDictionary.apply(result)
         result = applyLightITN(result)
         result = cleanWhitespace(result)
@@ -111,11 +113,6 @@ enum TextPostProcessor {
             (#"\s+new line\s*"#, "\n"),
             (#"\s+newline\s*"#, "\n"),
             (#"\s+new paragraph\s*"#, "\n\n"),
-            // Bulleted lists (Dragon-style multi-word only — avoid "bullet train")
-            (#"(?:^|\s+)bullet point\s*"#, "\n• "),
-            (#"(?:^|\s+)new bullet\s*"#, "\n• "),
-            (#"(?:^|\s+)next bullet\s*"#, "\n• "),
-            (#"(?:^|\s+)next item\s*"#, "\n• "),
             // Spoken symbols (Mac / Windows dictation style)
             (#"\s+(?:forward\s+)?slash\s+"#, "/"),
             (#"\s+(?:forward\s+)?slash$"#, "/"),
@@ -202,11 +199,27 @@ enum TextPostProcessor {
         return result
     }
 
+    private static let bulletPatterns: [(NSRegularExpression, String)] = {
+        let pairs: [(String, String)] = [
+            (#"(?:^|\s+)bullet point\s*"#, "\n• "),
+            (#"(?:^|\s+)new bullet\s*"#, "\n• "),
+            (#"(?:^|\s+)next bullet\s*"#, "\n• "),
+            (#"(?:^|\s+)next item\s*"#, "\n• "),
+        ]
+        return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
+    }()
+
     private static func applyPhraseFixes(_ text: String) -> String {
         var result = text
         for (pattern, replacement) in phraseFixes {
             let range = NSRange(result.startIndex..., in: result)
             result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
+        }
+        if FormatSettings.expandBullets {
+            for (pattern, replacement) in bulletPatterns {
+                let range = NSRange(result.startIndex..., in: result)
+                result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
+            }
         }
         return result
     }

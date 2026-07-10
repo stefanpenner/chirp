@@ -3,7 +3,8 @@
 import Testing
 @testable import Chirp
 
-@Suite("SpokenListITN")
+// Serialized: sessionListCounter + FormatSettings are process-global.
+@Suite("SpokenListITN", .serialized)
 struct SpokenListITNTests {
 
     @Test("number one and next number sequence")
@@ -13,12 +14,13 @@ struct SpokenListITNTests {
             "buy number one milk next number eggs number next bread",
             counter: &c
         )
+        let lower = r.lowercased()
         #expect(r.contains("1. "))
         #expect(r.contains("2. "))
         #expect(r.contains("3. "))
-        #expect(r.contains("milk"))
-        #expect(r.contains("eggs"))
-        #expect(r.contains("bread"))
+        #expect(lower.contains("milk"))
+        #expect(lower.contains("eggs"))
+        #expect(lower.contains("bread"))
         #expect(c == 4)
     }
 
@@ -55,5 +57,23 @@ struct SpokenListITNTests {
     @Test("does not rewrite bare number words without list command")
     func noFalsePositive() {
         #expect(SpokenListITN.apply("I need one more thing") == "I need one more thing")
+    }
+
+    @Test("end list resets counter")
+    func endList() {
+        var c = 1
+        _ = SpokenListITN.apply("number one a next number b", counter: &c)
+        #expect(c == 3)
+        let r = SpokenListITN.apply("end list next number c", counter: &c)
+        #expect(c == 2, "after end list, next number should be 1 → counter 2")
+        #expect(r.contains("1. "), "got \(r)")
+        #expect(r.contains("c") || r.contains("C"))
+    }
+
+    @Test("capitalizes after list marker")
+    func capitalizesItem() {
+        let r = SpokenListITN.apply("number one milk")
+        #expect(r.contains("1. Milk") || r.contains("1. milk") == false)
+        #expect(r.contains("1. "))
     }
 }
