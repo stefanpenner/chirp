@@ -10,6 +10,8 @@ enum DictationCommand: Equatable, Sendable {
     case scratchThat
     /// Arm multi-step replace: next content undoes last phrase then inserts.
     case replaceThat
+    /// Single-utterance find/replace last occurrence of `target` with `replacement`.
+    case replacePhrase(target: String, replacement: String)
     /// Delete the last whitespace-delimited word.
     case deleteLastWord
     /// Delete the last N whitespace-delimited words (N ≥ 2).
@@ -222,7 +224,57 @@ enum DictationCommand: Equatable, Sendable {
                 return cmd
             }
         }
+        // Phrase replace uses lightly cleaned original text so casing is preserved.
+        if let cmd = matchPhraseReplace(text) {
+            return cmd
+        }
         return .none
+    }
+
+    /// "replace X with Y" / "change X to Y" / "swap X for Y".
+    /// Does not match bare "replace that" (no with/to/for clause).
+    private static func matchPhraseReplace(_ text: String) -> DictationCommand? {
+        var n = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let last = n.last, ".!?,".contains(last) {
+            n.removeLast()
+        }
+        n = n.trimmingCharacters(in: .whitespaces)
+        // Strip leading politeness
+        let stripped = stripPoliteness(n.lowercased())
+        // Re-apply strip on original by dropping matching leading tokens
+        if stripped != n.lowercased() {
+            var tokens = n.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+            let fillers: Set<String> = ["please", "now", "thanks", "thank", "you"]
+            while let first = tokens.first, fillers.contains(first.lowercased()) {
+                tokens.removeFirst()
+            }
+            while let last = tokens.last, fillers.contains(last.lowercased()) {
+                tokens.removeLast()
+            }
+            n = tokens.joined(separator: " ")
+        }
+
+        let specs: [(pattern: String, targetGroup: Int, replGroup: Int)] = [
+            (#"(?i)^replace (.+?) with (.+)$"#, 1, 2),
+            (#"(?i)^change (.+?) to (.+)$"#, 1, 2),
+            (#"(?i)^swap (.+?) for (.+)$"#, 1, 2),
+        ]
+        for spec in specs {
+            guard let regex = try? NSRegularExpression(pattern: spec.pattern),
+                  let match = regex.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)),
+                  match.numberOfRanges > max(spec.targetGroup, spec.replGroup),
+                  let tRange = Range(match.range(at: spec.targetGroup), in: n),
+                  let rRange = Range(match.range(at: spec.replGroup), in: n) else {
+                continue
+            }
+            let target = String(n[tRange]).trimmingCharacters(in: .whitespaces)
+            let replacement = String(n[rRange]).trimmingCharacters(in: .whitespaces)
+            guard !target.isEmpty, !replacement.isEmpty else { continue }
+            // Do not treat "replace that with …" as multi-step arm — phrase form is fine.
+            // Bare "replace that" has no "with" and never reaches here.
+            return .replacePhrase(target: target, replacement: replacement)
+        }
+        return nil
     }
 
     /// Counted forms: "delete last two words", "select previous 3 sentences", etc.
@@ -704,6 +756,7 @@ enum DictationCommand: Equatable, Sendable {
     static let helpCatalog: [(say: String, effect: String)] = [
         ("scratch that / correct that", "Undo last phrase (multi-level)"),
         ("replace that", "Next phrase replaces last (multi-step)"),
+        ("replace X with Y / change X to Y / swap X for Y", "Replace last occurrence of X with Y"),
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
         ("delete last two words / delete previous 3 words", "Remove last N words"),

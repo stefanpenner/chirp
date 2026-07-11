@@ -22,6 +22,36 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("please replace that") == .replaceThat)
     }
 
+    @Test("recognizes replace X with Y without stealing replace that")
+    func replacePhraseCommands() {
+        #expect(
+            DictationCommand.parse("replace world with planet")
+                == .replacePhrase(target: "world", replacement: "planet")
+        )
+        #expect(
+            DictationCommand.parse("Replace World with Planet.")
+                == .replacePhrase(target: "World", replacement: "Planet")
+        )
+        #expect(
+            DictationCommand.parse("change foo to bar")
+                == .replacePhrase(target: "foo", replacement: "bar")
+        )
+        #expect(
+            DictationCommand.parse("swap red for blue")
+                == .replacePhrase(target: "red", replacement: "blue")
+        )
+        #expect(
+            DictationCommand.parse("please replace hello world with goodbye")
+                == .replacePhrase(target: "hello world", replacement: "goodbye")
+        )
+        // Bare multi-step arm must not become phrase replace
+        #expect(DictationCommand.parse("replace that") == .replaceThat)
+        #expect(DictationCommand.parse("change that") == .replaceThat)
+        #expect(DictationCommand.parse("swap that") == .replaceThat)
+        // Missing with/to/for → content
+        #expect(DictationCommand.parse("replace the world") == .none)
+    }
+
     @Test("recognizes delete last word")
     func deleteLastWord() {
         #expect(DictationCommand.parse("delete last word") == .deleteLastWord)

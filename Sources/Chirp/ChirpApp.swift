@@ -684,6 +684,13 @@ public final class AppState {
                         self.performScratchThat(typesIncrementally: false)
                     case .replaceThat:
                         self.performArmReplace()
+                    case .replacePhrase(let target, let replacement):
+                        self.awaitingReplace = false
+                        self.performReplacePhrase(
+                            target: target,
+                            replacement: replacement,
+                            typesIncrementally: false
+                        )
                     case .deleteLastWord:
                         self.awaitingReplace = false
                         self.performDeleteLastWord(typesIncrementally: false)
@@ -971,6 +978,13 @@ public final class AppState {
             performScratchThat(typesIncrementally: typesIncrementally)
         case .replaceThat:
             performArmReplace()
+        case .replacePhrase(let target, let replacement):
+            awaitingReplace = false
+            performReplacePhrase(
+                target: target,
+                replacement: replacement,
+                typesIncrementally: typesIncrementally
+            )
         case .deleteLastWord:
             awaitingReplace = false
             performDeleteLastWord(typesIncrementally: typesIncrementally)
@@ -1322,6 +1336,53 @@ public final class AppState {
     private func performArmReplace() {
         guard ReplaceDecision.canArm(hasLastPhrase: editStack.canUndo) else { return }
         awaitingReplace = true
+    }
+
+    /// Single-utterance "replace X with Y": last case-insensitive occurrence.
+    /// Dual of PhraseReplaceDecision / specs/ReplacePhrase.tla.
+    private func performReplacePhrase(
+        target: String,
+        replacement: String,
+        typesIncrementally: Bool
+    ) {
+        guard let match = PhraseReplaceDecision.findLastRange(target: target, in: transcribedText),
+              let newText = SelectionCommitDecision.bufferAfterRangeReplace(
+                buffer: transcribedText,
+                start: match.start,
+                length: match.length,
+                replacement: replacement
+              ) else {
+            return
+        }
+        if typesIncrementally {
+            moveToSessionOffset(match.start)
+            textInserter.selectForward(count: match.length)
+            textInserter.typeText(replacement)
+        }
+        if SelectionCommitDecision.isTrailing(
+            start: match.start,
+            length: match.length,
+            bufferCount: transcribedText.count
+        ) {
+            let suffix = String(transcribedText.suffix(match.length))
+            if !editStack.dropTrailingSuffix(suffix) {
+                editStack.clear()
+            }
+        } else {
+            editStack.clear()
+        }
+        transcribedText = newText
+        if !replacement.isEmpty {
+            editStack.push(replacement)
+        }
+        sessionSelection = nil
+        lastCommittedNormalized = ""
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// One-shot transform of the last typed phrase (EditStack top delta).

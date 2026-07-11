@@ -48,6 +48,7 @@ tlc specs/PipelineRebuild.tla
 | `MoveN` | move N words/characters leaves session bufferLen unchanged | `DictationCommand.movePrevious/NextWords` + `movePrevious/NextCharacters` + `performMoveWords` / `performMoveCharacters` |
 | `SelectLastWords` | select last N trailing words leaves session bufferLen unchanged | `DictationCommand.selectLastWords` + `TranscriptSelection.lastWords` + `performSelectLastWords` |
 | `SelectionCommit` | select any in-range window → re-dictate splices; typedToApp == textLen | `SelectionCommitDecision.bufferAfterRangeReplace` + `AppState.sessionSelection` |
+| `ReplacePhrase` | replace X with Y last match; miss is no-op; typedToApp == textLen | `PhraseReplaceDecision` + `AppState.performReplacePhrase` |
 | `VadEndpoint` | user VAD silence/threshold always clamp into safe range | `VadSettings.clamp` + min silence / threshold ranges |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |

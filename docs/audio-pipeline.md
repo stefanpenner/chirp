@@ -143,6 +143,7 @@ newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `Dicta
 Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** / **correct that** — multi-level undo (`EditStack`)
 - **replace that** — next phrase replaces last (text stays until then; HUD “Replace…”)
+- **replace X with Y** / **change X to Y** / **swap X for Y** — replace last case-insensitive occurrence of X with Y in the session buffer (select + type-over in host; `ReplacePhrase.tla`). No match → no-op. Does **not** steal bare **replace that**
 - **redo that** — restore last scratched / word-deleted segment
 - **delete last word** — drop trailing word (stack-aware; redo restores)
 - **delete last two words** / **delete previous 3 words** / **delete the last four words** — drop last N words (N ≥ 2; spoken or digits)
