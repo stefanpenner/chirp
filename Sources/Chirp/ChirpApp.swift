@@ -156,9 +156,9 @@ public final class AppState {
     /// Observable for overlay badge. Dual of specs/ReplaceThat.tla.
     private(set) var awaitingReplace = false
 
-    /// Trailing buffer suffix currently selected in the host (select that / last N words / …).
-    /// Next content peels this suffix so session buffer matches type-over. Dual of SelectionCommit.tla.
-    private var sessionSelectionSuffix: String? = nil
+    /// Buffer range currently selected in the host (select that / first sentence / …).
+    /// Next content splices this range so session buffer matches type-over. Dual of SelectionCommit.tla.
+    private var sessionSelection: (start: Int, length: Int)? = nil
 
     /// Normalized form of the last committed non-command segment (dedup echoes).
     private var lastCommittedNormalized = ""
@@ -585,7 +585,7 @@ public final class AppState {
         spellMode = .off
         noSpaceMode = .off
         awaitingReplace = false
-        sessionSelectionSuffix = nil
+        sessionSelection = nil
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
         sentenceSelectionActive = false
@@ -1203,7 +1203,7 @@ public final class AppState {
             // Multi-step replace: undo last phrase, then insert replacement.
             if ReplaceDecision.shouldUndoBeforeCommit(awaitingReplace: awaitingReplace) {
                 awaitingReplace = false
-                sessionSelectionSuffix = nil
+                sessionSelection = nil
                 performScratchThat(typesIncrementally: typesIncrementally)
             }
             // Skip consecutive identical segments (VAD/ASR echo under noise)
@@ -1213,17 +1213,25 @@ public final class AppState {
                 Log.transcription.debug("Skipping duplicate segment: \"\(shaped.text)\"")
                 return
             }
-            // Trailing selection type-over: peel suffix so buffer matches host overwrite.
-            if SelectionCommitDecision.shouldReplaceSuffix(
-                selection: sessionSelectionSuffix,
-                buffer: transcribedText
-            ), let selection = sessionSelectionSuffix {
-                let replaced = SelectionCommitDecision.bufferAfterReplace(
-                    buffer: transcribedText,
-                    selection: selection,
-                    replacement: shaped.text
-                )
-                if !editStack.dropTrailingSuffix(selection) {
+            // Selection type-over: splice range so buffer matches host overwrite.
+            if let sel = sessionSelection,
+               let replaced = SelectionCommitDecision.bufferAfterRangeReplace(
+                buffer: transcribedText,
+                start: sel.start,
+                length: sel.length,
+                replacement: shaped.text
+               ) {
+                if SelectionCommitDecision.isTrailing(
+                    start: sel.start,
+                    length: sel.length,
+                    bufferCount: transcribedText.count
+                ) {
+                    let suffix = String(transcribedText.suffix(sel.length))
+                    if !editStack.dropTrailingSuffix(suffix) {
+                        editStack.clear()
+                    }
+                } else {
+                    // Middle replace cannot peel stack deltas reliably.
                     editStack.clear()
                 }
                 transcribedText = replaced
@@ -1235,7 +1243,7 @@ public final class AppState {
                     editStack.push(shaped.text)
                 }
                 lastCommittedNormalized = norm
-                sessionSelectionSuffix = nil
+                sessionSelection = nil
                 sentenceNavIndex = nil
                 sentenceSelectionActive = false
                 paragraphNavIndex = nil
@@ -1244,7 +1252,7 @@ public final class AppState {
                 lineSelectionActive = false
                 return
             }
-            sessionSelectionSuffix = nil
+            sessionSelection = nil
             // One-shot pack preserves case ("abc"/"John"); sticky also glues segments.
             // Spell mode and no-space mode both use empty separators (no letter packing
             // for no-space — that is spell mode only).
@@ -1267,6 +1275,19 @@ public final class AppState {
             lineNavIndex = nil
             lineSelectionActive = false
         }
+    }
+
+    /// Arm a buffer range for next content type-over (must match host selection).
+    private func armSessionSelection(start: Int, length: Int) {
+        guard SelectionCommitDecision.isInRange(
+            start: start,
+            length: length,
+            bufferCount: transcribedText.count
+        ) else {
+            sessionSelection = nil
+            return
+        }
+        sessionSelection = (start, length)
     }
 
     /// Shape a content segment: one-shot "spell as …", sticky spell mode, or caps.
@@ -1667,7 +1688,8 @@ public final class AppState {
     private func performSelectThat(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         guard let delta = editStack.lastDelta, !delta.isEmpty else { return }
-        sessionSelectionSuffix = delta
+        guard transcribedText.hasSuffix(delta) else { return }
+        armSessionSelection(start: transcribedText.count - delta.count, length: delta.count)
         textInserter.selectBackward(count: delta.count)
     }
 
@@ -1680,13 +1702,13 @@ public final class AppState {
         }
         textInserter.applyFormat(style)
         textInserter.clearSelection()
-        sessionSelectionSuffix = nil
+        sessionSelection = nil
     }
 
     /// Collapse the current selection (spoken "unselect that"). Buffer unchanged.
     private func performUnselectThat() {
         textInserter.clearSelection()
-        sessionSelectionSuffix = nil
+        sessionSelection = nil
     }
 
     /// Select last phrase, cut (⌘X), drop buffer delta without re-deleting.
@@ -1816,7 +1838,7 @@ public final class AppState {
         guard typesIncrementally, count > 0 else { return }
         let selected = TranscriptSelection.lastWords(transcribedText, count: count)
         guard !selected.isEmpty else { return }
-        sessionSelectionSuffix = selected
+        armSessionSelection(start: transcribedText.count - selected.count, length: selected.count)
         textInserter.selectBackward(count: selected.count)
     }
 
@@ -1831,12 +1853,13 @@ public final class AppState {
         guard !selected.isEmpty else { return }
         // Prefer trailing selectBackward when caret model is end (index nil).
         if sentenceNavIndex == nil && !sentenceSelectionActive {
-            sessionSelectionSuffix = selected
+            armSessionSelection(start: text.count - selected.count, length: selected.count)
             textInserter.selectBackward(count: selected.count)
         } else {
-            sessionSelectionSuffix = nil
-            moveToSessionOffset(ranges[last].start)
-            textInserter.selectForward(count: ranges[last].end - ranges[last].start)
+            let range = ranges[last]
+            armSessionSelection(start: range.start, length: range.end - range.start)
+            moveToSessionOffset(range.start)
+            textInserter.selectForward(count: range.end - range.start)
         }
         sentenceNavIndex = last
         sentenceSelectionActive = true
@@ -1850,6 +1873,7 @@ public final class AppState {
         let ranges = TranscriptSelection.sentenceRanges(text)
         guard !ranges.isEmpty else { return }
         let range = ranges[0]
+        armSessionSelection(start: range.start, length: range.end - range.start)
         moveToSessionOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         sentenceNavIndex = 0
@@ -1871,6 +1895,7 @@ public final class AppState {
             next = idx + 1
         }
         let range = ranges[next]
+        armSessionSelection(start: range.start, length: range.end - range.start)
         moveToSessionOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         sentenceNavIndex = next
@@ -1892,6 +1917,7 @@ public final class AppState {
             return
         }
         let range = ranges[next]
+        armSessionSelection(start: range.start, length: range.end - range.start)
         moveToSessionOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         sentenceNavIndex = next
@@ -1965,7 +1991,7 @@ public final class AppState {
         let start = ranges[startIdx].start
         let fromEnd = text.count - start
         guard fromEnd > 0 else { return }
-        sessionSelectionSuffix = String(text.suffix(fromEnd))
+        armSessionSelection(start: start, length: fromEnd)
         textInserter.selectBackward(count: fromEnd)
         setUnitNav(kind: kind, index: startIdx, selectionActive: true)
     }
@@ -1987,6 +2013,7 @@ public final class AppState {
         let endIdx = min(startIdx + count, ranges.count) // exclusive
         let spanStart = ranges[startIdx].start
         let spanEnd = ranges[endIdx - 1].end
+        armSessionSelection(start: spanStart, length: spanEnd - spanStart)
         moveToUnitOffset(kind: kind, offset: spanStart)
         textInserter.selectForward(count: spanEnd - spanStart)
         setUnitNav(kind: kind, index: endIdx - 1, selectionActive: true)
@@ -2083,6 +2110,7 @@ public final class AppState {
             return
         }
         let range = ranges[next]
+        armSessionSelection(start: range.start, length: range.end - range.start)
         moveToParagraphOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         paragraphNavIndex = next
@@ -2104,6 +2132,7 @@ public final class AppState {
             return
         }
         let range = ranges[next]
+        armSessionSelection(start: range.start, length: range.end - range.start)
         moveToLineOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         lineNavIndex = next
@@ -2179,12 +2208,13 @@ public final class AppState {
         let selected = TranscriptSelection.lastParagraph(text)
         guard !selected.isEmpty else { return }
         if paragraphNavIndex == nil && !paragraphSelectionActive {
-            sessionSelectionSuffix = selected
+            armSessionSelection(start: text.count - selected.count, length: selected.count)
             textInserter.selectBackward(count: selected.count)
         } else {
-            sessionSelectionSuffix = nil
-            moveToParagraphOffset(ranges[last].start)
-            textInserter.selectForward(count: ranges[last].end - ranges[last].start)
+            let range = ranges[last]
+            armSessionSelection(start: range.start, length: range.end - range.start)
+            moveToParagraphOffset(range.start)
+            textInserter.selectForward(count: range.end - range.start)
         }
         paragraphNavIndex = last
         paragraphSelectionActive = true
@@ -2197,6 +2227,7 @@ public final class AppState {
         let ranges = TranscriptSelection.paragraphRanges(text)
         guard !ranges.isEmpty else { return }
         let range = ranges[0]
+        armSessionSelection(start: range.start, length: range.end - range.start)
         moveToParagraphOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         paragraphNavIndex = 0
@@ -2219,6 +2250,7 @@ public final class AppState {
             next = idx + 1
         }
         let range = ranges[next]
+        armSessionSelection(start: range.start, length: range.end - range.start)
         moveToParagraphOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         paragraphNavIndex = next
@@ -2292,13 +2324,14 @@ public final class AppState {
         let selected = TranscriptSelection.lastLine(text)
         guard !selected.isEmpty else { return }
         if lineNavIndex == nil && !lineSelectionActive {
-            sessionSelectionSuffix = selected
+            armSessionSelection(start: text.count - selected.count, length: selected.count)
             textInserter.selectBackward(count: selected.count)
         } else {
-            sessionSelectionSuffix = nil
             let last = ranges.count - 1
-            moveToLineOffset(ranges[last].start)
-            textInserter.selectForward(count: ranges[last].end - ranges[last].start)
+            let range = ranges[last]
+            armSessionSelection(start: range.start, length: range.end - range.start)
+            moveToLineOffset(range.start)
+            textInserter.selectForward(count: range.end - range.start)
         }
         lineNavIndex = ranges.count - 1
         lineSelectionActive = true
@@ -2311,6 +2344,7 @@ public final class AppState {
         let ranges = TranscriptSelection.lineRanges(text)
         guard !ranges.isEmpty else { return }
         let range = ranges[0]
+        armSessionSelection(start: range.start, length: range.end - range.start)
         moveToLineOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         lineNavIndex = 0
@@ -2331,6 +2365,7 @@ public final class AppState {
             next = idx + 1
         }
         let range = ranges[next]
+        armSessionSelection(start: range.start, length: range.end - range.start)
         moveToLineOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         lineNavIndex = next
@@ -2703,7 +2738,7 @@ public final class AppState {
         spellMode = .off
         noSpaceMode = .off
         awaitingReplace = false
-        sessionSelectionSuffix = nil
+        sessionSelection = nil
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
         sentenceSelectionActive = false

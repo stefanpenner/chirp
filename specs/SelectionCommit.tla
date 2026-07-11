@@ -1,39 +1,45 @@
 ---- MODULE SelectionCommit ----
 (*
-  Trailing selection → re-dictate: peel selected suffix, then insert
-  replacement so session buffer stays dual of host type-over.
+  Selection → re-dictate: splice selected range (trailing or middle),
+  then insert replacement so session buffer stays dual of host type-over.
 
   Dual of:
-    SelectionCommitDecision.shouldReplaceSuffix / bufferAfterReplace
-    AppState.sessionSelectionSuffix + content path (.none)
+    SelectionCommitDecision.isInRange / bufferAfterRangeReplace / isTrailing
+    AppState.sessionSelection + content path (.none)
 
-  Grain: textLen, selLen, typedToApp. Host type-over replaces selLen
-  with n without intermediate delete counting.
+  Grain: textLen, selStart, selLen, typedToApp.
 *)
 
 EXTENDS Integers, TLC
 
 VARIABLES
   textLen,          \* session transcript length
-  selLen,           \* trailing selection length (0 = none)
+  selStart,         \* selection start offset (-1 = none)
+  selLen,           \* selection length (0 = none)
   lastTyped,        \* size of last content delta
   typedToApp        \* characters accounted in host (mirrors textLen)
 
-vars == <<textLen, selLen, lastTyped, typedToApp>>
+vars == <<textLen, selStart, selLen, lastTyped, typedToApp>>
 
 MaxLen == 8
 
 TypeOK ==
   /\ textLen \in 0..MaxLen
+  /\ selStart \in -1..MaxLen
   /\ selLen \in 0..MaxLen
   /\ lastTyped \in 0..MaxLen
   /\ typedToApp \in 0..MaxLen
-  /\ selLen <= textLen
   /\ lastTyped <= textLen
   /\ typedToApp = textLen
+  /\ \/ /\ selStart = -1
+        /\ selLen = 0
+     \/ /\ selStart >= 0
+        /\ selLen > 0
+        /\ selStart + selLen <= textLen
 
 Init ==
   /\ textLen = 0
+  /\ selStart = -1
   /\ selLen = 0
   /\ lastTyped = 0
   /\ typedToApp = 0
@@ -47,38 +53,41 @@ Commit(n) ==
   /\ textLen' = textLen + n
   /\ lastTyped' = n
   /\ typedToApp' = typedToApp + n
-  /\ UNCHANGED selLen
+  /\ UNCHANGED <<selStart, selLen>>
 
-\* Select trailing suffix of length s (must fit)
-SelectTrailing(s) ==
-  /\ s \in 1..MaxLen
-  /\ s <= textLen
-  /\ selLen' = s
+\* Select any in-range window [start, start+len)
+SelectRange(start, len) ==
+  /\ start \in 0..MaxLen
+  /\ len \in 1..MaxLen
+  /\ start + len <= textLen
+  /\ selStart' = start
+  /\ selLen' = len
   /\ UNCHANGED <<textLen, lastTyped, typedToApp>>
 
 \* Unselect / format collapse
 ClearSelection ==
   /\ selLen > 0
+  /\ selStart' = -1
   /\ selLen' = 0
   /\ UNCHANGED <<textLen, lastTyped, typedToApp>>
 
-\* Content while selection active: peel selLen, append n (host type-over)
+\* Content while selection active: splice window with n (host type-over)
 ReplaceCommit(n) ==
   /\ selLen > 0
+  /\ selStart >= 0
   /\ n \in 1..MaxLen
   /\ LET base == textLen - selLen
      IN /\ base + n <= MaxLen
         /\ textLen' = base + n
         /\ typedToApp' = base + n
         /\ lastTyped' = n
+        /\ selStart' = -1
         /\ selLen' = 0
-
-\* Content with selection that is not a valid peel (safety no-op path not modeled;
-\* decision layer only peels when hasSuffix — here SelectTrailing always valid)
 
 Next ==
   \/ \E n \in 1..MaxLen: Commit(n)
-  \/ \E s \in 1..MaxLen: SelectTrailing(s)
+  \/ \E start \in 0..MaxLen:
+       \E len \in 1..MaxLen: SelectRange(start, len)
   \/ ClearSelection
   \/ \E n \in 1..MaxLen: ReplaceCommit(n)
 
@@ -87,7 +96,10 @@ Spec == Init /\ [][Next]_vars
 ----
 TypedMatchesText == typedToApp = textLen
 
-SelInRange == selLen <= textLen
+SelInRange ==
+  \/ selLen = 0
+  \/ /\ selStart >= 0
+     /\ selStart + selLen <= textLen
 
 Inv ==
   /\ TypeOK

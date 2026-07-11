@@ -2126,6 +2126,95 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select first sentence"))
     }
 
+    @Test("select first sentence then content replaces first only")
+    func selectFirstSentenceThenContentReplaces() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello. World now"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World now" { break }
+        }
+
+        await mock.setFeedAudioResult(["select first sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+
+        // Avoid silence-hallucination short hyps like "Hi." (dropped by TextPostProcessor).
+        await mock.setFeedAudioResult(["Better."])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.hasPrefix("Better.") { break }
+        }
+
+        #expect(
+            state.transcribedText == "Better. World now",
+            "first sentence replaced in place, got \"\(state.transcribedText)\""
+        )
+        #expect(!state.transcribedText.lowercased().contains("hello"))
+        #expect(!inserter.typedTexts.contains("select first sentence"))
+    }
+
+    @Test("select next sentence then content replaces second only")
+    func selectNextSentenceThenContentReplaces() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello. World now"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World now" { break }
+        }
+
+        await mock.setFeedAudioResult(["select next sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["Planet"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("Planet") || state.transcribedText.contains("planet") {
+                break
+            }
+        }
+
+        let text = state.transcribedText
+        #expect(text.hasPrefix("Hello."), "first sentence kept, got \"\(text)\"")
+        #expect(
+            text == "Hello. Planet" || text == "Hello. planet",
+            "second sentence replaced only, got \"\(text)\""
+        )
+        #expect(!text.lowercased().contains("world"))
+        #expect(!text.lowercased().contains("now"))
+    }
+
     @Test("select next sentence jumps past first then selects second")
     func selectNextSentenceCommand() async throws {
         let mock = MockTranscriber()

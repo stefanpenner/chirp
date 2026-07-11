@@ -170,8 +170,9 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **title case that** — title-case last phrase (stack delta)
 - **sentence case that** — sentence-case last phrase
 - **no space that** — join last word without leading space
-- **select that** / **highlight that** — select last phrase (shift+left). Next content **replaces** the trailing selection in both host and session buffer (`SelectionCommit.tla`); **unselect that** / format that clears the arm so next speech appends again
-- **select last word** — select trailing word only (same replace-on-next-content contract when selection is trailing)
+- **select that** / **highlight that** — select last phrase (shift+left). Next content **replaces** the selection in both host and session buffer (`SelectionCommit.tla`); **unselect that** / format that clears the arm so next speech appends again
+- **select first / next / previous sentence** (and paragraph / line) — same replace-on-next-content contract for middle ranges (splice, not append)
+- **select last word** — select trailing word only (same replace-on-next-content contract)
 - **select next word** / **select forward word** — select next word (⇧⌥→; keyboard only; buffer unchanged)
 - **select previous word** / **select prior word** — select previous word (⇧⌥←; keyboard only; buffer unchanged). Does **not** steal **select last word** or bare **previous word** (move left)
 - **delete next word** / **delete forward word** — delete next word (⇧⌥→ then ⌫; keyboard only; buffer unchanged). Does **not** steal **delete last word**
