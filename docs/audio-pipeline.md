@@ -192,7 +192,9 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select next line** / **select forward line** / **highlight next line** — progressive: from end select second line; further calls advance (`LineCursor.tla`). Buffer unchanged. Does **not** steal bare **next line** (move down) or **select last line**
 - **select previous N words** / **select next N words** — keyboard ⇧⌥←/→ × N (N ≥ 2)
 - **delete last N sentences** / **paragraphs** / **lines** — peel last N trailing units (N ≥ 2; Voice Control style)
+- **delete next N sentences** / **paragraphs** / **lines** — remove next N units from session cursor (from end = starting at second; `MultiUnitEdit.tla`)
 - **select last N sentences** / **previous N paragraphs** / **last N lines** — select trailing N units via ⇧← (N ≥ 2)
+- **select next N sentences** / **paragraphs** / **lines** — select next N units from session cursor (from end = 2nd onward)
 - **select all** — select all (⌘A)
 - **unselect that** / **deselect** / **clear selection** — collapse selection to end (→)
 - **bold that** / **make that bold** — select last phrase + bold (⌘B), then unselect

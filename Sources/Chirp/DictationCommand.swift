@@ -116,6 +116,18 @@ enum DictationCommand: Equatable, Sendable {
     case selectLastParagraphs(count: Int)
     /// Select last N lines (session trailing). Buffer unchanged.
     case selectLastLines(count: Int)
+    /// Select next N sentences (session-relative progressive). Buffer unchanged.
+    case selectNextSentences(count: Int)
+    /// Select next N paragraphs (session-relative progressive). Buffer unchanged.
+    case selectNextParagraphs(count: Int)
+    /// Select next N lines (session-relative progressive). Buffer unchanged.
+    case selectNextLines(count: Int)
+    /// Delete next N sentences (session-relative progressive).
+    case deleteNextSentences(count: Int)
+    /// Delete next N paragraphs (session-relative progressive).
+    case deleteNextParagraphs(count: Int)
+    /// Delete next N lines (session-relative progressive).
+    case deleteNextLines(count: Int)
     /// Select the last sentence (after [.?!] + whitespace).
     case selectLastSentence
     /// Select the first sentence (before first [.?!] + whitespace).
@@ -231,6 +243,32 @@ enum DictationCommand: Equatable, Sendable {
             (
                 #"^select (?:the )?(?:last|previous|prior) "# + num + #" lines?$"#,
                 { c in inRange(c) ? .selectLastLines(count: c) : nil }
+            ),
+            // Buffer select: next N sentences|paragraphs|lines (session-relative)
+            (
+                #"^select (?:the )?(?:next|forward) "# + num + #" sentences?$"#,
+                { c in inRange(c) ? .selectNextSentences(count: c) : nil }
+            ),
+            (
+                #"^select (?:the )?(?:next|forward) "# + num + #" paragraphs?$"#,
+                { c in inRange(c) ? .selectNextParagraphs(count: c) : nil }
+            ),
+            (
+                #"^select (?:the )?(?:next|forward) "# + num + #" lines?$"#,
+                { c in inRange(c) ? .selectNextLines(count: c) : nil }
+            ),
+            // Buffer delete: next N sentences|paragraphs|lines
+            (
+                #"^delete (?:the )?(?:next|forward) "# + num + #" sentences?$"#,
+                { c in inRange(c) ? .deleteNextSentences(count: c) : nil }
+            ),
+            (
+                #"^delete (?:the )?(?:next|forward) "# + num + #" paragraphs?$"#,
+                { c in inRange(c) ? .deleteNextParagraphs(count: c) : nil }
+            ),
+            (
+                #"^delete (?:the )?(?:next|forward) "# + num + #" lines?$"#,
+                { c in inRange(c) ? .deleteNextLines(count: c) : nil }
             ),
             // Keyboard: select previous/next N words
             (
@@ -657,7 +695,9 @@ enum DictationCommand: Equatable, Sendable {
         ("select next line / select forward line", "Select next line (progressive)"),
         ("select previous two words / select next 3 words", "Select N words (keyboard)"),
         ("delete last two sentences / paragraphs / lines", "Remove last N sentences/paragraphs/lines"),
+        ("delete next two sentences / paragraphs / lines", "Remove next N sentences/paragraphs/lines"),
         ("select last two sentences / previous 3 paragraphs", "Select last N sentences/paragraphs/lines"),
+        ("select next two sentences / paragraphs / lines", "Select next N sentences/paragraphs/lines"),
         ("select all", "Select all (⌘A)"),
         ("unselect that / deselect", "Collapse selection (caret to end)"),
         ("bold that", "Select last phrase + bold (⌘B), then unselect"),

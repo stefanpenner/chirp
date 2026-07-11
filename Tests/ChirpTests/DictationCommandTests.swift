@@ -593,10 +593,18 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("select last two sentences") == .selectLastSentences(count: 2))
         #expect(DictationCommand.parse("select previous three paragraphs") == .selectLastParagraphs(count: 3))
         #expect(DictationCommand.parse("select last 2 lines") == .selectLastLines(count: 2))
+        #expect(DictationCommand.parse("select next two sentences") == .selectNextSentences(count: 2))
+        #expect(DictationCommand.parse("select forward 3 paragraphs") == .selectNextParagraphs(count: 3))
+        #expect(DictationCommand.parse("select next two lines") == .selectNextLines(count: 2))
+        #expect(DictationCommand.parse("delete next two sentences") == .deleteNextSentences(count: 2))
+        #expect(DictationCommand.parse("delete forward 3 paragraphs") == .deleteNextParagraphs(count: 3))
+        #expect(DictationCommand.parse("delete next two lines") == .deleteNextLines(count: 2))
         // Single units stay non-counted cases
         #expect(DictationCommand.parse("select previous word") == .selectPreviousWord)
         #expect(DictationCommand.parse("delete last sentence") == .deleteLastSentence)
         #expect(DictationCommand.parse("select previous sentence") == .selectPreviousSentence)
+        #expect(DictationCommand.parse("select next sentence") == .selectNextSentence)
+        #expect(DictationCommand.parse("delete next sentence") == .deleteNextSentence)
     }
 
     @Test("recognizes select next sentence (not move next / select last)")

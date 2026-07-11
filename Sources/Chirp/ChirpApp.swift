@@ -818,6 +818,21 @@ public final class AppState {
                         self.performSelectLastUnits(kind: .paragraph, count: count, typesIncrementally: false)
                     case .selectLastLines(let count):
                         self.performSelectLastUnits(kind: .line, count: count, typesIncrementally: false)
+                    case .selectNextSentences(let count):
+                        self.performSelectNextUnits(kind: .sentence, count: count, typesIncrementally: false)
+                    case .selectNextParagraphs(let count):
+                        self.performSelectNextUnits(kind: .paragraph, count: count, typesIncrementally: false)
+                    case .selectNextLines(let count):
+                        self.performSelectNextUnits(kind: .line, count: count, typesIncrementally: false)
+                    case .deleteNextSentences(let count):
+                        self.awaitingReplace = false
+                        self.performDeleteNextUnits(kind: .sentence, count: count, typesIncrementally: false)
+                    case .deleteNextParagraphs(let count):
+                        self.awaitingReplace = false
+                        self.performDeleteNextUnits(kind: .paragraph, count: count, typesIncrementally: false)
+                    case .deleteNextLines(let count):
+                        self.awaitingReplace = false
+                        self.performDeleteNextUnits(kind: .line, count: count, typesIncrementally: false)
                     case .selectLastSentence:
                         self.performSelectLastSentence(typesIncrementally: false)
                     case .selectFirstSentence:
@@ -1056,6 +1071,21 @@ public final class AppState {
             performSelectLastUnits(kind: .paragraph, count: count, typesIncrementally: typesIncrementally)
         case .selectLastLines(let count):
             performSelectLastUnits(kind: .line, count: count, typesIncrementally: typesIncrementally)
+        case .selectNextSentences(let count):
+            performSelectNextUnits(kind: .sentence, count: count, typesIncrementally: typesIncrementally)
+        case .selectNextParagraphs(let count):
+            performSelectNextUnits(kind: .paragraph, count: count, typesIncrementally: typesIncrementally)
+        case .selectNextLines(let count):
+            performSelectNextUnits(kind: .line, count: count, typesIncrementally: typesIncrementally)
+        case .deleteNextSentences(let count):
+            awaitingReplace = false
+            performDeleteNextUnits(kind: .sentence, count: count, typesIncrementally: typesIncrementally)
+        case .deleteNextParagraphs(let count):
+            awaitingReplace = false
+            performDeleteNextUnits(kind: .paragraph, count: count, typesIncrementally: typesIncrementally)
+        case .deleteNextLines(let count):
+            awaitingReplace = false
+            performDeleteNextUnits(kind: .line, count: count, typesIncrementally: typesIncrementally)
         case .selectLastSentence:
             performSelectLastSentence(typesIncrementally: typesIncrementally)
         case .selectFirstSentence:
@@ -1826,32 +1856,112 @@ public final class AppState {
     private func performSelectLastUnits(kind: TrailingUnit, count: Int, typesIncrementally: Bool) {
         guard typesIncrementally, count > 0 else { return }
         let text = transcribedText
-        let ranges: [TranscriptSelection.SentenceRange]
-        switch kind {
-        case .sentence: ranges = TranscriptSelection.sentenceRanges(text)
-        case .paragraph: ranges = TranscriptSelection.paragraphRanges(text)
-        case .line: ranges = TranscriptSelection.lineRanges(text)
-        }
+        let ranges = unitRanges(kind, text)
         guard !ranges.isEmpty else { return }
         let n = min(count, ranges.count)
         let startIdx = ranges.count - n
         let start = ranges[startIdx].start
-        // From end of buffer, select back to start of first unit in the group.
-        // When selection already active at end of a unit, collapse first if needed.
         let fromEnd = text.count - start
         guard fromEnd > 0 else { return }
         textInserter.selectBackward(count: fromEnd)
-        // Nav index: land on first of the selected group
+        setUnitNav(kind: kind, index: startIdx, selectionActive: true)
+    }
+
+    /// Select next N units (session-relative). From end: starts at second unit.
+    /// Further progressive: starts after current nav index.
+    private func performSelectNextUnits(kind: TrailingUnit, count: Int, typesIncrementally: Bool) {
+        guard typesIncrementally, count > 0 else { return }
+        let text = transcribedText
+        let ranges = unitRanges(kind, text)
+        guard ranges.count >= 2 else { return }
+        let startIdx: Int
+        if let idx = unitNavIndex(kind) {
+            startIdx = idx + 1
+        } else {
+            startIdx = 1
+        }
+        guard startIdx < ranges.count else { return }
+        let endIdx = min(startIdx + count, ranges.count) // exclusive
+        let spanStart = ranges[startIdx].start
+        let spanEnd = ranges[endIdx - 1].end
+        moveToUnitOffset(kind: kind, offset: spanStart)
+        textInserter.selectForward(count: spanEnd - spanStart)
+        setUnitNav(kind: kind, index: endIdx - 1, selectionActive: true)
+    }
+
+    /// Delete next N units (session-relative). From end: starts at second unit.
+    private func performDeleteNextUnits(kind: TrailingUnit, count: Int, typesIncrementally: Bool) {
+        guard count > 0 else { return }
+        let text = transcribedText
+        let ranges = unitRanges(kind, text)
+        guard ranges.count >= 2 else { return }
+        let startIdx: Int
+        if let idx = unitNavIndex(kind) {
+            startIdx = idx + 1
+        } else {
+            startIdx = 1
+        }
+        guard startIdx < ranges.count else { return }
+        let endIdx = min(startIdx + count, ranges.count) // exclusive
+        // Cut from end of prior unit through end of last deleted unit.
+        let cutStart = ranges[startIdx - 1].end
+        let cutEnd = ranges[endIdx - 1].end
+        guard cutStart < cutEnd, cutEnd <= text.count else { return }
+        let keepPrefix = String(text.prefix(cutStart))
+        let keepSuffix = String(text.dropFirst(cutEnd))
+        let newText = keepPrefix + keepSuffix
+        let remove = cutEnd - cutStart
+        if typesIncrementally, remove > 0 {
+            moveToUnitOffset(kind: kind, offset: cutStart)
+            textInserter.selectForward(count: remove)
+            textInserter.deleteBackward(count: 1)
+        }
+        transcribedText = newText
+        editStack.clear()
+        lastCommittedNormalized = ""
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
+    }
+
+    private func unitRanges(_ kind: TrailingUnit, _ text: String) -> [TranscriptSelection.SentenceRange] {
+        switch kind {
+        case .sentence: return TranscriptSelection.sentenceRanges(text)
+        case .paragraph: return TranscriptSelection.paragraphRanges(text)
+        case .line: return TranscriptSelection.lineRanges(text)
+        }
+    }
+
+    private func unitNavIndex(_ kind: TrailingUnit) -> Int? {
+        switch kind {
+        case .sentence: return sentenceNavIndex
+        case .paragraph: return paragraphNavIndex
+        case .line: return lineNavIndex
+        }
+    }
+
+    private func setUnitNav(kind: TrailingUnit, index: Int, selectionActive: Bool) {
         switch kind {
         case .sentence:
-            sentenceNavIndex = startIdx
-            sentenceSelectionActive = true
+            sentenceNavIndex = index
+            sentenceSelectionActive = selectionActive
         case .paragraph:
-            paragraphNavIndex = startIdx
-            paragraphSelectionActive = true
+            paragraphNavIndex = index
+            paragraphSelectionActive = selectionActive
         case .line:
-            lineNavIndex = startIdx
-            lineSelectionActive = true
+            lineNavIndex = index
+            lineSelectionActive = selectionActive
+        }
+    }
+
+    private func moveToUnitOffset(kind: TrailingUnit, offset: Int) {
+        switch kind {
+        case .sentence: moveToSessionOffset(offset)
+        case .paragraph: moveToParagraphOffset(offset)
+        case .line: moveToLineOffset(offset)
         }
     }
 
