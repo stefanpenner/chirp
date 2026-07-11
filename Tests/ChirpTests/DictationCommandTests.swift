@@ -419,6 +419,18 @@ struct DictationCommandTests {
         #expect(TranscriptSelection.lastSentence("Hi. There  ") == " There  ")
     }
 
+    @Test("lastWords peels trailing N words with leading space style")
+    func lastWordsSpan() {
+        #expect(TranscriptSelection.lastWords("", count: 2) == "")
+        #expect(TranscriptSelection.lastWords("Hello", count: 1) == "Hello")
+        #expect(TranscriptSelection.lastWords("Hello world", count: 1) == " world")
+        #expect(TranscriptSelection.lastWords("Hello world now", count: 2) == " world now")
+        #expect(TranscriptSelection.lastWords("one two three four", count: 2) == " three four")
+        #expect(TranscriptSelection.lastWords("one two three", count: 5) == "one two three")
+        #expect(TranscriptSelection.lastWords("Hello world  ", count: 1) == " world  ")
+        #expect(TranscriptSelection.lastWords("a b", count: 0) == "")
+    }
+
     @Test("first sentence selection boundaries")
     func firstSentenceSelection() {
         #expect(TranscriptSelection.firstSentence("") == "")
@@ -585,6 +597,10 @@ struct DictationCommandTests {
     func countedSelectDeleteCommands() {
         #expect(DictationCommand.parse("select previous two words") == .selectPreviousWords(count: 2))
         #expect(DictationCommand.parse("select next 3 words") == .selectNextWords(count: 3))
+        // Buffer trailing: select last N words (not keyboard previous)
+        #expect(DictationCommand.parse("select last two words") == .selectLastWords(count: 2))
+        #expect(DictationCommand.parse("select the last 3 words") == .selectLastWords(count: 3))
+        #expect(DictationCommand.parse("highlight last two words") == .selectLastWords(count: 2))
         #expect(DictationCommand.parse("delete next two words") == .deleteNextWords(count: 2))
         #expect(DictationCommand.parse("delete last two sentences") == .deleteLastSentences(count: 2))
         #expect(DictationCommand.parse("delete previous three sentences") == .deleteLastSentences(count: 3))

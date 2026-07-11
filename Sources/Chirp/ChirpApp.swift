@@ -793,6 +793,8 @@ public final class AppState {
                         self.performSelectThat(typesIncrementally: false)
                     case .selectLastWord:
                         self.performSelectLastWord(typesIncrementally: false)
+                    case .selectLastWords(let count):
+                        self.performSelectLastWords(count: count, typesIncrementally: false)
                     case .selectNextWord:
                         self.performSelectWord(direction: .right)
                     case .selectPreviousWord:
@@ -1063,6 +1065,8 @@ public final class AppState {
             performSelectThat(typesIncrementally: typesIncrementally)
         case .selectLastWord:
             performSelectLastWord(typesIncrementally: typesIncrementally)
+        case .selectLastWords(let count):
+            performSelectLastWords(count: count, typesIncrementally: typesIncrementally)
         case .selectNextWord:
             performSelectWord(direction: .right)
         case .selectPreviousWord:
@@ -1763,34 +1767,15 @@ public final class AppState {
 
     /// Select the last whitespace-delimited word. Buffer unchanged.
     private func performSelectLastWord(typesIncrementally: Bool) {
-        guard typesIncrementally else { return }
-        let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        performSelectLastWords(count: 1, typesIncrementally: typesIncrementally)
+    }
 
-        var buffer = transcribedText
-        while buffer.last?.isWhitespace == true {
-            buffer.removeLast()
-        }
-        guard let lastSpace = buffer.lastIndex(where: { $0.isWhitespace }) else {
-            // Single word — select entire buffer content
-            let count = transcribedText.count
-            if count > 0 {
-                textInserter.selectBackward(count: count)
-            }
-            return
-        }
-        let wordStart = buffer.index(after: lastSpace)
-        var start = wordStart
-        if start > transcribedText.startIndex {
-            let before = transcribedText.index(before: start)
-            if transcribedText[before].isWhitespace {
-                start = before
-            }
-        }
-        let selected = String(transcribedText[start...])
-        if !selected.isEmpty {
-            textInserter.selectBackward(count: selected.count)
-        }
+    /// Select last N whitespace-delimited words (session trailing). Buffer unchanged.
+    private func performSelectLastWords(count: Int, typesIncrementally: Bool) {
+        guard typesIncrementally, count > 0 else { return }
+        let selected = TranscriptSelection.lastWords(transcribedText, count: count)
+        guard !selected.isEmpty else { return }
+        textInserter.selectBackward(count: selected.count)
     }
 
     /// Select the last sentence. Buffer unchanged.

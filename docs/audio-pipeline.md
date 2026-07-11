@@ -194,6 +194,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select first line** / **select the first line** / **highlight first line** / **select 1st line** — select first line (← session then ⇧→ × n; content before first `\n`). Buffer unchanged. Does **not** steal **select last line**
 - **select next line** / **select forward line** / **highlight next line** — progressive: from end select second line; further calls advance (`LineCursor.tla`). Buffer unchanged. Does **not** steal bare **next line** (move down) or **select last line**
 - **select previous N words** / **select next N words** — keyboard ⇧⌥←/→ × N (N ≥ 2)
+- **select last N words** / **highlight last N words** — select trailing N words from session buffer (⇧← span; N ≥ 2). Does **not** steal **select previous N words** (caret-relative). Dual: `SelectLastWords.tla`
 - **delete last N sentences** / **paragraphs** / **lines** — peel last N trailing units (N ≥ 2; Voice Control style)
 - **delete next N sentences** / **paragraphs** / **lines** — remove next N units from session cursor (from end = starting at second; `MultiUnitEdit.tla`)
 - **select last N sentences** / **previous N paragraphs** / **last N lines** — select trailing N units via ⇧← (N ≥ 2)

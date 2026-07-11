@@ -46,6 +46,7 @@ tlc specs/PipelineRebuild.tla
 | `MultiUnitEdit` | delete last N trailing units clamps and stays non-negative | `DictationCommand.deleteLast*`(count) + `performDeleteLastUnits` |
 | `CharacterEdit` | delete previous N characters clamps to bufferLen | `DictationCommand.deletePreviousCharacters` + `performDeletePreviousCharacters` |
 | `MoveN` | move N words/characters leaves session bufferLen unchanged | `DictationCommand.movePrevious/NextWords` + `movePrevious/NextCharacters` + `performMoveWords` / `performMoveCharacters` |
+| `SelectLastWords` | select last N trailing words leaves session bufferLen unchanged | `DictationCommand.selectLastWords` + `TranscriptSelection.lastWords` + `performSelectLastWords` |
 | `VadEndpoint` | user VAD silence/threshold always clamp into safe range | `VadSettings.clamp` + min silence / threshold ranges |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |

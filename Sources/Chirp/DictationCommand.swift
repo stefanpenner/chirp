@@ -88,6 +88,8 @@ enum DictationCommand: Equatable, Sendable {
     case selectThat
     /// Select the last whitespace-delimited word.
     case selectLastWord
+    /// Select last N whitespace-delimited words (session trailing). Buffer unchanged.
+    case selectLastWords(count: Int)
     /// Select next word via ⇧⌥→. Keyboard-only; buffer unchanged.
     case selectNextWord
     /// Select previous word via ⇧⌥←. Keyboard-only; buffer unchanged.
@@ -247,6 +249,12 @@ enum DictationCommand: Equatable, Sendable {
             (
                 #"^delete (?:the )?(?:last|previous|prior) "# + num + #" lines?$"#,
                 { c in inRange(c) ? .deleteLastLines(count: c) : nil }
+            ),
+            // Buffer select: last N words (session trailing). Do not steal
+            // "select previous N words" (keyboard selectPreviousWords below).
+            (
+                #"^(?:select|highlight) (?:the )?last "# + num + #" words?$"#,
+                { c in inRange(c) ? .selectLastWords(count: c) : nil }
             ),
             // Buffer select: select last/previous N sentences|paragraphs|lines
             (
@@ -738,6 +746,7 @@ enum DictationCommand: Equatable, Sendable {
         ("no space off / compound off / spaces on", "Exit no-space mode"),
         ("select that", "Select last phrase"),
         ("select last word", "Select last word"),
+        ("select last two words / select last 3 words", "Select last N words"),
         ("select next word / select forward word", "Select next word (⇧⌥→; keyboard only)"),
         ("select previous word / select prior word", "Select previous word (⇧⌥←; keyboard only)"),
         ("delete next word / delete forward word", "Delete next word (⇧⌥→ then ⌫; keyboard only)"),
@@ -802,6 +811,36 @@ enum TranscriptSelection {
     struct SentenceRange: Equatable {
         let start: Int
         let end: Int
+    }
+
+    /// Trailing N whitespace-delimited words (session buffer style).
+    /// Includes the space before the first selected word (matches select-last-word).
+    /// Clamps when N exceeds word count. Empty when count < 1 or text empty.
+    static func lastWords(_ text: String, count: Int) -> String {
+        guard count > 0, !text.isEmpty else { return "" }
+        var remaining = text
+        for _ in 0..<count {
+            while remaining.last?.isWhitespace == true {
+                remaining.removeLast()
+            }
+            guard !remaining.isEmpty else { break }
+            if let lastSpace = remaining.lastIndex(where: { $0.isWhitespace }) {
+                var start = remaining.index(after: lastSpace)
+                if start > remaining.startIndex {
+                    let before = remaining.index(before: start)
+                    if remaining[before].isWhitespace {
+                        start = before
+                    }
+                }
+                remaining = String(remaining[..<start])
+            } else {
+                remaining = ""
+                break
+            }
+        }
+        let remove = text.count - remaining.count
+        guard remove > 0 else { return "" }
+        return String(text.suffix(remove))
     }
 
     /// All sentence ranges in `text`, split on `[.?!]\s+` (punct stays with prior sentence).
