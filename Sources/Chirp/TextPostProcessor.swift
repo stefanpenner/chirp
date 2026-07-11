@@ -152,6 +152,7 @@ enum TextPostProcessor {
             (#"(?:^|\s+)space bar\b"#, " "),
             (#"\s+new line\s*"#, "\n"),
             (#"\s+newline\s*"#, "\n"),
+            (#"\s+line break\s*"#, "\n"),
             (#"\s+new paragraph\s*"#, "\n\n"),
             // Spoken symbols (Mac / Windows dictation style)
             // Absolute slash+segment runs packed in packSpokenPath (keeps space

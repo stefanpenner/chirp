@@ -1460,6 +1460,70 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("delete last two sentences"))
     }
 
+    @Test("delete previous 3 characters peels trailing buffer chars")
+    func deletePreviousThreeCharactersCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["delete previous 3 characters"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello wo" { break }
+        }
+
+        #expect(state.transcribedText == "Hello wo")
+        #expect(inserter.deletedCounts.last == 3)
+        #expect(!inserter.typedTexts.contains("delete previous 3 characters"))
+    }
+
+    @Test("select previous 4 characters uses selectBackward")
+    func selectPreviousFourCharactersCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["select previous 4 characters"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+
+        #expect(inserter.selectBackwardCounts.last == 4)
+        #expect(state.transcribedText == "Hello world")
+        #expect(!inserter.typedTexts.contains("select previous 4 characters"))
+    }
+
     @Test("delete last two words peels both trailing words")
     func deleteLastTwoWordsCommand() async throws {
         let mock = MockTranscriber()

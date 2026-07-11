@@ -194,6 +194,7 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("Hello new line world") == "Hello\nWorld")
         #expect(TextPostProcessor.process("One new paragraph Two") == "One\n\nTwo")
         #expect(TextPostProcessor.process("line newline break") == "line\nBreak")
+        #expect(TextPostProcessor.process("Hello line break world") == "Hello\nWorld")
     }
 
     @Test("Capitalizes after terminal punct and newlines")

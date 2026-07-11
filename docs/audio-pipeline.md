@@ -175,6 +175,9 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select next word** / **select forward word** — select next word (⇧⌥→; keyboard only; buffer unchanged)
 - **select previous word** / **select prior word** — select previous word (⇧⌥←; keyboard only; buffer unchanged). Does **not** steal **select last word** or bare **previous word** (move left)
 - **delete next word** / **delete forward word** — delete next word (⇧⌥→ then ⌫; keyboard only; buffer unchanged). Does **not** steal **delete last word**
+- **delete previous N characters** / **delete last N characters** — peel N trailing session characters (+ keyboard ⌫ when incremental). Single: **delete previous character**
+- **delete next N characters** — select forward N then ⌫ (keyboard only)
+- **select previous N characters** / **select next N characters** — ⇧← / ⇧→ × N (keyboard only; Voice Control style)
 - **select last sentence** / **select sentence** — select trailing sentence
 - **select previous sentence** / **select prior sentence** — progressive: from end select last; further calls step back (`SentenceCursor.tla`). Buffer unchanged
 - **select first sentence** / **select the first sentence** / **highlight first sentence** / **select 1st sentence** — select first sentence (← session then ⇧→ × n). Buffer unchanged
@@ -217,6 +220,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - When spell mode is on, caps transform is skipped and multi-segment joins glue without spaces
 - **clear all** — wipe session transcript
 - **press enter** / **press tab** / **press space** — key inserts
+- Spoken **line break** → newline (same as **new line**)
 - **press backspace** / **delete key** — Backspace once (keyboard only; buffer unchanged)
 - **forward delete** / **press forward delete** / **delete forward** / **press delete forward** — Forward Delete once (0x75; keyboard only; buffer unchanged). Does **not** steal **press delete** / **delete key** (Backspace)
 - **press escape** / **press esc** / **hit escape** / **escape key** — Escape once (keyboard only; buffer unchanged; does **not** cancel session). Bare **escape** is not a command

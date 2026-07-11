@@ -803,6 +803,15 @@ public final class AppState {
                         self.performDeleteWords(direction: .left, count: count)
                     case .deleteNextWords(let count):
                         self.performDeleteWords(direction: .right, count: count)
+                    case .selectPreviousCharacters(let count):
+                        self.performSelectCharacters(direction: .left, count: count)
+                    case .selectNextCharacters(let count):
+                        self.performSelectCharacters(direction: .right, count: count)
+                    case .deletePreviousCharacters(let count):
+                        self.awaitingReplace = false
+                        self.performDeletePreviousCharacters(count: count, typesIncrementally: false)
+                    case .deleteNextCharacters(let count):
+                        self.performDeleteNextCharacters(count: count)
                     case .deleteLastSentences(let count):
                         self.awaitingReplace = false
                         self.performDeleteLastSentences(count: count, typesIncrementally: false)
@@ -1056,6 +1065,15 @@ public final class AppState {
             performDeleteWords(direction: .left, count: count)
         case .deleteNextWords(let count):
             performDeleteWords(direction: .right, count: count)
+        case .selectPreviousCharacters(let count):
+            performSelectCharacters(direction: .left, count: count)
+        case .selectNextCharacters(let count):
+            performSelectCharacters(direction: .right, count: count)
+        case .deletePreviousCharacters(let count):
+            awaitingReplace = false
+            performDeletePreviousCharacters(count: count, typesIncrementally: typesIncrementally)
+        case .deleteNextCharacters(let count):
+            performDeleteNextCharacters(count: count)
         case .deleteLastSentences(let count):
             awaitingReplace = false
             performDeleteLastSentences(count: count, typesIncrementally: typesIncrementally)
@@ -1685,6 +1703,39 @@ public final class AppState {
         for _ in 0..<count {
             textInserter.selectWord(direction: direction)
         }
+        textInserter.deleteBackward(count: 1)
+    }
+
+    /// Select N characters left (previous) or right (next). Keyboard-only.
+    private func performSelectCharacters(direction: MoveDirection, count: Int) {
+        guard count > 0 else { return }
+        if direction == .left {
+            textInserter.selectBackward(count: count)
+        } else {
+            textInserter.selectForward(count: count)
+        }
+    }
+
+    /// Delete previous N characters from session buffer (+ keyboard when incremental).
+    private func performDeletePreviousCharacters(count: Int, typesIncrementally: Bool) {
+        guard count > 0 else { return }
+        let n = min(count, transcribedText.count)
+        guard n > 0 else { return }
+        let removed = String(transcribedText.suffix(n))
+        transcribedText = String(transcribedText.dropLast(n))
+        if typesIncrementally {
+            textInserter.deleteBackward(count: n)
+        }
+        if !editStack.dropTrailingSuffix(removed) {
+            editStack.clear()
+        }
+        lastCommittedNormalized = ""
+    }
+
+    /// Delete next N characters (select forward then backspace). Keyboard-only.
+    private func performDeleteNextCharacters(count: Int) {
+        guard count > 0 else { return }
+        textInserter.selectForward(count: count)
         textInserter.deleteBackward(count: 1)
     }
 

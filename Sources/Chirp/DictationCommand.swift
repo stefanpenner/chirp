@@ -104,6 +104,14 @@ enum DictationCommand: Equatable, Sendable {
     case deletePreviousWords(count: Int)
     /// Delete next N words via ⇧⌥→ × N then backspace. Keyboard-only.
     case deleteNextWords(count: Int)
+    /// Select previous N characters (⇧← × N). Keyboard-only; buffer unchanged.
+    case selectPreviousCharacters(count: Int)
+    /// Select next N characters (⇧→ × N). Keyboard-only; buffer unchanged.
+    case selectNextCharacters(count: Int)
+    /// Delete previous N characters from session buffer (and keyboard when incremental).
+    case deletePreviousCharacters(count: Int)
+    /// Delete next N characters (select forward then backspace). Keyboard-only.
+    case deleteNextCharacters(count: Int)
     /// Delete last N sentences from session buffer (N ≥ 2).
     case deleteLastSentences(count: Int)
     /// Delete last N paragraphs from session buffer (N ≥ 2).
@@ -211,7 +219,8 @@ enum DictationCommand: Equatable, Sendable {
     /// Requires N ≥ 2 for multi-unit peels (single stays uncounted case).
     /// Voice Control / SpeechPulse style multi-unit edit.
     private static func matchCounted(_ n: String) -> DictationCommand? {
-        let num = #"(\d+|two|three|four|five|six|seven|eight|nine|ten)"#
+        // Include "one" for character-level commands; multi-unit peels still require N≥2.
+        let num = #"(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)"#
         let inRange: (Int) -> Bool = { (2...20).contains($0) }
         let specs: [(pattern: String, make: (Int) -> DictationCommand?)] = [
             // Buffer peel: delete last/previous N words|sentences|paragraphs|lines
@@ -284,6 +293,23 @@ enum DictationCommand: Equatable, Sendable {
                 #"^delete (?:the )?(?:next|forward) "# + num + #" words?$"#,
                 { c in inRange(c) ? .deleteNextWords(count: c) : nil }
             ),
+            // Characters (Voice Control style; N ≥ 1 including single)
+            (
+                #"^select (?:the )?(?:previous|prior|last) "# + num + #" characters?$"#,
+                { c in (1...100).contains(c) ? .selectPreviousCharacters(count: c) : nil }
+            ),
+            (
+                #"^select (?:the )?(?:next|forward) "# + num + #" characters?$"#,
+                { c in (1...100).contains(c) ? .selectNextCharacters(count: c) : nil }
+            ),
+            (
+                #"^delete (?:the )?(?:previous|prior|last) "# + num + #" characters?$"#,
+                { c in (1...100).contains(c) ? .deletePreviousCharacters(count: c) : nil }
+            ),
+            (
+                #"^delete (?:the )?(?:next|forward) "# + num + #" characters?$"#,
+                { c in (1...100).contains(c) ? .deleteNextCharacters(count: c) : nil }
+            ),
         ]
 
         for spec in specs {
@@ -303,8 +329,9 @@ enum DictationCommand: Equatable, Sendable {
     private static func parseCountToken(_ raw: String) -> Int? {
         if let d = Int(raw) { return d }
         let words: [String: Int] = [
-            "two": 2, "three": 3, "four": 4, "five": 5,
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
             "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+            "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20,
         ]
         return words[raw]
     }
@@ -421,6 +448,14 @@ enum DictationCommand: Equatable, Sendable {
         case "press backspace", "hit backspace", "backspace",
              "press delete", "hit delete", "delete key":
             return .pressBackspace
+        // Single character (also covered by counted forms with "one")
+        case "delete previous character", "delete last character",
+             "delete prior character", "remove previous character",
+             "remove last character":
+            return .deletePreviousCharacters(count: 1)
+        case "delete next character", "delete forward character",
+             "remove next character", "remove forward character":
+            return .deleteNextCharacters(count: 1)
         // Forward Delete (0x75) — not laptop Delete/Backspace.
         case "forward delete", "press forward delete",
              "delete forward", "press delete forward":
@@ -694,6 +729,7 @@ enum DictationCommand: Equatable, Sendable {
         ("select first line / the first line", "Select first line"),
         ("select next line / select forward line", "Select next line (progressive)"),
         ("select previous two words / select next 3 words", "Select N words (keyboard)"),
+        ("delete previous N characters / select previous N characters", "Character-level edit (Voice Control style)"),
         ("delete last two sentences / paragraphs / lines", "Remove last N sentences/paragraphs/lines"),
         ("delete next two sentences / paragraphs / lines", "Remove next N sentences/paragraphs/lines"),
         ("select last two sentences / previous 3 paragraphs", "Select last N sentences/paragraphs/lines"),
