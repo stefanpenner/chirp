@@ -211,6 +211,14 @@ enum DictationCommand: Equatable, Sendable {
     case moveToDocumentStart
     /// Move cursor to document end (⌘↓). Buffer unchanged.
     case moveToDocumentEnd
+    /// Move caret to start of sentence under session caret (Dragon-style).
+    case moveToSentenceStart
+    /// Move caret to end of sentence under session caret (Dragon-style).
+    case moveToSentenceEnd
+    /// Move caret to start of paragraph under session caret.
+    case moveToParagraphStart
+    /// Move caret to end of paragraph under session caret.
+    case moveToParagraphEnd
     /// Scroll one page up (Page Up). Buffer unchanged.
     case pageUp
     /// Scroll one page down (Page Down). Buffer unchanged.
@@ -924,6 +932,22 @@ enum DictationCommand: Equatable, Sendable {
             return .moveToStart
         case "go to end", "end of line":
             return .moveToEnd
+        // Sentence / paragraph edges (Dragon Medical-style) — before progressive
+        // previous/next so "start of sentence" is not stolen by "previous sentence".
+        case "start of sentence", "beginning of sentence",
+             "go to start of sentence", "go to beginning of sentence",
+             "move to start of sentence", "move to beginning of sentence":
+            return .moveToSentenceStart
+        case "end of sentence", "go to end of sentence",
+             "move to end of sentence":
+            return .moveToSentenceEnd
+        case "start of paragraph", "beginning of paragraph",
+             "go to start of paragraph", "go to beginning of paragraph",
+             "move to start of paragraph", "move to beginning of paragraph":
+            return .moveToParagraphStart
+        case "end of paragraph", "go to end of paragraph",
+             "move to end of paragraph":
+            return .moveToParagraphEnd
         // Page scroll — exact phrases; "move up" / "go up" remain moveUpLine.
         case "page up", "scroll up", "scroll page up":
             return .pageUp
@@ -1039,6 +1063,8 @@ enum DictationCommand: Equatable, Sendable {
         ("move down / next line / line down", "Cursor down one line (↓)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),
         ("go to end / end of line", "Cursor to line end (⌘→)"),
+        ("start of sentence / end of sentence", "Caret to sentence edge under cursor"),
+        ("start of paragraph / end of paragraph", "Caret to paragraph edge under cursor"),
         ("beginning of document / top of document", "Cursor to document start (⌘↑)"),
         ("end of document / bottom of document", "Cursor to document end (⌘↓)"),
         ("page up / scroll up", "Page up (Page Up key)"),
@@ -1413,15 +1439,15 @@ enum TranscriptSelection {
         return ranges
     }
 
-    /// 0-based line index for `pos` (caret may sit at line.end). Nil when no lines.
-    /// Dual of LineCaret.tla line-under-caret.
-    static func lineIndexContaining(_ pos: Int, ranges: [SentenceRange]) -> Int? {
+    /// 0-based unit index for `pos` (caret may sit at range.end). Nil when empty.
+    /// Dual of LineCaret / SentenceEdge range-under-caret.
+    static func rangeIndexContaining(_ pos: Int, ranges: [SentenceRange]) -> Int? {
         guard !ranges.isEmpty else { return nil }
         let p = max(0, pos)
         for (i, r) in ranges.enumerated() {
             if p >= r.start && p <= r.end { return i }
         }
-        // On the `\n` between lines → treat as end of previous line.
+        // Between units (e.g. on `\n`) → treat as end of previous unit.
         for (i, r) in ranges.enumerated() {
             if i + 1 < ranges.count {
                 let next = ranges[i + 1]
@@ -1429,6 +1455,55 @@ enum TranscriptSelection {
             }
         }
         return ranges.count - 1
+    }
+
+    /// Alias for line ranges (same grain as `rangeIndexContaining`).
+    static func lineIndexContaining(_ pos: Int, ranges: [SentenceRange]) -> Int? {
+        rangeIndexContaining(pos, ranges: ranges)
+    }
+
+    /// Start of the unit under caret (sentence / paragraph / line ranges).
+    /// Dual of SentenceEdge.tla UnitStart.
+    static func offsetAtUnitStart(
+        _ text: String,
+        caret: Int?,
+        ranges: [SentenceRange]
+    ) -> Int {
+        let len = text.count
+        let pos = min(max(caret ?? len, 0), len)
+        guard let idx = rangeIndexContaining(pos, ranges: ranges) else { return 0 }
+        return ranges[idx].start
+    }
+
+    /// End of the unit under caret (before separator / next unit).
+    /// Dual of SentenceEdge.tla UnitEnd.
+    static func offsetAtUnitEnd(
+        _ text: String,
+        caret: Int?,
+        ranges: [SentenceRange]
+    ) -> Int {
+        let len = text.count
+        let pos = min(max(caret ?? len, 0), len)
+        guard let idx = rangeIndexContaining(pos, ranges: ranges) else { return len }
+        return ranges[idx].end
+    }
+
+    /// Dual of SentenceEdge.tla — sentence under caret.
+    static func offsetAtSentenceStart(_ text: String, caret: Int?) -> Int {
+        offsetAtUnitStart(text, caret: caret, ranges: sentenceRanges(text))
+    }
+
+    static func offsetAtSentenceEnd(_ text: String, caret: Int?) -> Int {
+        offsetAtUnitEnd(text, caret: caret, ranges: sentenceRanges(text))
+    }
+
+    /// Dual of SentenceEdge.tla — paragraph under caret.
+    static func offsetAtParagraphStart(_ text: String, caret: Int?) -> Int {
+        offsetAtUnitStart(text, caret: caret, ranges: paragraphRanges(text))
+    }
+
+    static func offsetAtParagraphEnd(_ text: String, caret: Int?) -> Int {
+        offsetAtUnitEnd(text, caret: caret, ranges: paragraphRanges(text))
     }
 
     /// Session caret after ↑ / ↓ by `count` lines, preserving column when possible.
@@ -1471,19 +1546,11 @@ enum TranscriptSelection {
 
     /// Start of the line under caret. Dual of LineCaret.tla LineStart.
     static func offsetAtLineStart(_ text: String, caret: Int?) -> Int {
-        let len = text.count
-        let pos = min(max(caret ?? len, 0), len)
-        let ranges = lineRanges(text)
-        guard let idx = lineIndexContaining(pos, ranges: ranges) else { return 0 }
-        return ranges[idx].start
+        offsetAtUnitStart(text, caret: caret, ranges: lineRanges(text))
     }
 
     /// End of the line under caret (before `\n` / buffer end). Dual of LineCaret.tla LineEnd.
     static func offsetAtLineEnd(_ text: String, caret: Int?) -> Int {
-        let len = text.count
-        let pos = min(max(caret ?? len, 0), len)
-        let ranges = lineRanges(text)
-        guard let idx = lineIndexContaining(pos, ranges: ranges) else { return len }
-        return ranges[idx].end
+        offsetAtUnitEnd(text, caret: caret, ranges: lineRanges(text))
     }
 }

@@ -3889,6 +3889,106 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("end of line"))
     }
 
+    @Test("end of sentence then content inserts at sentence edge")
+    func endOfSentenceThenContentInsertsMid() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world. Next sentence."])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains(".") { break }
+        }
+
+        let text = state.transcribedText
+        let ranges = TranscriptSelection.sentenceRanges(text)
+        guard ranges.count >= 2 else {
+            Issue.record("need 2+ sentences, got \"\(text)\"")
+            return
+        }
+
+        // Move to start of first sentence, then "end of sentence" → first sentence end
+        await mock.setFeedAudioResult(["beginning of document"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveToDocumentStartCalled { break }
+        }
+
+        await mock.setFeedAudioResult(["end of sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveForwardCounts.isEmpty || !inserter.moveBackwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["XX"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("XX") || state.transcribedText.contains("xx") { break }
+        }
+
+        let after = state.transcribedText
+        #expect(
+            after.contains("XX") || after.contains("xx") || after.contains("Xx"),
+            "inserted XX, got \"\(after)\""
+        )
+        // Must not be pure trailing-only append after whole buffer
+        #expect(
+            !after.lowercased().hasSuffix("xx")
+                || after.lowercased().contains("xx next")
+                || after.lowercased().contains("xxnext")
+                || after.range(of: "XX", options: .caseInsensitive)?.upperBound
+                    != after.endIndex,
+            "prefer mid-buffer insert at sentence edge, got \"\(after)\""
+        )
+        #expect(!inserter.typedTexts.contains("end of sentence"))
+    }
+
+    @Test("start of sentence moves host without changing buffer")
+    func startOfSentenceCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world. Next one."])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains(".") { break }
+        }
+        let before = state.transcribedText
+
+        await mock.setFeedAudioResult(["start of sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == before)
+        #expect(!inserter.typedTexts.contains("start of sentence"))
+        // From end, start of last sentence is a backward move
+        #expect(!inserter.moveBackwardCounts.isEmpty || !inserter.moveForwardCounts.isEmpty)
+    }
+
     @Test("beginning of document then content inserts at start (sessionCaret dual)")
     func documentStartThenContentInsertsMid() async throws {
         let mock = MockTranscriber()

@@ -1139,6 +1139,14 @@ public final class AppState {
                         self.performMoveToDocumentStart()
                     case .moveToDocumentEnd:
                         self.performMoveToDocumentEnd()
+                    case .moveToSentenceStart:
+                        self.performMoveToSentenceEdge(start: true)
+                    case .moveToSentenceEnd:
+                        self.performMoveToSentenceEdge(start: false)
+                    case .moveToParagraphStart:
+                        self.performMoveToParagraphEdge(start: true)
+                    case .moveToParagraphEnd:
+                        self.performMoveToParagraphEdge(start: false)
                     case .pageUp:
                         self.performScrollPage(direction: .up)
                     case .pageDown:
@@ -1430,6 +1438,14 @@ public final class AppState {
             performMoveToDocumentStart()
         case .moveToDocumentEnd:
             performMoveToDocumentEnd()
+        case .moveToSentenceStart:
+            performMoveToSentenceEdge(start: true)
+        case .moveToSentenceEnd:
+            performMoveToSentenceEdge(start: false)
+        case .moveToParagraphStart:
+            performMoveToParagraphEdge(start: true)
+        case .moveToParagraphEnd:
+            performMoveToParagraphEdge(start: false)
         case .pageUp:
             performScrollPage(direction: .up)
         case .pageDown:
@@ -3070,6 +3086,46 @@ public final class AppState {
         textInserter.moveToDocumentEnd()
         setSessionCaret(transcribedText.count)
         clearUnitNavAfterLineOrDocMove()
+    }
+
+    /// Dragon-style "start/end of sentence". Dual of SentenceEdge.tla + sessionCaret.
+    private func performMoveToSentenceEdge(start: Bool) {
+        let text = transcribedText
+        let ranges = TranscriptSelection.sentenceRanges(text)
+        guard !ranges.isEmpty else { return }
+        let offset = start
+            ? TranscriptSelection.offsetAtSentenceStart(text, caret: sessionCaret)
+            : TranscriptSelection.offsetAtSentenceEnd(text, caret: sessionCaret)
+        moveToSessionOffset(offset)
+        setSessionCaret(offset)
+        if let idx = TranscriptSelection.rangeIndexContaining(offset, ranges: ranges) {
+            sentenceNavIndex = idx
+        }
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
+    }
+
+    /// Dragon-style "start/end of paragraph". Dual of SentenceEdge.tla + sessionCaret.
+    private func performMoveToParagraphEdge(start: Bool) {
+        let text = transcribedText
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        guard !ranges.isEmpty else { return }
+        let offset = start
+            ? TranscriptSelection.offsetAtParagraphStart(text, caret: sessionCaret)
+            : TranscriptSelection.offsetAtParagraphEnd(text, caret: sessionCaret)
+        moveToParagraphOffset(offset)
+        setSessionCaret(offset)
+        if let idx = TranscriptSelection.rangeIndexContaining(offset, ranges: ranges) {
+            paragraphNavIndex = idx
+        }
+        paragraphSelectionActive = false
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Clear progressive unit nav after line/doc host moves (same as word/char).

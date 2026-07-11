@@ -545,6 +545,55 @@ struct DictationCommandTests {
         )
     }
 
+    @Test("recognizes start/end of sentence and paragraph")
+    func sentenceParagraphEdgeCommands() {
+        #expect(DictationCommand.parse("start of sentence") == .moveToSentenceStart)
+        #expect(DictationCommand.parse("end of sentence") == .moveToSentenceEnd)
+        #expect(DictationCommand.parse("go to beginning of sentence") == .moveToSentenceStart)
+        #expect(DictationCommand.parse("start of paragraph") == .moveToParagraphStart)
+        #expect(DictationCommand.parse("end of paragraph") == .moveToParagraphEnd)
+        #expect(DictationCommand.parse("go to end of paragraph") == .moveToParagraphEnd)
+        // Do not steal progressive nav
+        #expect(DictationCommand.parse("previous sentence") == .moveToPreviousSentence)
+        #expect(DictationCommand.parse("next paragraph") == .moveToNextParagraph)
+        // Do not steal line edges
+        #expect(DictationCommand.parse("end of line") == .moveToEnd)
+        #expect(DictationCommand.parse("go to start") == .moveToStart)
+    }
+
+    @Test("sentence and paragraph edge offsets under caret")
+    func sentenceParagraphEdgeOffsets() {
+        let t = "Hello world. Next one. Third."
+        // End of buffer → last sentence
+        #expect(TranscriptSelection.offsetAtSentenceEnd(t, caret: nil) == t.count
+                || TranscriptSelection.offsetAtSentenceEnd(t, caret: t.count) == t.count)
+        let ranges = TranscriptSelection.sentenceRanges(t)
+        #expect(ranges.count >= 2)
+        // Mid first sentence → start/end of first
+        let midFirst = ranges[0].start + 1
+        #expect(TranscriptSelection.offsetAtSentenceStart(t, caret: midFirst) == ranges[0].start)
+        #expect(TranscriptSelection.offsetAtSentenceEnd(t, caret: midFirst) == ranges[0].end)
+        // Second sentence start
+        #expect(
+            TranscriptSelection.offsetAtSentenceStart(t, caret: ranges[1].start)
+                == ranges[1].start
+        )
+
+        let paras = "One para.\n\nTwo para here."
+        let pr = TranscriptSelection.paragraphRanges(paras)
+        #expect(pr.count >= 2)
+        #expect(TranscriptSelection.offsetAtParagraphStart(paras, caret: nil) == pr[pr.count - 1].start
+                || TranscriptSelection.offsetAtParagraphEnd(paras, caret: nil) == pr[pr.count - 1].end)
+        #expect(
+            TranscriptSelection.offsetAtParagraphStart(paras, caret: pr[0].start + 1)
+                == pr[0].start
+        )
+        #expect(
+            TranscriptSelection.offsetAtParagraphEnd(paras, caret: pr[0].start + 1)
+                == pr[0].end
+        )
+    }
+
     @Test("line caret offsets for multi-line buffer")
     func lineCaretOffsets() {
         let t = "Hello\nWorld\nFoo"
