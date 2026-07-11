@@ -61,49 +61,45 @@ struct SpokenDateITNTests {
 
     @Test("relative days resolve with injectable clock")
     func relativeDays() {
-        // Pin clock: Wednesday 2026-07-08 UTC
+        // Pin clock via args (no process-global race): Wednesday 2026-07-08 UTC
         var comps = DateComponents()
         comps.year = 2026; comps.month = 7; comps.day = 8
         comps.hour = 15
         var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
+        let tz = TimeZone(identifier: "UTC")!
+        cal.timeZone = tz
         let pinned = cal.date(from: comps)!
-        SpokenDateITN.nowProvider = { pinned }
-        SpokenDateITN.timeZoneProvider = { TimeZone(identifier: "UTC")! }
-        defer {
-            SpokenDateITN.resetClock()
-            SpokenDateITN.resetTimeZone()
-        }
 
-        #expect(SpokenDateITN.apply("today") == "July 8, 2026")
-        #expect(SpokenDateITN.apply("tomorrow") == "July 9, 2026")
-        #expect(SpokenDateITN.apply("yesterday") == "July 7, 2026")
-        #expect(SpokenDateITN.apply("due tomorrow please") == "due July 9, 2026 please")
+        #expect(SpokenDateITN.apply("today", now: pinned, timeZone: tz) == "July 8, 2026")
+        #expect(SpokenDateITN.apply("tomorrow", now: pinned, timeZone: tz) == "July 9, 2026")
+        #expect(SpokenDateITN.apply("yesterday", now: pinned, timeZone: tz) == "July 7, 2026")
+        #expect(
+            SpokenDateITN.apply("due tomorrow please", now: pinned, timeZone: tz)
+                == "due July 9, 2026 please"
+        )
     }
 
     @Test("next this last weekday")
     func relativeWeekdays() {
-        // Wednesday 2026-07-08
+        // Wednesday 2026-07-08 — explicit clock args (parallel-safe)
         var comps = DateComponents()
         comps.year = 2026; comps.month = 7; comps.day = 8
         var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
+        let tz = TimeZone(identifier: "UTC")!
+        cal.timeZone = tz
         let pinned = cal.date(from: comps)!
-        SpokenDateITN.nowProvider = { pinned }
-        SpokenDateITN.timeZoneProvider = { TimeZone(identifier: "UTC")! }
-        defer {
-            SpokenDateITN.resetClock()
-            SpokenDateITN.resetTimeZone()
-        }
 
         // Next Friday = July 10
-        #expect(SpokenDateITN.apply("next friday") == "July 10, 2026")
+        #expect(SpokenDateITN.apply("next friday", now: pinned, timeZone: tz) == "July 10, 2026")
         // This Wednesday = today
-        #expect(SpokenDateITN.apply("this wednesday") == "July 8, 2026")
+        #expect(SpokenDateITN.apply("this wednesday", now: pinned, timeZone: tz) == "July 8, 2026")
         // Last Monday = July 6
-        #expect(SpokenDateITN.apply("last monday") == "July 6, 2026")
+        #expect(SpokenDateITN.apply("last monday", now: pinned, timeZone: tz) == "July 6, 2026")
         // Next Monday = July 13 (not today)
-        #expect(SpokenDateITN.apply("meet next monday") == "meet July 13, 2026")
+        #expect(
+            SpokenDateITN.apply("meet next monday", now: pinned, timeZone: tz)
+                == "meet July 13, 2026"
+        )
     }
 }
 

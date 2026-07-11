@@ -72,10 +72,17 @@ enum SpokenDateITN {
     ]
 
     /// Rewrite spoken month/day(/year), relative dates, years, and weekdays.
-    static func apply(_ text: String) -> String {
+    /// Prefer explicit `now` / `timeZone` from callers (parallel-safe tests).
+    /// Falls back to static providers when omitted (production + unit defaults).
+    static func apply(
+        _ text: String,
+        now: Date? = nil,
+        timeZone: TimeZone? = nil
+    ) -> String {
         let parts = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         guard !parts.isEmpty else { return text }
-        let now = nowProvider()
+        let now = now ?? nowProvider()
+        let tz = timeZone ?? timeZoneProvider()
 
         var out: [String] = []
         var i = 0
@@ -96,9 +103,9 @@ enum SpokenDateITN {
                (core == "next" || core == "this" || core == "last"),
                i + 1 < parts.count,
                let wd = weekdayNumbers[normalize(parts[i + 1])] {
-                let date = relativeWeekday(wd, mode: core, from: now)
+                let date = relativeWeekday(wd, mode: core, from: now, timeZone: tz)
                 let trailing = trailingPunct(parts[i + 1])
-                out.append(formatAbsoluteDate(date) + trailing)
+                out.append(formatAbsoluteDate(date, timeZone: tz) + trailing)
                 i += 2
                 continue
             }
@@ -106,9 +113,9 @@ enum SpokenDateITN {
             // today / tomorrow / yesterday → absolute date (optional)
             if FormatSettings.expandRelativeDates,
                core == "today" || core == "tomorrow" || core == "yesterday" {
-                let date = relativeDay(core, from: now)
+                let date = relativeDay(core, from: now, timeZone: tz)
                 let trailing = trailingPunct(parts[i])
-                out.append(formatAbsoluteDate(date) + trailing)
+                out.append(formatAbsoluteDate(date, timeZone: tz) + trailing)
                 i += 1
                 continue
             }
@@ -143,22 +150,22 @@ enum SpokenDateITN {
         timeZoneProvider = { .current }
     }
 
-    static func formatAbsoluteDate(_ date: Date) -> String {
+    static func formatAbsoluteDate(_ date: Date, timeZone: TimeZone? = nil) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = timeZoneProvider()
+        f.timeZone = timeZone ?? timeZoneProvider()
         f.dateFormat = "MMMM d, yyyy"
         return f.string(from: date)
     }
 
-    private static func calendar() -> Calendar {
+    private static func calendar(timeZone: TimeZone? = nil) -> Calendar {
         var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = timeZoneProvider()
+        cal.timeZone = timeZone ?? timeZoneProvider()
         return cal
     }
 
-    static func relativeDay(_ word: String, from now: Date) -> Date {
-        let cal = calendar()
+    static func relativeDay(_ word: String, from now: Date, timeZone: TimeZone? = nil) -> Date {
+        let cal = calendar(timeZone: timeZone)
         let start = cal.startOfDay(for: now)
         switch word {
         case "today": return start
@@ -169,8 +176,13 @@ enum SpokenDateITN {
     }
 
     /// next = strictly after today; this = today if match else next; last = strictly before today.
-    static func relativeWeekday(_ weekday: Int, mode: String, from now: Date) -> Date {
-        let cal = calendar()
+    static func relativeWeekday(
+        _ weekday: Int,
+        mode: String,
+        from now: Date,
+        timeZone: TimeZone? = nil
+    ) -> Date {
+        let cal = calendar(timeZone: timeZone)
         let start = cal.startOfDay(for: now)
         let todayWD = cal.component(.weekday, from: start)
 

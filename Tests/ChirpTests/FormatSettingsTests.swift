@@ -24,18 +24,13 @@ struct FormatSettingsTests {
         var comps = DateComponents()
         comps.year = 2026; comps.month = 7; comps.day = 8
         var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
+        let tz = TimeZone(identifier: "UTC")!
+        cal.timeZone = tz
         let pinned = cal.date(from: comps)!
-        SpokenDateITN.nowProvider = { pinned }
-        SpokenDateITN.timeZoneProvider = { TimeZone(identifier: "UTC")! }
-        defer {
-            SpokenDateITN.resetClock()
-            SpokenDateITN.resetTimeZone()
-        }
-        let r = SpokenDateITN.apply("due tomorrow")
+        let r = SpokenDateITN.apply("due tomorrow", now: pinned, timeZone: tz)
         #expect(r == "due tomorrow")
         // Absolute calendar dates still work
-        #expect(SpokenDateITN.apply("march fifth") == "March 5")
+        #expect(SpokenDateITN.apply("march fifth", now: pinned, timeZone: tz) == "March 5")
     }
 
     @Test("disabling bullets leaves bullet point as words")
