@@ -1130,10 +1130,10 @@ public final class AppState {
                         self.performMoveCharacters(direction: .left, count: count)
                     case .moveNextCharacters(let count):
                         self.performMoveCharacters(direction: .right, count: count)
-                    case .moveUpLine:
-                        self.performMoveLine(direction: .up)
-                    case .moveDownLine:
-                        self.performMoveLine(direction: .down)
+                    case .moveUpLines(let count):
+                        self.performMoveLine(direction: .up, count: count)
+                    case .moveDownLines(let count):
+                        self.performMoveLine(direction: .down, count: count)
                     case .moveToPreviousLine:
                         self.performMoveToPreviousLine()
                     case .moveToNextLine:
@@ -1436,10 +1436,10 @@ public final class AppState {
             performMoveCharacters(direction: .left, count: count)
         case .moveNextCharacters(let count):
             performMoveCharacters(direction: .right, count: count)
-        case .moveUpLine:
-            performMoveLine(direction: .up)
-        case .moveDownLine:
-            performMoveLine(direction: .down)
+        case .moveUpLines(let count):
+            performMoveLine(direction: .up, count: count)
+        case .moveDownLines(let count):
+            performMoveLine(direction: .down, count: count)
         case .moveToPreviousLine:
             performMoveToPreviousLine()
         case .moveToNextLine:
@@ -3115,16 +3115,19 @@ public final class AppState {
         lineSelectionActive = false
     }
 
-    /// Move cursor one line (↑ / ↓). Buffer unchanged; sets sessionCaret for mid-insert.
-    /// Dual of TranscriptSelection.offsetAfterLineMove + LineCaret.tla.
-    /// Updates `lineNavIndex` so progressive next/previous line stays coherent.
-    private func performMoveLine(direction: MoveDirection) {
-        textInserter.moveLine(direction: direction)
+    /// Move cursor N lines (↑ / ↓ × N). Dragon "move down N lines".
+    /// Buffer unchanged; sets sessionCaret for mid-insert.
+    /// Dual of TranscriptSelection.offsetAfterLineMove + MoveLinesN.tla / LineCaret.tla.
+    private func performMoveLine(direction: MoveDirection, count: Int = 1) {
+        let n = LineMoveDecision.clampCount(count)
+        for _ in 0..<n {
+            textInserter.moveLine(direction: direction)
+        }
         let to = TranscriptSelection.offsetAfterLineMove(
             transcribedText,
             caret: sessionCaret,
             up: direction == .up,
-            count: 1
+            count: n
         )
         setSessionCaret(to)
         let ranges = TranscriptSelection.lineRanges(transcribedText)

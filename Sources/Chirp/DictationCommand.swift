@@ -205,10 +205,10 @@ enum DictationCommand: Equatable, Sendable {
     case movePreviousCharacters(count: Int)
     /// Move cursor N characters right (→ × N). Buffer unchanged.
     case moveNextCharacters(count: Int)
-    /// Move cursor one line up (↑). Buffer unchanged.
-    case moveUpLine
-    /// Move cursor one line down (↓). Buffer unchanged.
-    case moveDownLine
+    /// Move cursor N lines up (↑ × N). Dragon "move up N lines". Buffer unchanged.
+    case moveUpLines(count: Int)
+    /// Move cursor N lines down (↓ × N). Dragon "move down N lines". Buffer unchanged.
+    case moveDownLines(count: Int)
     /// Progressive session: move caret to previous line start (dual LineCursor.tla).
     case moveToPreviousLine
     /// Progressive session: move caret to next line start (dual LineCursor.tla).
@@ -693,6 +693,24 @@ enum DictationCommand: Equatable, Sendable {
                 #"^(?:move )?(?:right|next|forward) "# + num + #" characters?$"#,
                 { c in (1...100).contains(c) ? .moveNextCharacters(count: c) : nil }
             ),
+            // Dragon / Voice Control: "move up N lines" / "move down 3 lines"
+            // (N ≥ 1 including "one line" spoken with a number). Bare "move up" is exact.
+            (
+                #"^(?:move )?up "# + num + #" lines?$"#,
+                { c in (1...20).contains(c) ? .moveUpLines(count: c) : nil }
+            ),
+            (
+                #"^(?:move )?down "# + num + #" lines?$"#,
+                { c in (1...20).contains(c) ? .moveDownLines(count: c) : nil }
+            ),
+            (
+                #"^up "# + num + #" lines?$"#,
+                { c in (1...20).contains(c) ? .moveUpLines(count: c) : nil }
+            ),
+            (
+                #"^down "# + num + #" lines?$"#,
+                { c in (1...20).contains(c) ? .moveDownLines(count: c) : nil }
+            ),
         ]
 
         for spec in specs {
@@ -1035,10 +1053,11 @@ enum DictationCommand: Equatable, Sendable {
             return .moveRightWord
         // Host arrow line moves (↑/↓). Progressive "next/previous line" is below
         // (aligned with next/previous sentence). Do not match "select previous line".
+        // Counted "move up N lines" is matchCounted.
         case "move up", "up a line", "go up", "line up":
-            return .moveUpLine
+            return .moveUpLines(count: 1)
         case "move down", "down a line", "go down", "line down":
-            return .moveDownLine
+            return .moveDownLines(count: 1)
         // Document edges before line edges so "… of document" phrases win as full matches
         // (exact match; line phrases stay separate strings).
         case "beginning of document", "top of document", "go to top of document",
@@ -1194,6 +1213,7 @@ enum DictationCommand: Equatable, Sendable {
         ("move left / previous word", "Cursor left one word (⌥←)"),
         ("move right / next word", "Cursor right one word (⌥→)"),
         ("move up / move down / line up / line down", "Cursor up/down one line (host ↑↓)"),
+        ("move up N lines / move down 3 lines", "Cursor up/down N lines (host ↑↓ × N)"),
         ("next line / previous line", "Progressive line start (session dual)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),
         ("go to end / end of line", "Cursor to line end (⌘→)"),
