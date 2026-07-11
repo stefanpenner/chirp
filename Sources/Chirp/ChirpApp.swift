@@ -128,6 +128,13 @@ public final class AppState {
     /// Injectable for tests.
     var lingerDuration: UInt64 = 800_000_000
 
+    /// Clock for "insert date" / "insert time". Injectable so tests never touch
+    /// process-global InsertStamp.nowProvider (parallel suite races).
+    var nowProvider: () -> Date = { Date() }
+
+    /// Timezone for insert date/time stamps. Injectable for deterministic tests.
+    var timeZoneProvider: () -> TimeZone = { .current }
+
     /// Generation counter — incremented each time a committed segment arrives.
     /// Peek previews that were started before the latest commit are discarded.
     private var commitGen = 0
@@ -945,9 +952,9 @@ public final class AppState {
                     case .pressForwardDelete:
                         self.performPressForwardDelete()
                     case .insertDate:
-                        self.performKeyInsert(InsertStamp.formatDate(), typesIncrementally: false)
+                        self.performKeyInsert(self.stampDate(), typesIncrementally: false)
                     case .insertTime:
-                        self.performKeyInsert(InsertStamp.formatTime(), typesIncrementally: false)
+                        self.performKeyInsert(self.stampTime(), typesIncrementally: false)
                     case .copyThat:
                         self.performCopyThat()
                     case .pasteThat:
@@ -1251,9 +1258,9 @@ public final class AppState {
         case .pressForwardDelete:
             performPressForwardDelete()
         case .insertDate:
-            performKeyInsert(InsertStamp.formatDate(), typesIncrementally: typesIncrementally)
+            performKeyInsert(stampDate(), typesIncrementally: typesIncrementally)
         case .insertTime:
-            performKeyInsert(InsertStamp.formatTime(), typesIncrementally: typesIncrementally)
+            performKeyInsert(stampTime(), typesIncrementally: typesIncrementally)
         case .copyThat:
             performCopyThat()
         case .pasteThat:
@@ -2167,6 +2174,16 @@ public final class AppState {
     }
 
     /// System undo (⌘Z). Keyboard-only; buffer / edit stack unchanged.
+    /// Date stamp via instance clock (not process-global InsertStamp providers).
+    private func stampDate() -> String {
+        InsertStamp.formatDate(nowProvider(), timeZone: timeZoneProvider())
+    }
+
+    /// Time stamp via instance clock (not process-global InsertStamp providers).
+    private func stampTime() -> String {
+        InsertStamp.formatTime(nowProvider(), timeZone: timeZoneProvider())
+    }
+
     private func performPressUndo() {
         textInserter.pressUndo()
     }

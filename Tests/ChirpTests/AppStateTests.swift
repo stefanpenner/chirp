@@ -1233,15 +1233,16 @@ struct AppStateTests {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "UTC")!
         let pinned = cal.date(from: comps)!
-        InsertStamp.nowProvider = { pinned }
-        InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
-        defer { InsertStamp.resetClock() }
+        let tz = TimeZone(identifier: "UTC")!
 
         let mock = MockTranscriber()
         await mock.setFeedAudioResult(["Hello"])
         let recorder = MockAudioRecorder()
         let inserter = MockTextInserter()
         let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        // Instance clock — no process-global InsertStamp.nowProvider (parallel-safe).
+        state.nowProvider = { pinned }
+        state.timeZoneProvider = { tz }
         state.status = .ready
         state.startRecording()
 
@@ -1255,16 +1256,11 @@ struct AppStateTests {
             if !state.transcribedText.isEmpty { break }
         }
 
-        // Re-pin after awaits — other parallel suites may reset static clock.
-        InsertStamp.nowProvider = { pinned }
-        InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
         await mock.setFeedAudioResult(["insert date"])
         recorder.lastOnSamples?([0.1])
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 100_000_000)
             if state.transcribedText.contains("July 10, 2026") { break }
-            InsertStamp.nowProvider = { pinned }
-            InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
         }
 
         #expect(state.transcribedText == "HelloJuly 10, 2026")
@@ -1280,15 +1276,16 @@ struct AppStateTests {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "UTC")!
         let pinned = cal.date(from: comps)!
-        InsertStamp.nowProvider = { pinned }
-        InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
-        defer { InsertStamp.resetClock() }
+        let tz = TimeZone(identifier: "UTC")!
+        let expectedTime = InsertStamp.formatTime(pinned, timeZone: tz)
 
         let mock = MockTranscriber()
         await mock.setFeedAudioResult(["Hello"])
         let recorder = MockAudioRecorder()
         let inserter = MockTextInserter()
         let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.nowProvider = { pinned }
+        state.timeZoneProvider = { tz }
         state.status = .ready
         state.startRecording()
 
@@ -1302,17 +1299,11 @@ struct AppStateTests {
             if !state.transcribedText.isEmpty { break }
         }
 
-        // Re-pin after awaits — other parallel suites may reset static clock.
-        InsertStamp.nowProvider = { pinned }
-        InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
-        let expectedTime = InsertStamp.formatTime(pinned)
         await mock.setFeedAudioResult(["insert time"])
         recorder.lastOnSamples?([0.1])
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 100_000_000)
             if state.transcribedText.contains(expectedTime) { break }
-            InsertStamp.nowProvider = { pinned }
-            InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
         }
 
         #expect(state.transcribedText == "Hello" + expectedTime)
