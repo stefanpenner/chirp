@@ -450,10 +450,19 @@ public final class AppState {
         return RegexPostProcessor()
     }
 
+    /// Human-readable hold chord for UI (e.g. "fn+C"). Dual: AICleanupTriggerDecision.
+    public var aiCleanupChordLabel: String {
+        AICleanupTriggerDecision.holdChordLabel(holdKeyLabel: hotkeyConfig.label)
+    }
+
     /// On-demand AI cleanup of selection / last phrase / session buffer.
-    /// Triggers: menu "AI Cleanup", ⌘⇧U, or spoken "clean that up".
+    /// Triggers: hold-to-talk + C, menu, ⌘⇧U, or spoken "clean that up".
     public func runAICleanup() {
-        guard cleanupTask == nil, !isCleaningUp else { return }
+        let hasText = !transcribedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard AICleanupTriggerDecision.canStart(
+            hasText: hasText,
+            isCleaningUp: isCleaningUp || cleanupTask != nil
+        ) else { return }
 
         let scope = AICleanupDecision.resolve(
             buffer: transcribedText,

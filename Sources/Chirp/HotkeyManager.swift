@@ -222,7 +222,11 @@ final class HotkeyManager {
 
     nonisolated(unsafe) private static var current: HotkeyManager?
 
-    /// Default on-demand AI cleanup chord: ⌘⇧U (one-shot, not hold-to-talk).
+    /// Hold-to-talk + this key → AI cleanup (e.g. hold fn, tap C).
+    /// Dual of specs/AICleanupTrigger.tla HoldChordCleanup.
+    static let cleanupChordKeyCode: UInt16 = 0x08  // C
+
+    /// Fallback one-shot when not holding talk key: ⌘⇧U.
     static let cleanupKeyCode: UInt16 = 0x20  // U
     static let cleanupRequiredModifiers: CGEventFlags = [.maskCommand, .maskShift]
 
@@ -316,10 +320,24 @@ final class HotkeyManager {
                         return nil
                     }
 
-                    // On-demand AI cleanup: ⌘⇧U (one-shot). Does not steal hold-to-talk.
+                    // AI cleanup while hold-to-talk is down: hold + C (swallowed).
+                    // Dual: AICleanupTriggerDecision.shouldHandleHoldChord
+                    if type == .keyDown
+                        && keyCode == HotkeyManager.cleanupChordKeyCode
+                        && AICleanupTriggerDecision.shouldHandleHoldChord(
+                            holdActive: mgr.fnDown,
+                            suppressOnly: mgr.suppressOnly
+                        )
+                    {
+                        DispatchQueue.main.async { mgr.onCleanup() }
+                        return nil
+                    }
+
+                    // Fallback one-shot: ⌘⇧U when not holding talk key.
                     if type == .keyDown
                         && keyCode == HotkeyManager.cleanupKeyCode
                         && !mgr.suppressOnly
+                        && !mgr.fnDown
                     {
                         let currentMods = flags.intersection(
                             CGEventFlags([.maskCommand, .maskShift, .maskAlternate, .maskControl])

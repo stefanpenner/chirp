@@ -953,7 +953,7 @@ enum DictationCommand: Equatable, Sendable {
     /// User-facing command catalog for Settings / help (say → effect).
     static let helpCatalog: [(say: String, effect: String)] = [
         ("scratch that / correct that", "Undo last phrase (multi-level)"),
-        ("clean that up / ai cleanup / polish that", "AI cleanup selection or last phrase"),
+        ("clean that up / ai cleanup / polish that", "AI cleanup selection or last phrase (also hold+C)"),
         ("replace that", "Next phrase replaces last (multi-step)"),
         ("replace X with Y / change X to Y / swap X for Y", "Replace last occurrence of X with Y"),
         ("delete X / remove X", "Delete last occurrence of phrase X"),

@@ -31,7 +31,10 @@ struct ChirpApp: App {
 
                 SectionDivider()
 
-                MenuRow("AI Cleanup", shortcut: "⌘⇧U") { appState.runAICleanup() }
+                MenuRow(
+                    appState.isCleaningUp ? "AI Cleanup\u{2026}" : "AI Cleanup",
+                    shortcut: appState.aiCleanupChordLabel
+                ) { appState.runAICleanup() }
                     .disabled(appState.transcribedText.trimmingCharacters(
                         in: .whitespacesAndNewlines
                     ).isEmpty || appState.isCleaningUp)

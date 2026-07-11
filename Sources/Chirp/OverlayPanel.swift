@@ -166,7 +166,9 @@ struct IslandView: View {
     @State private var pulseOpacity: Double = 1.0
 
     /// True for `.recording` or `.transcribing` — drives glow border, padding, border opacity.
+    /// Also true while on-demand AI cleanup runs (overlay must stay visible).
     private var isActive: Bool {
+        if appState.isCleaningUp { return true }
         switch appState.status {
         case .recording, .transcribing: return true
         default: return false
@@ -200,11 +202,22 @@ struct IslandView: View {
 
     /// Label shown during the transcribing state, reflecting the current processing phase.
     private var transcribingLabel: String {
+        if appState.isCleaningUp { return "AI Cleanup\u{2026}" }
         switch appState.processingPhase {
-        case .fixing: return "Fixing\u{2026}"
+        case .fixing: return "AI Cleanup\u{2026}"
         case .transcribing: return "Transcribing\u{2026}"
         case .none: return appState.pipelineTypesIncrementally ? "Finalizing\u{2026}" : "Processing\u{2026}"
         }
+    }
+
+    /// Idle / listening line when there is no transcript text yet.
+    private var statusHint: String {
+        if appState.isCleaningUp { return "AI Cleanup\u{2026}" }
+        if isRecording {
+            return "Listening\u{2026}  ·  \(appState.aiCleanupChordLabel) to clean"
+        }
+        if isTranscribing { return transcribingLabel }
+        return "Ready"
     }
 
     /// Show the text area once any text has appeared during an active session,
@@ -276,7 +289,7 @@ struct IslandView: View {
                             .accessibilityLabel("No-space mode: \(noSpaceLabel)")
                     }
                     if appState.awaitingReplace {
-                        Text("Replace…")
+                        Text("Replace\u{2026}")
                             .font(.system(size: 10, weight: .semibold, design: .rounded))
                             .foregroundStyle(.orange.opacity(0.85))
                             .padding(.horizontal, 6)
@@ -285,6 +298,28 @@ struct IslandView: View {
                                 Capsule().fill(.orange.opacity(0.12))
                             )
                             .accessibilityLabel("Waiting for replacement phrase")
+                    }
+                    if appState.isCleaningUp {
+                        Text("AI Cleanup\u{2026}")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(cPurple.opacity(0.95))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule().fill(cPurple.opacity(0.15))
+                            )
+                            .accessibilityLabel("AI cleanup in progress")
+                    } else if isRecording, !appState.transcribedText.isEmpty {
+                        // Discoverability: hold-talk + C cleans current session text.
+                        Text(appState.aiCleanupChordLabel)
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundStyle(.primary.opacity(0.35))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule().fill(.primary.opacity(0.06))
+                            )
+                            .accessibilityLabel("Press \(appState.aiCleanupChordLabel) for AI cleanup")
                     }
                 }
                 .padding(.top, 10)
@@ -351,9 +386,10 @@ struct IslandView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 6)
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
-            } else if isTranscribing {
+            } else if isTranscribing || appState.isCleaningUp {
+                // Transcribing or on-demand AI cleanup — pulse so state is obvious.
                 Circle()
-                    .fill(cBlue.opacity(0.6))
+                    .fill((appState.isCleaningUp ? cPurple : cBlue).opacity(0.65))
                     .frame(width: 8, height: 8)
                     .phaseAnimator([false, true]) { content, phase in
                         content.opacity(phase ? 1.0 : 0.4)
@@ -436,7 +472,7 @@ struct IslandView: View {
                             }
                         }
                     } else {
-                        Text(isRecording ? "Listening..." : isTranscribing ? transcribingLabel : "Ready")
+                        Text(statusHint)
                             .foregroundStyle(.primary.opacity(0.4))
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
