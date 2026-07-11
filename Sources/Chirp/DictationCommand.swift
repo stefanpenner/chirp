@@ -14,6 +14,8 @@ enum DictationCommand: Equatable, Sendable {
     case replacePhrase(target: String, replacement: String)
     /// Single-utterance delete last occurrence of `target`.
     case deletePhrase(target: String)
+    /// Single-utterance select last occurrence of `target` (arms type-over).
+    case selectPhrase(target: String)
     /// Delete the last whitespace-delimited word.
     case deleteLastWord
     /// Delete the last N whitespace-delimited words (N ≥ 2).
@@ -233,6 +235,9 @@ enum DictationCommand: Equatable, Sendable {
         if let cmd = matchPhraseDelete(text) {
             return cmd
         }
+        if let cmd = matchPhraseSelect(text) {
+            return cmd
+        }
         return .none
     }
 
@@ -331,6 +336,59 @@ enum DictationCommand: Equatable, Sendable {
                 continue
             }
             return .deletePhrase(target: target)
+        }
+        return nil
+    }
+
+    /// "select X" / "highlight X". Runs after exact/counted so structural selects win.
+    private static func matchPhraseSelect(_ text: String) -> DictationCommand? {
+        var n = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let last = n.last, ".!?,".contains(last) {
+            n.removeLast()
+        }
+        n = n.trimmingCharacters(in: .whitespaces)
+        var tokens = n.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        let fillers: Set<String> = ["please", "now", "thanks", "thank", "you"]
+        while let first = tokens.first, fillers.contains(first.lowercased()) {
+            tokens.removeFirst()
+        }
+        while let last = tokens.last, fillers.contains(last.lowercased()) {
+            tokens.removeLast()
+        }
+        n = tokens.joined(separator: " ")
+
+        let specs = [
+            #"(?i)^select (.+)$"#,
+            #"(?i)^highlight (.+)$"#,
+        ]
+        for pattern in specs {
+            guard let regex = try? NSRegularExpression(pattern: pattern),
+                  let match = regex.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)),
+                  match.numberOfRanges >= 2,
+                  let tRange = Range(match.range(at: 1), in: n) else {
+                continue
+            }
+            let target = String(n[tRange]).trimmingCharacters(in: .whitespaces)
+            guard !target.isEmpty else { continue }
+            let low = target.lowercased()
+            // Bare structural tokens (exact match already won if full phrase matched).
+            let blocked: Set<String> = [
+                "that", "it", "last", "word", "sentence", "paragraph", "line",
+                "all", "everything", "selection", "forward", "previous", "prior",
+                "next", "the last word", "the last sentence", "the last paragraph",
+                "the last line", "the first sentence", "the first paragraph",
+                "the first line",
+            ]
+            if blocked.contains(low) { continue }
+            // Incomplete counted / progressive forms
+            if low.hasPrefix("last ") || low.hasPrefix("previous ") || low.hasPrefix("prior ")
+                || low.hasPrefix("next ") || low.hasPrefix("forward ")
+                || low.hasPrefix("first ") || low.hasPrefix("the last ")
+                || low.hasPrefix("the previous ") || low.hasPrefix("the next ")
+                || low.hasPrefix("the first ") {
+                continue
+            }
+            return .selectPhrase(target: target)
         }
         return nil
     }
@@ -816,6 +874,7 @@ enum DictationCommand: Equatable, Sendable {
         ("replace that", "Next phrase replaces last (multi-step)"),
         ("replace X with Y / change X to Y / swap X for Y", "Replace last occurrence of X with Y"),
         ("delete X / remove X", "Delete last occurrence of phrase X"),
+        ("select X / highlight X", "Select last occurrence of phrase X (type-over next)"),
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
         ("delete last two words / delete previous 3 words", "Remove last N words"),

@@ -67,6 +67,21 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("delete next word") == .deleteNextWord)
     }
 
+    @Test("recognizes select X phrase without stealing structural selects")
+    func selectPhraseCommands() {
+        #expect(DictationCommand.parse("select world") == .selectPhrase(target: "world"))
+        #expect(DictationCommand.parse("Select World.") == .selectPhrase(target: "World"))
+        #expect(DictationCommand.parse("highlight hello world") == .selectPhrase(target: "hello world"))
+        #expect(DictationCommand.parse("please select planet") == .selectPhrase(target: "planet"))
+        // Structural selects stay exact
+        #expect(DictationCommand.parse("select that") == .selectThat)
+        #expect(DictationCommand.parse("select last word") == .selectLastWord)
+        #expect(DictationCommand.parse("select last sentence") == .selectLastSentence)
+        #expect(DictationCommand.parse("select previous word") == .selectPreviousWord)
+        #expect(DictationCommand.parse("select next two words") == .selectNextWords(count: 2))
+        #expect(DictationCommand.parse("select all") == .selectAll)
+    }
+
     @Test("recognizes delete last word")
     func deleteLastWord() {
         #expect(DictationCommand.parse("delete last word") == .deleteLastWord)

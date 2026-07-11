@@ -50,6 +50,7 @@ tlc specs/PipelineRebuild.tla
 | `SelectionCommit` | select any in-range window → re-dictate splices; typedToApp == textLen | `SelectionCommitDecision.bufferAfterRangeReplace` + `AppState.sessionSelection` |
 | `ReplacePhrase` | replace X with Y last match; miss is no-op; typedToApp == textLen | `PhraseReplaceDecision` + `AppState.performReplacePhrase` |
 | `DeletePhrase` | delete X last match (space absorb); miss is no-op; typedToApp == textLen | `PhraseReplaceDecision.bufferAfterDelete` + `AppState.performDeletePhrase` |
+| `SelectPhrase` | select X last match arms range; buffer unchanged; miss no-op | `PhraseReplaceDecision.findLastRange` + `AppState.performSelectPhrase` |
 | `VadEndpoint` | user VAD silence/threshold always clamp into safe range | `VadSettings.clamp` + min silence / threshold ranges |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |

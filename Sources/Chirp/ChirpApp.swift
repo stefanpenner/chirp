@@ -806,6 +806,8 @@ public final class AppState {
                         self.performNoSpaceThat(typesIncrementally: false)
                     case .selectThat:
                         self.performSelectThat(typesIncrementally: false)
+                    case .selectPhrase(let target):
+                        self.performSelectPhrase(target: target, typesIncrementally: false)
                     case .selectLastWord:
                         self.performSelectLastWord(typesIncrementally: false)
                     case .selectLastWords(let count):
@@ -1088,6 +1090,8 @@ public final class AppState {
             performNoSpaceThat(typesIncrementally: typesIncrementally)
         case .selectThat:
             performSelectThat(typesIncrementally: typesIncrementally)
+        case .selectPhrase(let target):
+            performSelectPhrase(target: target, typesIncrementally: typesIncrementally)
         case .selectLastWord:
             performSelectLastWord(typesIncrementally: typesIncrementally)
         case .selectLastWords(let count):
@@ -1801,6 +1805,21 @@ public final class AppState {
         guard transcribedText.hasSuffix(delta) else { return }
         armSessionSelection(start: transcribedText.count - delta.count, length: delta.count)
         textInserter.selectBackward(count: delta.count)
+    }
+
+    /// Select last occurrence of `target` in session buffer; arm type-over.
+    /// Dual of PhraseReplaceDecision / specs/SelectPhrase.tla. Buffer unchanged.
+    private func performSelectPhrase(target: String, typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        guard let match = PhraseReplaceDecision.findLastRange(
+            target: target,
+            in: transcribedText
+        ) else {
+            return
+        }
+        armSessionSelection(start: match.start, length: match.length)
+        moveToSessionOffset(match.start)
+        textInserter.selectForward(count: match.length)
     }
 
     /// Select last phrase (when available) then apply bold/italic/underline.

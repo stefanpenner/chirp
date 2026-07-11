@@ -1986,6 +1986,82 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select that"))
     }
 
+    @Test("select X arms middle phrase then content type-over replaces only that span")
+    func selectPhraseThenContentReplaces() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello world foo"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("world") { break }
+        }
+
+        await mock.setFeedAudioResult(["select world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+
+        #expect(state.transcribedText.lowercased().contains("world"))
+        #expect(inserter.selectForwardCounts.last == "world".count)
+        #expect(!inserter.typedTexts.contains("select world"))
+
+        // Avoid silence-hallucination short hyps
+        await mock.setFeedAudioResult(["planet"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("planet") { break }
+        }
+
+        let text = state.transcribedText.lowercased()
+        #expect(text.contains("planet"), "replacement present, got \"\(state.transcribedText)\"")
+        #expect(!text.contains("world"), "selected phrase replaced, got \"\(state.transcribedText)\"")
+        #expect(text.contains("hello") && text.contains("foo"))
+    }
+
+    @Test("select X no-op when target missing")
+    func selectPhraseMissingTarget() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("hello") { break }
+        }
+        let before = state.transcribedText
+        let selectBefore = inserter.selectForwardCounts.count
+
+        await mock.setFeedAudioResult(["select zzz"])
+        recorder.lastOnSamples?([0.1])
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        #expect(state.transcribedText == before)
+        #expect(inserter.selectForwardCounts.count == selectBefore)
+        #expect(!inserter.typedTexts.contains("select zzz"))
+    }
+
     @Test("select that then re-dictate replaces suffix in buffer (not append)")
     func selectThatThenContentReplaces() async throws {
         let mock = MockTranscriber()

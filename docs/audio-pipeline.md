@@ -145,6 +145,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **replace that** — next phrase replaces last (text stays until then; HUD “Replace…”)
 - **replace X with Y** / **change X to Y** / **swap X for Y** — replace last case-insensitive occurrence of X with Y in the session buffer (select + type-over in host; `ReplacePhrase.tla`). No match → no-op. Does **not** steal bare **replace that**
 - **delete X** / **remove X** — delete last case-insensitive occurrence of phrase X (absorbs one adjacent space; `DeletePhrase.tla`). No match → no-op. Does **not** steal **delete that** / **delete last word** / unit deletes
+- **select X** / **highlight X** — select last case-insensitive occurrence of phrase X and arm type-over (`SelectPhrase.tla`). Buffer unchanged until next content. No match → no-op. Does **not** steal **select that** / **select last word** / unit selects
 - **redo that** — restore last scratched / word-deleted segment
 - **delete last word** — drop trailing word (stack-aware; redo restores)
 - **delete last two words** / **delete previous 3 words** / **delete the last four words** — drop last N words (N ≥ 2; spoken or digits)
