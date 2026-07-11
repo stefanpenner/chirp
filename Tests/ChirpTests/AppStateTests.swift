@@ -2328,6 +2328,48 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("go after world"))
     }
 
+    @Test("insert after X then content inserts mid-buffer (Dragon dual)")
+    func insertAfterPhraseThenContentInsertsMid() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello world foo"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("world") { break }
+        }
+
+        await mock.setFeedAudioResult(["insert after world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+        #expect(!inserter.typedTexts.contains("insert after world"))
+
+        await mock.setFeedAudioResult(["planet"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("planet") { break }
+        }
+
+        let after = state.transcribedText.lowercased()
+        #expect(
+            after == "hello world planet foo",
+            "insert after world then planet, got \"\(state.transcribedText)\""
+        )
+    }
+
     @Test("second go to uses sessionCaret not end (host dual)")
     func successiveGoToUsesSessionCaretNotEnd() async throws {
         // "alpha beta gamma" — go to beta from end, then go to alpha from beta.

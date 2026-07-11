@@ -2122,7 +2122,7 @@ public final class AppState {
 
     /// Move caret to start (or end if `after`) of last occurrence of `target`.
     /// Sets `sessionCaret` so next content inserts mid-buffer (not always append).
-    /// Dual of specs/GoToPhrase.tla.
+    /// Spoken: go to/after X, insert before/after X (Dragon). Dual of specs/GoToPhrase.tla.
     private func performGoToPhrase(target: String, after: Bool, typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         guard let match = PhraseReplaceDecision.findLastRange(

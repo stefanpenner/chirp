@@ -415,7 +415,8 @@ enum DictationCommand: Equatable, Sendable {
         return nil
     }
 
-    /// "go to X" / "move to X" / "go after X" / "move after X".
+    /// "go to X" / "go after X" / Dragon "insert before X" / "insert after X".
+    /// Insert-before/after only moves the caret (next content inserts); dual GoToPhrase.tla.
     /// Exact structural go-tos win first (start/end/sentence/…).
     private static func matchPhraseGo(_ text: String) -> DictationCommand? {
         var n = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -433,13 +434,18 @@ enum DictationCommand: Equatable, Sendable {
         }
         n = tokens.joined(separator: " ")
 
+        // After-forms before to-forms so "insert after" is not eaten by a weaker prefix.
         let specs: [(pattern: String, after: Bool)] = [
             (#"(?i)^go after (.+)$"#, true),
             (#"(?i)^move after (.+)$"#, true),
             (#"(?i)^jump after (.+)$"#, true),
+            (#"(?i)^insert after (.+)$"#, true),
+            (#"(?i)^place after (.+)$"#, true),
             (#"(?i)^go to (.+)$"#, false),
             (#"(?i)^move to (.+)$"#, false),
             (#"(?i)^jump to (.+)$"#, false),
+            (#"(?i)^insert before (.+)$"#, false),
+            (#"(?i)^place before (.+)$"#, false),
         ]
         for spec in specs {
             guard let regex = try? NSRegularExpression(pattern: spec.pattern),
@@ -995,8 +1001,8 @@ enum DictationCommand: Equatable, Sendable {
         ("replace X with Y / change X to Y / swap X for Y", "Replace last occurrence of X with Y"),
         ("delete X / remove X", "Delete last occurrence of phrase X"),
         ("select X / highlight X", "Select last occurrence of phrase X (type-over next)"),
-        ("go to X / move to X", "Move caret to start of last occurrence of X"),
-        ("go after X / move after X", "Move caret to end of last occurrence of X"),
+        ("go to X / move to X / insert before X", "Move caret to start of last occurrence of X"),
+        ("go after X / move after X / insert after X", "Move caret to end of last occurrence of X"),
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
         ("delete last two words / delete previous 3 words", "Remove last N words"),

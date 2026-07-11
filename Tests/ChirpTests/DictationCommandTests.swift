@@ -114,6 +114,39 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("beginning of document") == .moveToDocumentStart)
     }
 
+    @Test("recognizes insert before/after as go-to duals (Dragon-style)")
+    func insertBeforeAfterPhraseCommands() {
+        #expect(
+            DictationCommand.parse("insert before world")
+                == .goToPhrase(target: "world")
+        )
+        #expect(
+            DictationCommand.parse("insert after world")
+                == .goAfterPhrase(target: "world")
+        )
+        #expect(
+            DictationCommand.parse("Insert Before Hello World.")
+                == .goToPhrase(target: "Hello World")
+        )
+        #expect(
+            DictationCommand.parse("please insert after foo")
+                == .goAfterPhrase(target: "foo")
+        )
+        #expect(
+            DictationCommand.parse("place before bar")
+                == .goToPhrase(target: "bar")
+        )
+        #expect(
+            DictationCommand.parse("place after bar")
+                == .goAfterPhrase(target: "bar")
+        )
+        // Exact insert date/time must not become phrase go
+        #expect(DictationCommand.parse("insert date") == .insertDate)
+        #expect(DictationCommand.parse("insert time") == .insertTime)
+        // Structural edges still win via exact match
+        #expect(DictationCommand.parse("go to start") == .moveToStart)
+    }
+
     @Test("recognizes delete last word")
     func deleteLastWord() {
         #expect(DictationCommand.parse("delete last word") == .deleteLastWord)

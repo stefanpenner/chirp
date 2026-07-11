@@ -1,15 +1,18 @@
 ---- MODULE GoToPhrase ----
 (*
-  "go to X" / "go after X" set session caret; next content inserts at caret
-  (not always append). Buffer dual of host type-at-caret.
+  "go to X" / "go after X" / Dragon "insert before X" / "insert after X"
+  set session caret; next content inserts at caret (not always append).
+  Buffer dual of host type-at-caret.
 
   Dual of:
     PhraseReplaceDecision.findLastRange
+    DictationCommand.matchPhraseGo (go/move/jump/insert before|after)
     AppState.performGoToPhrase + SessionCaretDecision.bufferAfterInsert
     AppState.sessionCaret content path
 
   Grain: abstract lengths (not string content).
   caret = -1 means end (append mode).
+  Note: insert before/after is caret placement only — same as go to / go after.
 *)
 
 EXTENDS Integers, TLC
