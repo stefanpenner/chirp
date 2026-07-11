@@ -958,8 +958,8 @@ public final class AppState {
                         self.performPressUndo()
                     case .pressRedo:
                         self.performPressRedo()
-                    case .pressForwardDelete:
-                        self.performPressForwardDelete()
+                    case .pressForwardDelete(let count):
+                        self.performPressForwardDelete(count: count)
                     case .insertDate:
                         self.performKeyInsert(self.stampDate(), typesIncrementally: false)
                     case .insertTime:
@@ -1279,8 +1279,8 @@ public final class AppState {
             performPressUndo()
         case .pressRedo:
             performPressRedo()
-        case .pressForwardDelete:
-            performPressForwardDelete()
+        case .pressForwardDelete(let count):
+            performPressForwardDelete(count: count)
         case .insertDate:
             performKeyInsert(stampDate(), typesIncrementally: typesIncrementally)
         case .insertTime:
@@ -2290,8 +2290,12 @@ public final class AppState {
     }
 
     /// Press Forward Delete once. Keyboard-only; buffer / stack unchanged.
-    private func performPressForwardDelete() {
-        textInserter.pressForwardDelete()
+    /// Forward Delete N times (right-of-caret). Dual of specs/ForwardDeleteN.tla.
+    private func performPressForwardDelete(count: Int = 1) {
+        let n = BackspaceDecision.clampCount(count)
+        for _ in 0..<n {
+            textInserter.pressForwardDelete()
+        }
     }
 
     /// Select one word. Previous: trailing then progressive step-back via wordNavIndex.

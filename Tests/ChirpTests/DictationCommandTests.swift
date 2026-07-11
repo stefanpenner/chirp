@@ -350,12 +350,12 @@ struct DictationCommandTests {
 
     @Test("recognizes forward delete without stealing press delete / delete that")
     func pressForwardDelete() {
-        #expect(DictationCommand.parse("forward delete") == .pressForwardDelete)
-        #expect(DictationCommand.parse("press forward delete") == .pressForwardDelete)
-        #expect(DictationCommand.parse("delete forward") == .pressForwardDelete)
-        #expect(DictationCommand.parse("press delete forward") == .pressForwardDelete)
-        #expect(DictationCommand.parse("Forward Delete.") == .pressForwardDelete)
-        #expect(DictationCommand.parse("please forward delete") == .pressForwardDelete)
+        #expect(DictationCommand.parse("forward delete") == .pressForwardDelete(count: 1))
+        #expect(DictationCommand.parse("press forward delete") == .pressForwardDelete(count: 1))
+        #expect(DictationCommand.parse("delete forward") == .pressForwardDelete(count: 1))
+        #expect(DictationCommand.parse("press delete forward") == .pressForwardDelete(count: 1))
+        #expect(DictationCommand.parse("Forward Delete.") == .pressForwardDelete(count: 1))
+        #expect(DictationCommand.parse("please forward delete") == .pressForwardDelete(count: 1))
         // Laptop Delete stays backspace
         #expect(DictationCommand.parse("press delete") == .pressBackspace(count: 1))
         #expect(DictationCommand.parse("delete key") == .pressBackspace(count: 1))
@@ -363,6 +363,27 @@ struct DictationCommandTests {
         // Session scratch / delete-last paths unchanged
         #expect(DictationCommand.parse("delete that") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("delete it") == .scratchThat(count: 1))
+    }
+
+    @Test("Forward delete N times / bare select previous next character")
+    func forwardDeleteNAndBareCharSelect() {
+        #expect(DictationCommand.parse("forward delete 5") == .pressForwardDelete(count: 5))
+        #expect(DictationCommand.parse("forward delete three") == .pressForwardDelete(count: 3))
+        #expect(DictationCommand.parse("press forward delete 2") == .pressForwardDelete(count: 2))
+        #expect(DictationCommand.parse("forward delete 4 times") == .pressForwardDelete(count: 4))
+        #expect(DictationCommand.parse("delete forward two times") == .pressForwardDelete(count: 2))
+        #expect(DictationCommand.parse("forward delete twice") == .pressForwardDelete(count: 2))
+        #expect(DictationCommand.parse("please forward delete 3") == .pressForwardDelete(count: 3))
+        #expect(DictationCommand.parse("forward delete") == .pressForwardDelete(count: 1))
+        // Do not steal delete next N characters (select+backspace path)
+        #expect(DictationCommand.parse("delete next 3 characters") == .deleteNextCharacters(count: 3))
+        #expect(DictationCommand.parse("delete forward character") == .deleteNextCharacters(count: 1))
+        // Bare single character select
+        #expect(DictationCommand.parse("select previous character") == .selectPreviousCharacters(count: 1))
+        #expect(DictationCommand.parse("select last character") == .selectPreviousCharacters(count: 1))
+        #expect(DictationCommand.parse("select next character") == .selectNextCharacters(count: 1))
+        #expect(DictationCommand.parse("select forward character") == .selectNextCharacters(count: 1))
+        #expect(DictationCommand.parse("Select previous character.") == .selectPreviousCharacters(count: 1))
     }
 
     @Test("recognizes select next / previous word (keyboard)")

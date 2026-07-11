@@ -62,8 +62,9 @@ enum DictationCommand: Equatable, Sendable {
     case pressUndo
     /// System redo (⌘⇧Z). Keyboard-only; buffer / edit stack unchanged.
     case pressRedo
-    /// Press Forward Delete once. Keyboard-only; buffer unchanged.
-    case pressForwardDelete
+    /// Press Forward Delete N times (right-of-caret delete).
+    /// Keyboard-only; session buffer / edit stack unchanged. Count ≥ 1.
+    case pressForwardDelete(count: Int)
     /// Insert today's date (e.g. "July 10, 2026").
     case insertDate
     /// Insert current local time (e.g. "3:45 p.m.").
@@ -571,6 +572,16 @@ enum DictationCommand: Equatable, Sendable {
                 #"^backspace "# + num + #"(?: times?)?$"#,
                 { c in (1...100).contains(c) ? .pressBackspace(count: c) : nil }
             ),
+            // Forward Delete N (right-of-caret). Do not steal "delete forward character"
+            // (deleteNextCharacters) or "delete next N characters".
+            (
+                #"^(?:press |hit )?forward delete "# + num + #"(?: times?)?$"#,
+                { c in (1...100).contains(c) ? .pressForwardDelete(count: c) : nil }
+            ),
+            (
+                #"^(?:press |hit )?delete forward "# + num + #"(?: times?)?$"#,
+                { c in (1...100).contains(c) ? .pressForwardDelete(count: c) : nil }
+            ),
             // Buffer peel: delete last/previous N words|sentences|paragraphs|lines
             (
                 #"^delete (?:the )?(?:last|previous|prior) "# + num + #" words?$"#,
@@ -845,7 +856,18 @@ enum DictationCommand: Equatable, Sendable {
         // Forward Delete (0x75) — not laptop Delete/Backspace.
         case "forward delete", "press forward delete",
              "delete forward", "press delete forward":
-            return .pressForwardDelete
+            return .pressForwardDelete(count: 1)
+        case "forward delete twice", "press forward delete twice",
+             "delete forward twice", "press delete forward twice":
+            return .pressForwardDelete(count: 2)
+        // Bare single character select (counted forms need a number token).
+        case "select previous character", "select last character",
+             "select prior character", "highlight previous character",
+             "highlight last character":
+            return .selectPreviousCharacters(count: 1)
+        case "select next character", "select forward character",
+             "highlight next character", "highlight forward character":
+            return .selectNextCharacters(count: 1)
         // Escape requires press/hit/key — bare "escape" is not a command.
         case "press escape", "press esc", "hit escape", "hit esc",
              "escape key", "esc key", "press the escape key", "hit the escape key":
@@ -1113,6 +1135,8 @@ enum DictationCommand: Equatable, Sendable {
         ("press backspace / delete key", "Press Backspace once (keyboard only)"),
         ("backspace N / press backspace N times", "Press Backspace N times (keyboard only)"),
         ("forward delete / delete forward", "Press Forward Delete once (keyboard only; not Backspace)"),
+        ("forward delete N / delete forward 3 times", "Press Forward Delete N times (keyboard only)"),
+        ("select previous character / select next character", "Select one character left/right (keyboard)"),
         ("press escape / escape key", "Press Escape once (keyboard only; does not cancel)"),
         ("system undo / press undo / undo key", "System undo (⌘Z; keyboard only; not scratch that)"),
         ("system redo / press redo / redo key", "System redo (⌘⇧Z; keyboard only; not redo that)"),
