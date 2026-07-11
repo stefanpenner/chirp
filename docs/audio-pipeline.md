@@ -341,13 +341,16 @@ end-of-recording flush needs complete audio (pendingAudio).
 Shared source for peek, mid-recording commit, and flush — so preview,
 incremental typing, and final text share one decode path.
 
-**VAD** — Silero via sherpa-onnx; endpoint on
-`DecodePolicy.vadMinSilenceDuration` (0.55s default, LiveKit-style) or
-`vadMaxSpeechDuration` (15s). Segment audio is *not* decoded; VAD is the
-endpointing signal only. Empty ASR on a VAD endpoint keeps `pendingAudio`
-(false endpoint must not wipe speech). Mid-clause VAD caps are downcased on
-join when the next segment starts with a continuation verb (`SegmentJoiner`).
-Formal model: `specs/TranscriberBuffer.tla` (TLC-checked).
+**VAD** — Silero via sherpa-onnx; endpoint on user-tunable
+`VadSettings.minSilenceDuration` (default 0.55s from
+`DecodePolicy.vadMinSilenceDuration`, LiveKit-style) or
+`vadMaxSpeechDuration` (15s). Settings → Audio → **Phrase Endpointing**
+recreates VAD via `Transcriber.reconfigureVAD` (`VadEndpoint.tla` clamp dual).
+Segment audio is *not* decoded; VAD is the endpointing signal only. Empty ASR
+on a VAD endpoint keeps `pendingAudio` (false endpoint must not wipe speech).
+Mid-clause VAD caps are downcased on join when the next segment starts with a
+continuation verb (`SegmentJoiner`). Formal model: `specs/TranscriberBuffer.tla`
+(TLC-checked).
 
 
 ### Peek Safeguards

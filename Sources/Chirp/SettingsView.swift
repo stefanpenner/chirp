@@ -116,6 +116,8 @@ struct SettingsView: View {
 
 struct AudioSettingsTab: View {
     @Bindable var appState: AppState
+    @State private var minSilence: Double = Double(VadSettings.minSilenceDuration)
+    @State private var speechThreshold: Double = Double(VadSettings.threshold)
 
     var body: some View {
         Form {
@@ -124,6 +126,51 @@ struct AudioSettingsTab: View {
                 Text("Uses Apple Voice Processing for noise suppression, echo cancellation, and automatic gain control.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("Phrase Endpointing") {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Pause before next phrase")
+                        Spacer()
+                        Text(VadSettings.formatSeconds(Float(minSilence)))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(
+                        value: $minSilence,
+                        in: Double(VadSettings.minSilenceRange.lowerBound)...Double(VadSettings.minSilenceRange.upperBound),
+                        step: 0.05
+                    )
+                    .onChange(of: minSilence) { _, newValue in
+                        VadSettings.minSilenceDuration = Float(newValue)
+                        appState.applyVadSettings()
+                    }
+                    Text("Longer pause = fewer mid-sentence cuts; shorter = snappier phrases. Default 0.55 s.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Speech sensitivity")
+                        Spacer()
+                        Text(String(format: "%.2f", speechThreshold))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(
+                        value: $speechThreshold,
+                        in: Double(VadSettings.thresholdRange.lowerBound)...Double(VadSettings.thresholdRange.upperBound),
+                        step: 0.05
+                    )
+                    .onChange(of: speechThreshold) { _, newValue in
+                        VadSettings.threshold = Float(newValue)
+                        appState.applyVadSettings()
+                    }
+                    Text("Higher = ignore more noise (may miss quiet speech). Default 0.45.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Auto-Formatting") {

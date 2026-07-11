@@ -45,6 +45,7 @@ tlc specs/PipelineRebuild.tla
 | `LineCursor` | progressive line nav index (`-1`/nil = end; next/prev/delete) | `AppState.lineNavIndex` (nil = end); dual of select next/previous/delete next line |
 | `MultiUnitEdit` | delete last N trailing units clamps and stays non-negative | `DictationCommand.deleteLast*`(count) + `performDeleteLastUnits` |
 | `CharacterEdit` | delete previous N characters clamps to bufferLen | `DictationCommand.deletePreviousCharacters` + `performDeletePreviousCharacters` |
+| `VadEndpoint` | user VAD silence/threshold always clamp into safe range | `VadSettings.clamp` + min silence / threshold ranges |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |
 | `PeekCommitHyp` | reuse peek hyp on commit when speech-window sig matches | `DecodePolicy.shouldReuseCommitHyp` + `Transcriber` feed/flush |

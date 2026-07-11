@@ -16,6 +16,12 @@ protocol TranscriberProtocol: Sendable {
     func peekTranscription() async -> String?
     func flush() async -> String
     func resetVAD() async
+    /// Rebuild VAD with current VadSettings (pause / threshold). Default no-op for mocks.
+    func reconfigureVAD() async
+}
+
+extension TranscriberProtocol {
+    func reconfigureVAD() async {}
 }
 
 @MainActor protocol AudioRecording {

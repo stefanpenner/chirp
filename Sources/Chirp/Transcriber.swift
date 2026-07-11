@@ -14,6 +14,8 @@ actor Transcriber: TranscriberProtocol {
     nonisolated(unsafe) private var recognizer: OpaquePointer?
     nonisolated(unsafe) private var vad: OpaquePointer?
     private var pendingAudio: [Float] = []
+    /// Last VAD model path — needed to recreate VAD when settings change.
+    private var vadModelPath: String?
     /// Peek ASR cache: skip re-decode when pending sample count is unchanged.
     /// Cleared when pending is cleared (commit / flush / resetVAD).
     private var lastPeekPendingCount: Int?
@@ -40,6 +42,7 @@ actor Transcriber: TranscriberProtocol {
             return false
         }
 
+        vadModelPath = paths.vadPath
         if !initializeVAD(vadPath: paths.vadPath) {
             Log.transcription.error("Failed to create VAD")
             return false
@@ -47,6 +50,28 @@ actor Transcriber: TranscriberProtocol {
 
         Log.transcription.info("Transcriber initialized successfully")
         return true
+    }
+
+    /// Recreate VAD with current `VadSettings` (pause length / sensitivity).
+    /// Safe to call between sessions; clears pending audio and peek cache.
+    func reconfigureVAD() {
+        guard let path = vadModelPath else {
+            Log.transcription.debug("reconfigureVAD: no vad path yet")
+            return
+        }
+        pendingAudio.removeAll()
+        clearPeekCache()
+        if let existing = vad {
+            SherpaOnnxDestroyVoiceActivityDetector(existing)
+            vad = nil
+        }
+        if initializeVAD(vadPath: path) {
+            Log.transcription.info(
+                "VAD reconfigured silence=\(VadSettings.minSilenceDuration)s threshold=\(VadSettings.threshold)"
+            )
+        } else {
+            Log.transcription.error("VAD reconfigure failed")
+        }
     }
 
     /// Try preferred ASR providers in order until create succeeds.
@@ -136,8 +161,9 @@ actor Transcriber: TranscriberProtocol {
 
         var sileroConfig = SherpaOnnxSileroVadModelConfig()
         sileroConfig.model = UnsafePointer(vadModelStr)
-        sileroConfig.threshold = DecodePolicy.vadThreshold
-        sileroConfig.min_silence_duration = DecodePolicy.vadMinSilenceDuration
+        // User-tunable endpointing (VadSettings); defaults from DecodePolicy.
+        sileroConfig.threshold = VadSettings.threshold
+        sileroConfig.min_silence_duration = VadSettings.minSilenceDuration
         sileroConfig.min_speech_duration = DecodePolicy.vadMinSpeechDuration
         sileroConfig.window_size = Int32(DecodePolicy.vadWindowSize)
         sileroConfig.max_speech_duration = DecodePolicy.vadMaxSpeechDuration

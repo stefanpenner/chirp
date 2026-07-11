@@ -110,6 +110,12 @@ public final class AppState {
         }
     }
 
+    /// Apply VAD endpoint settings (pause length / sensitivity) to the live transcriber.
+    /// Call from Settings when the user moves endpointing sliders.
+    public func applyVadSettings() {
+        Task { await transcriber.reconfigureVAD() }
+    }
+
     /// Settings window controller. Created lazily on first showSettings().
     var settingsWindowController: SettingsWindowController?
 
