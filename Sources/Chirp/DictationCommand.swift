@@ -98,13 +98,13 @@ enum DictationCommand: Equatable, Sendable {
     case selectLastWords(count: Int)
     /// Select next word via ⇧⌥→. Keyboard-only; buffer unchanged.
     case selectNextWord
-    /// Select previous word via ⇧⌥←. Keyboard-only; buffer unchanged.
+    /// Select previous word: session trailing word + arm type-over (buffer unchanged until content).
     case selectPreviousWord
     /// Delete next word via ⇧⌥→ then backspace. Keyboard-only; buffer unchanged.
     case deleteNextWord
     /// Delete previous word via ⇧⌥← then backspace. Keyboard-only; buffer unchanged.
     case deletePreviousWord
-    /// Select previous N words via ⇧⌥← × N. Keyboard-only; buffer unchanged.
+    /// Select previous N words: session trailing N words + arm type-over (N ≥ 2).
     case selectPreviousWords(count: Int)
     /// Select next N words via ⇧⌥→ × N. Keyboard-only; buffer unchanged.
     case selectNextWords(count: Int)
@@ -919,7 +919,8 @@ enum DictationCommand: Equatable, Sendable {
         ("select last word", "Select last word"),
         ("select last two words / select last 3 words", "Select last N words"),
         ("select next word / select forward word", "Select next word (⇧⌥→; keyboard only)"),
-        ("select previous word / select prior word", "Select previous word (⇧⌥←; keyboard only)"),
+        ("select previous word / select prior word", "Select trailing word + arm type-over"),
+        ("select previous N words", "Select trailing N words + arm type-over"),
         ("delete next word / delete forward word", "Delete next word (⇧⌥→ then ⌫; keyboard only)"),
         ("select last sentence", "Select last sentence"),
         ("select previous sentence / select prior sentence", "Select previous sentence (progressive)"),

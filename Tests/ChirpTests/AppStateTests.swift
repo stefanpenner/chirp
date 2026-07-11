@@ -853,7 +853,7 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select next word"))
     }
 
-    @Test("select previous word uses keyboard select without changing buffer")
+    @Test("select previous word selects trailing session word and arms type-over")
     func selectPreviousWordCommand() async throws {
         let mock = MockTranscriber()
         await mock.setFeedAudioResult(["Hello world"])
@@ -877,12 +877,97 @@ struct AppStateTests {
         recorder.lastOnSamples?([0.1])
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 100_000_000)
-            if !inserter.selectWordDirections.isEmpty { break }
+            if !inserter.selectBackwardCounts.isEmpty { break }
         }
 
         #expect(state.transcribedText == "Hello world")
-        #expect(inserter.selectWordDirections == [.left])
+        // Session trailing select (same span as select last word), not bare ⌥⇧←
+        #expect(inserter.selectBackwardCounts.last == " world".count)
+        #expect(inserter.selectWordDirections.isEmpty)
         #expect(!inserter.typedTexts.contains("select previous word"))
+    }
+
+    @Test("select previous word then content replaces last word only")
+    func selectPreviousWordThenContentReplaces() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["select previous word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["planet"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("planet") { break }
+        }
+
+        let text = state.transcribedText
+        #expect(text.hasPrefix("Hello"), "prefix kept, got \"\(text)\"")
+        #expect(text.lowercased().contains("planet"), "replacement present, got \"\(text)\"")
+        #expect(!text.lowercased().contains("world"), "old word gone, got \"\(text)\"")
+    }
+
+    @Test("select previous two words then content replaces trailing span")
+    func selectPreviousTwoWordsThenContentReplaces() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world now"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world now" { break }
+        }
+
+        await mock.setFeedAudioResult(["select previous two words"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+
+        #expect(inserter.selectBackwardCounts.last == " world now".count)
+
+        await mock.setFeedAudioResult(["planet"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("planet") { break }
+        }
+
+        let text = state.transcribedText
+        #expect(text.hasPrefix("Hello"), "prefix kept, got \"\(text)\"")
+        #expect(text.lowercased().contains("planet"))
+        #expect(!text.lowercased().contains("world"))
+        #expect(!text.lowercased().contains("now"))
     }
 
     @Test("delete next word uses keyboard without changing session buffer")

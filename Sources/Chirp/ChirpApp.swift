@@ -813,17 +813,17 @@ public final class AppState {
                     case .selectLastWords(let count):
                         self.performSelectLastWords(count: count, typesIncrementally: false)
                     case .selectNextWord:
-                        self.performSelectWord(direction: .right)
+                        self.performSelectWord(direction: .right, typesIncrementally: false)
                     case .selectPreviousWord:
-                        self.performSelectWord(direction: .left)
+                        self.performSelectWord(direction: .left, typesIncrementally: false)
                     case .deleteNextWord:
                         self.performDeleteWord(direction: .right)
                     case .deletePreviousWord:
                         self.performDeleteWord(direction: .left)
                     case .selectPreviousWords(let count):
-                        self.performSelectWords(direction: .left, count: count)
+                        self.performSelectWords(direction: .left, count: count, typesIncrementally: false)
                     case .selectNextWords(let count):
-                        self.performSelectWords(direction: .right, count: count)
+                        self.performSelectWords(direction: .right, count: count, typesIncrementally: false)
                     case .deletePreviousWords(let count):
                         self.performDeleteWords(direction: .left, count: count)
                     case .deleteNextWords(let count):
@@ -1097,17 +1097,17 @@ public final class AppState {
         case .selectLastWords(let count):
             performSelectLastWords(count: count, typesIncrementally: typesIncrementally)
         case .selectNextWord:
-            performSelectWord(direction: .right)
+            performSelectWord(direction: .right, typesIncrementally: typesIncrementally)
         case .selectPreviousWord:
-            performSelectWord(direction: .left)
+            performSelectWord(direction: .left, typesIncrementally: typesIncrementally)
         case .deleteNextWord:
             performDeleteWord(direction: .right)
         case .deletePreviousWord:
             performDeleteWord(direction: .left)
         case .selectPreviousWords(let count):
-            performSelectWords(direction: .left, count: count)
+            performSelectWords(direction: .left, count: count, typesIncrementally: typesIncrementally)
         case .selectNextWords(let count):
-            performSelectWords(direction: .right, count: count)
+            performSelectWords(direction: .right, count: count, typesIncrementally: typesIncrementally)
         case .deletePreviousWords(let count):
             performDeleteWords(direction: .left, count: count)
         case .deleteNextWords(let count):
@@ -1897,14 +1897,28 @@ public final class AppState {
         textInserter.pressForwardDelete()
     }
 
-    /// Select one word via ⇧⌥← / ⇧⌥→. Buffer unchanged — caret-relative.
-    private func performSelectWord(direction: MoveDirection) {
+    /// Select one word. Previous: session trailing word + arm type-over (dual of select last word).
+    /// Next: keyboard ⇧⌥→ (caret-relative; no session caret model yet).
+    private func performSelectWord(direction: MoveDirection, typesIncrementally: Bool) {
+        if direction == .left,
+           typesIncrementally,
+           !TranscriptSelection.lastWords(transcribedText, count: 1).isEmpty {
+            performSelectLastWords(count: 1, typesIncrementally: true)
+            return
+        }
         textInserter.selectWord(direction: direction)
     }
 
-    /// Select N words in direction (⇧⌥←/→ × N). Keyboard-only; buffer unchanged.
-    private func performSelectWords(direction: MoveDirection, count: Int) {
+    /// Select N words. Previous: session trailing N words + arm type-over.
+    /// Next: keyboard ⇧⌥→ × N (caret-relative).
+    private func performSelectWords(direction: MoveDirection, count: Int, typesIncrementally: Bool) {
         guard count > 0 else { return }
+        if direction == .left,
+           typesIncrementally,
+           !TranscriptSelection.lastWords(transcribedText, count: count).isEmpty {
+            performSelectLastWords(count: count, typesIncrementally: true)
+            return
+        }
         for _ in 0..<count {
             textInserter.selectWord(direction: direction)
         }

@@ -1,13 +1,17 @@
 ---- MODULE WordSelect ----
 (*
-  Keyboard select next/previous word must not mutate the session buffer.
+  Select next/previous word must not mutate the session buffer.
 
   Dual of:
     DictationCommand.selectNextWord / selectPreviousWord
     AppState.performSelectWord
-    (TextInserter.selectWord only; transcribedText unchanged)
+    Previous (session end): trailing lastWords + arm sessionSelection
+    Next: TextInserter.selectWord keyboard only
+    Both leave transcribedText / bufferLen unchanged until content type-over.
 
   Grain: bufferLen only (0..4). Select-word actions leave bufferLen unchanged.
+  Arming is modeled as lastOp = "select" without growing buffer (SelectionCommit
+  handles the subsequent type-over peel).
 *)
 
 EXTENDS Integers, TLC
@@ -46,7 +50,7 @@ SelectNextWord ==
   /\ lastOp' = "select"
   /\ UNCHANGED bufferLen
 
-\* Select previous word (⇧⌥←) — same contract
+\* Select previous word — session trailing arm; buffer unchanged
 SelectPreviousWord ==
   /\ prevBufferLen' = bufferLen
   /\ lastOp' = "select"
