@@ -261,7 +261,25 @@ struct DictationCommandTests {
     func pressKeys() {
         #expect(DictationCommand.parse("press enter") == .pressEnter)
         #expect(DictationCommand.parse("hit return") == .pressEnter)
-        #expect(DictationCommand.parse("press tab") == .pressTab)
+        #expect(DictationCommand.parse("press tab") == .pressTab(count: 1))
+        #expect(DictationCommand.parse("hit tab") == .pressTab(count: 1))
+        #expect(DictationCommand.parse("tab key") == .pressTab(count: 1))
+    }
+
+    @Test("Dragon tab N times / press tab N")
+    func tabNTimes() {
+        #expect(DictationCommand.parse("tab 3 times") == .pressTab(count: 3))
+        #expect(DictationCommand.parse("press tab 2 times") == .pressTab(count: 2))
+        #expect(DictationCommand.parse("press tab 4") == .pressTab(count: 4))
+        #expect(DictationCommand.parse("tab two times") == .pressTab(count: 2))
+        #expect(DictationCommand.parse("hit tab 5 times") == .pressTab(count: 5))
+        #expect(DictationCommand.parse("tab key 3 times") == .pressTab(count: 3))
+        #expect(DictationCommand.parse("tab twice") == .pressTab(count: 2))
+        #expect(DictationCommand.parse("press tab twice") == .pressTab(count: 2))
+        #expect(DictationCommand.parse("please tab 3 times") == .pressTab(count: 3))
+        #expect(DictationCommand.parse("press tab") == .pressTab(count: 1))
+        // Bare "tab" alone is not a command (could be content)
+        #expect(DictationCommand.parse("tab") == .none)
     }
 
     @Test("recognizes press space variants")

@@ -49,8 +49,9 @@ enum DictationCommand: Equatable, Sendable {
     case clearAll
     /// Insert a newline (Return key).
     case pressEnter
-    /// Insert a tab.
-    case pressTab
+    /// Insert Tab N times (Dragon "Tab <n> times"). Count ≥ 1.
+    /// Session buffer + edit stack grow by N tab characters.
+    case pressTab(count: Int)
     /// Insert a space character.
     case pressSpace
     /// Press Backspace / Delete N times (Dragon "Backspace <n>").
@@ -582,6 +583,15 @@ enum DictationCommand: Equatable, Sendable {
                 #"^(?:press |hit )?delete forward "# + num + #"(?: times?)?$"#,
                 { c in (1...100).contains(c) ? .pressForwardDelete(count: c) : nil }
             ),
+            // Dragon "Tab <n> times" / "press tab N" (N ≥ 1). Bare "press tab" is exact.
+            (
+                #"^(?:press |hit )?tab(?: key)? "# + num + #"(?: times?)?$"#,
+                { c in (1...20).contains(c) ? .pressTab(count: c) : nil }
+            ),
+            (
+                #"^tab "# + num + #" times?$"#,
+                { c in (1...20).contains(c) ? .pressTab(count: c) : nil }
+            ),
             // Buffer peel: delete last/previous N words|sentences|paragraphs|lines
             (
                 #"^delete (?:the )?(?:last|previous|prior) "# + num + #" words?$"#,
@@ -848,8 +858,11 @@ enum DictationCommand: Equatable, Sendable {
         case "press enter", "press return", "hit enter", "hit return",
              "press return key", "press the enter key", "hit the enter key":
             return .pressEnter
-        case "press tab", "hit tab", "press tab key", "press the tab key":
-            return .pressTab
+        case "press tab", "hit tab", "press tab key", "press the tab key",
+             "tab key":
+            return .pressTab(count: 1)
+        case "tab twice", "press tab twice", "hit tab twice", "tab key twice":
+            return .pressTab(count: 2)
         // Explicit press/hit only — bare "space bar" is content ITN → " ".
         case "press space", "hit space", "press space bar", "hit space bar",
              "press spacebar", "hit spacebar", "space key", "press space key",
@@ -1149,7 +1162,8 @@ enum DictationCommand: Equatable, Sendable {
         ("delete next line / delete forward line", "Remove next line (progressive)"),
         ("clear all", "Wipe session text"),
         ("press enter", "Insert Return"),
-        ("press tab", "Insert Tab"),
+        ("press tab / tab key", "Insert Tab once"),
+        ("tab N times / press tab 3 times", "Insert Tab N times"),
         ("press space / hit space", "Insert Space"),
         ("press backspace / delete key", "Press Backspace once (keyboard only)"),
         ("backspace N / press backspace N times", "Press Backspace N times (keyboard only)"),

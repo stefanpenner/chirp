@@ -946,8 +946,8 @@ public final class AppState {
                         self.performClearAll(typesIncrementally: false)
                     case .pressEnter:
                         self.performKeyInsert("\n", typesIncrementally: false)
-                    case .pressTab:
-                        self.performKeyInsert("\t", typesIncrementally: false)
+                    case .pressTab(let count):
+                        self.performPressTab(count: count, typesIncrementally: false)
                     case .pressSpace:
                         self.performKeyInsert(" ", typesIncrementally: false)
                     case .pressBackspace(let count):
@@ -1267,8 +1267,8 @@ public final class AppState {
             performClearAll(typesIncrementally: typesIncrementally)
         case .pressEnter:
             performKeyInsert("\n", typesIncrementally: typesIncrementally)
-        case .pressTab:
-            performKeyInsert("\t", typesIncrementally: typesIncrementally)
+        case .pressTab(let count):
+            performPressTab(count: count, typesIncrementally: typesIncrementally)
         case .pressSpace:
             performKeyInsert(" ", typesIncrementally: typesIncrementally)
         case .pressBackspace(let count):
@@ -1872,6 +1872,14 @@ public final class AppState {
         }
         editStack.push(s)
         lastCommittedNormalized = ""
+    }
+
+    /// Dragon "Tab <n> times": insert N tab characters (one stack delta).
+    /// Dual of specs/TabN.tla.
+    private func performPressTab(count: Int = 1, typesIncrementally: Bool) {
+        let n = TabDecision.clampCount(count)
+        let s = String(repeating: "\t", count: n)
+        performKeyInsert(s, typesIncrementally: typesIncrementally)
     }
 
     /// Copy session transcript to the pasteboard (does not type).
