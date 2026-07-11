@@ -150,6 +150,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **move up N lines** / **move down 3 lines** — host ↑/↓ × N; buffer unchanged (`MoveLinesN.tla`)
 - **tab N times** / **press tab 3 times** — insert N tabs into session (`TabN.tla`)
 - **press enter N times** / **enter twice** — insert N returns into session (`EnterN.tla`)
+- **press space N times** / **space twice** — insert N spaces into session (`SpaceN.tla`)
 - **replace that** — next phrase replaces last (text stays until then; HUD “Replace…”)
 - **replace X with Y** / **change X to Y** / **swap X for Y** — replace last case-insensitive occurrence of X with Y in the session buffer (select + type-over in host; `ReplacePhrase.tla`). No match → no-op. Does **not** steal bare **replace that**
 - **delete X** / **remove X** — delete last case-insensitive occurrence of phrase X (absorbs one adjacent space; `DeletePhrase.tla`). No match → no-op. Does **not** steal **delete that** / **delete last word** / unit deletes

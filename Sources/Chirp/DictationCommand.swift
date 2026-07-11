@@ -53,8 +53,9 @@ enum DictationCommand: Equatable, Sendable {
     /// Insert Tab N times (Dragon "Tab <n> times"). Count ≥ 1.
     /// Session buffer + edit stack grow by N tab characters.
     case pressTab(count: Int)
-    /// Insert a space character.
-    case pressSpace
+    /// Insert Space N times (Dragon-style "press space N times"). Count ≥ 1.
+    /// Session buffer + edit stack grow by N spaces.
+    case pressSpace(count: Int)
     /// Press Backspace / Delete N times (Dragon "Backspace <n>").
     /// Keyboard-only; session buffer / edit stack unchanged. Count ≥ 1.
     case pressBackspace(count: Int)
@@ -603,6 +604,16 @@ enum DictationCommand: Equatable, Sendable {
                 #"^(?:enter|return) "# + num + #" times?$"#,
                 { c in (1...20).contains(c) ? .pressEnter(count: c) : nil }
             ),
+            // "press space N times" / "space bar 3" (N ≥ 1). Bare "press space" is exact.
+            // Do not steal mid-utterance content with bare "space".
+            (
+                #"^(?:press |hit )?(?:space|spacebar|space bar)(?: key)? "# + num + #"(?: times?)?$"#,
+                { c in (1...20).contains(c) ? .pressSpace(count: c) : nil }
+            ),
+            (
+                #"^space "# + num + #" times?$"#,
+                { c in (1...20).contains(c) ? .pressSpace(count: c) : nil }
+            ),
             // Buffer peel: delete last/previous N words|sentences|paragraphs|lines
             (
                 #"^delete (?:the )?(?:last|previous|prior) "# + num + #" words?$"#,
@@ -882,7 +893,10 @@ enum DictationCommand: Equatable, Sendable {
         case "press space", "hit space", "press space bar", "hit space bar",
              "press spacebar", "hit spacebar", "space key", "press space key",
              "hit space key":
-            return .pressSpace
+            return .pressSpace(count: 1)
+        case "press space twice", "hit space twice", "space twice",
+             "press space bar twice", "space bar twice", "spacekey twice":
+            return .pressSpace(count: 2)
         // Keyboard backspace only — do not match "delete that" / "delete it"
         // (those remain scratchThat) or "delete last" (deleteLastWord).
         // Forward delete phrases are matched separately below.
@@ -1180,7 +1194,8 @@ enum DictationCommand: Equatable, Sendable {
         ("press enter N times / enter twice", "Insert Return N times"),
         ("press tab / tab key", "Insert Tab once"),
         ("tab N times / press tab 3 times", "Insert Tab N times"),
-        ("press space / hit space", "Insert Space"),
+        ("press space / hit space", "Insert Space once"),
+        ("press space N times / space twice", "Insert Space N times"),
         ("press backspace / delete key", "Press Backspace once (keyboard only)"),
         ("backspace N / press backspace N times", "Press Backspace N times (keyboard only)"),
         ("forward delete / delete forward", "Press Forward Delete once (keyboard only; not Backspace)"),

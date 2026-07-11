@@ -301,16 +301,32 @@ struct DictationCommandTests {
 
     @Test("recognizes press space variants")
     func pressSpace() {
-        #expect(DictationCommand.parse("press space") == .pressSpace)
-        #expect(DictationCommand.parse("hit space") == .pressSpace)
-        #expect(DictationCommand.parse("press space bar") == .pressSpace)
-        #expect(DictationCommand.parse("hit space bar") == .pressSpace)
-        #expect(DictationCommand.parse("press spacebar") == .pressSpace)
-        #expect(DictationCommand.parse("space key") == .pressSpace)
-        #expect(DictationCommand.parse("Press Space.") == .pressSpace)
-        #expect(DictationCommand.parse("please press space") == .pressSpace)
+        #expect(DictationCommand.parse("press space") == .pressSpace(count: 1))
+        #expect(DictationCommand.parse("hit space") == .pressSpace(count: 1))
+        #expect(DictationCommand.parse("press space bar") == .pressSpace(count: 1))
+        #expect(DictationCommand.parse("hit space bar") == .pressSpace(count: 1))
+        #expect(DictationCommand.parse("press spacebar") == .pressSpace(count: 1))
+        #expect(DictationCommand.parse("space key") == .pressSpace(count: 1))
+        #expect(DictationCommand.parse("Press Space.") == .pressSpace(count: 1))
+        #expect(DictationCommand.parse("please press space") == .pressSpace(count: 1))
         // Content mid-sentence is not a whole-utterance command
         #expect(DictationCommand.parse("hit the space bar hard") == .none)
+    }
+
+    @Test("Dragon press space N times")
+    func spaceNTimes() {
+        #expect(DictationCommand.parse("press space 3 times") == .pressSpace(count: 3))
+        #expect(DictationCommand.parse("press space 2") == .pressSpace(count: 2))
+        #expect(DictationCommand.parse("space 4 times") == .pressSpace(count: 4))
+        #expect(DictationCommand.parse("hit space two times") == .pressSpace(count: 2))
+        #expect(DictationCommand.parse("space bar 3 times") == .pressSpace(count: 3))
+        #expect(DictationCommand.parse("press spacebar 5 times") == .pressSpace(count: 5))
+        #expect(DictationCommand.parse("press space twice") == .pressSpace(count: 2))
+        #expect(DictationCommand.parse("space twice") == .pressSpace(count: 2))
+        #expect(DictationCommand.parse("please press space 2 times") == .pressSpace(count: 2))
+        #expect(DictationCommand.parse("press space") == .pressSpace(count: 1))
+        // Bare "space" alone is not a command (content / ITN)
+        #expect(DictationCommand.parse("space") == .none)
     }
 
     @Test("recognizes press backspace without stealing delete that")

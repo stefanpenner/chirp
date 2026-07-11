@@ -948,8 +948,8 @@ public final class AppState {
                         self.performPressEnter(count: count, typesIncrementally: false)
                     case .pressTab(let count):
                         self.performPressTab(count: count, typesIncrementally: false)
-                    case .pressSpace:
-                        self.performKeyInsert(" ", typesIncrementally: false)
+                    case .pressSpace(let count):
+                        self.performPressSpace(count: count, typesIncrementally: false)
                     case .pressBackspace(let count):
                         self.performPressBackspace(count: count)
                     case .pressEscape:
@@ -1269,8 +1269,8 @@ public final class AppState {
             performPressEnter(count: count, typesIncrementally: typesIncrementally)
         case .pressTab(let count):
             performPressTab(count: count, typesIncrementally: typesIncrementally)
-        case .pressSpace:
-            performKeyInsert(" ", typesIncrementally: typesIncrementally)
+        case .pressSpace(let count):
+            performPressSpace(count: count, typesIncrementally: typesIncrementally)
         case .pressBackspace(let count):
             performPressBackspace(count: count)
         case .pressEscape:
@@ -1887,6 +1887,14 @@ public final class AppState {
     private func performPressEnter(count: Int = 1, typesIncrementally: Bool) {
         let n = EnterDecision.clampCount(count)
         let s = String(repeating: "\n", count: n)
+        performKeyInsert(s, typesIncrementally: typesIncrementally)
+    }
+
+    /// Dragon "press space N times": insert N spaces (one stack delta).
+    /// Dual of specs/SpaceN.tla.
+    private func performPressSpace(count: Int = 1, typesIncrementally: Bool) {
+        let n = SpaceDecision.clampCount(count)
+        let s = String(repeating: " ", count: n)
         performKeyInsert(s, typesIncrementally: typesIncrementally)
     }
 
