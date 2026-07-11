@@ -51,7 +51,7 @@ tlc specs/PipelineRebuild.tla
 | `ReplacePhrase` | replace X with Y last match; miss is no-op; typedToApp == textLen | `PhraseReplaceDecision` + `AppState.performReplacePhrase` |
 | `DeletePhrase` | delete X last match (space absorb); miss is no-op; typedToApp == textLen | `PhraseReplaceDecision.bufferAfterDelete` + `AppState.performDeletePhrase` |
 | `SelectPhrase` | select X last match arms range; buffer unchanged; miss no-op | `PhraseReplaceDecision.findLastRange` + `AppState.performSelectPhrase` |
-| `GoToPhrase` | go to/after X moves caret; buffer unchanged; no selection arm; miss no-op | `PhraseReplaceDecision.findLastRange` + `AppState.performGoToPhrase` |
+| `GoToPhrase` | go to/after X sets caret; next insert at caret (not always append); miss no-op | `SessionCaretDecision` + `AppState.sessionCaret` + `performGoToPhrase` |
 | `VadEndpoint` | user VAD silence/threshold always clamp into safe range | `VadSettings.clamp` + min silence / threshold ranges |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |

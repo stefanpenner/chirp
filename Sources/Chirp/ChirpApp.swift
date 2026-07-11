@@ -160,6 +160,10 @@ public final class AppState {
     /// Next content splices this range so session buffer matches type-over. Dual of SelectionCommit.tla.
     private var sessionSelection: (start: Int, length: Int)? = nil
 
+    /// Session caret offset after go-to / go-after (nil = end of buffer).
+    /// Mid-buffer content inserts here so host and session stay dual. Dual of GoToPhrase.tla.
+    private var sessionCaret: Int? = nil
+
     /// Normalized form of the last committed non-command segment (dedup echoes).
     private var lastCommittedNormalized = ""
 
@@ -586,6 +590,7 @@ public final class AppState {
         noSpaceMode = .off
         awaitingReplace = false
         sessionSelection = nil
+        sessionCaret = nil
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
         sentenceSelectionActive = false
@@ -1236,6 +1241,7 @@ public final class AppState {
             if ReplaceDecision.shouldUndoBeforeCommit(awaitingReplace: awaitingReplace) {
                 awaitingReplace = false
                 sessionSelection = nil
+                sessionCaret = nil
                 performScratchThat(typesIncrementally: typesIncrementally)
             }
             // Skip consecutive identical segments (VAD/ASR echo under noise)
@@ -1276,6 +1282,7 @@ public final class AppState {
                 }
                 lastCommittedNormalized = norm
                 sessionSelection = nil
+                sessionCaret = nil
                 sentenceNavIndex = nil
                 sentenceSelectionActive = false
                 paragraphNavIndex = nil
@@ -1285,6 +1292,39 @@ public final class AppState {
                 return
             }
             sessionSelection = nil
+            // Mid-buffer insert after go-to / go-after (host caret already mid).
+            if SessionCaretDecision.isMidBuffer(
+                caret: sessionCaret,
+                bufferCount: transcribedText.count
+            ),
+               let caret = sessionCaret,
+               let inserted = SessionCaretDecision.bufferAfterInsert(
+                buffer: transcribedText,
+                caret: caret,
+                piece: shaped.text,
+                preserveLeadingCase: shaped.preserveLeadingCase,
+                emptySeparator: spellMode == .on || noSpaceMode.isOn
+               ) {
+                editStack.clear()
+                transcribedText = inserted.text
+                if typesIncrementally {
+                    textInserter.typeText(inserted.delta)
+                }
+                if !inserted.delta.isEmpty {
+                    editStack.push(inserted.delta)
+                }
+                lastCommittedNormalized = norm
+                // Stay mid if still not at end; else clear (trailing again).
+                sessionCaret = inserted.caret < transcribedText.count ? inserted.caret : nil
+                sentenceNavIndex = nil
+                sentenceSelectionActive = false
+                paragraphNavIndex = nil
+                paragraphSelectionActive = false
+                lineNavIndex = nil
+                lineSelectionActive = false
+                return
+            }
+            sessionCaret = nil
             // One-shot pack preserves case ("abc"/"John"); sticky also glues segments.
             // Spell mode and no-space mode both use empty separators (no letter packing
             // for no-space — that is spell mode only).
@@ -1831,7 +1871,8 @@ public final class AppState {
     }
 
     /// Move caret to start (or end if `after`) of last occurrence of `target`.
-    /// Navigation only — does not arm type-over. Dual of specs/GoToPhrase.tla.
+    /// Sets `sessionCaret` so next content inserts mid-buffer (not always append).
+    /// Dual of specs/GoToPhrase.tla.
     private func performGoToPhrase(target: String, after: Bool, typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         guard let match = PhraseReplaceDecision.findLastRange(
@@ -1840,11 +1881,12 @@ public final class AppState {
         ) else {
             return
         }
-        // Clear any armed selection so next content appends (nav-only contract).
+        // Clear selection arm; caret drives insert (not type-over replace).
         sessionSelection = nil
         textInserter.clearSelection()
         let offset = after ? match.start + match.length : match.start
         moveToSessionOffset(offset)
+        sessionCaret = offset < transcribedText.count ? offset : nil
         // Reset progressive unit nav — caret is no longer at a known unit edge.
         sentenceNavIndex = nil
         sentenceSelectionActive = false
@@ -2914,6 +2956,7 @@ public final class AppState {
         noSpaceMode = .off
         awaitingReplace = false
         sessionSelection = nil
+        sessionCaret = nil
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
         sentenceSelectionActive = false

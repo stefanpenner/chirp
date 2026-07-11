@@ -1,13 +1,15 @@
 ---- MODULE GoToPhrase ----
 (*
-  Single-utterance "go to X" / "go after X": last match moves abstract caret.
-  Buffer length is unchanged. Selection is not armed. Miss is a no-op.
+  "go to X" / "go after X" set session caret; next content inserts at caret
+  (not always append). Buffer dual of host type-at-caret.
 
   Dual of:
     PhraseReplaceDecision.findLastRange
-    AppState.performGoToPhrase
+    AppState.performGoToPhrase + SessionCaretDecision.bufferAfterInsert
+    AppState.sessionCaret content path
 
   Grain: abstract lengths (not string content).
+  caret = -1 means end (append mode).
 *)
 
 EXTENDS Integers, TLC
@@ -16,8 +18,8 @@ VARIABLES
   textLen,       \* session transcript length
   hasMatch,      \* whether last find would succeed
   targetLen,     \* length of match when hasMatch
-  caret,         \* abstract caret offset (0..textLen); -1 = unknown/end
-  lastOp         \* "none" | "commit" | "goTo" | "goAfter" | "miss"
+  caret,         \* abstract caret (0..textLen); -1 = end (append mode)
+  lastOp         \* "none" | "commit" | "goTo" | "goAfter" | "miss" | "insert"
 
 vars == <<textLen, hasMatch, targetLen, caret, lastOp>>
 
@@ -28,10 +30,10 @@ TypeOK ==
   /\ hasMatch \in BOOLEAN
   /\ targetLen \in 0..MaxLen
   /\ caret \in -1..MaxLen
-  /\ lastOp \in {"none", "commit", "goTo", "goAfter", "miss"}
+  /\ lastOp \in {"none", "commit", "goTo", "goAfter", "miss", "insert"}
   /\ hasMatch => (targetLen > 0 /\ targetLen <= textLen)
   /\ ~hasMatch => targetLen = 0
-  /\ caret = -1 \/ caret <= textLen
+  /\ caret = -1 \/ (caret >= 0 /\ caret <= textLen)
 
 Init ==
   /\ textLen = 0
@@ -41,11 +43,13 @@ Init ==
   /\ lastOp = "none"
 
 ----
-Commit(n) ==
+\* Trailing append when caret is end (-1)
+CommitEnd(n) ==
+  /\ caret = -1
   /\ n \in 1..MaxLen
   /\ textLen + n <= MaxLen
   /\ textLen' = textLen + n
-  /\ caret' = textLen'   \* append lands at end
+  /\ caret' = -1
   /\ lastOp' = "commit"
   /\ \/ /\ hasMatch' = FALSE
         /\ targetLen' = 0
@@ -53,7 +57,22 @@ Commit(n) ==
         /\ \E t \in 1..textLen':
              targetLen' = t
 
-\* Go to start of match; buffer unchanged
+\* Mid-buffer insert at caret; advance caret; switch to end mode if at end
+InsertAtCaret(n) ==
+  /\ caret >= 0
+  /\ caret < textLen
+  /\ n \in 1..MaxLen
+  /\ textLen + n <= MaxLen
+  /\ LET newLen == textLen + n
+        newCaret == caret + n
+     IN /\ textLen' = newLen
+        /\ lastOp' = "insert"
+        /\ hasMatch' = FALSE
+        /\ targetLen' = 0
+        /\ IF newCaret >= newLen
+           THEN caret' = -1
+           ELSE caret' = newCaret
+
 GoToHit ==
   /\ hasMatch
   /\ targetLen > 0
@@ -63,24 +82,26 @@ GoToHit ==
        /\ lastOp' = "goTo"
        /\ UNCHANGED <<textLen, hasMatch, targetLen>>
 
-\* Go after end of match; buffer unchanged
 GoAfterHit ==
   /\ hasMatch
   /\ targetLen > 0
   /\ \E start \in 0..MaxLen:
        /\ start + targetLen <= textLen
-       /\ caret' = start + targetLen
+       /\ LET c == start + targetLen
+          IN IF c >= textLen
+             THEN caret' = -1
+             ELSE caret' = c
        /\ lastOp' = "goAfter"
        /\ UNCHANGED <<textLen, hasMatch, targetLen>>
 
-\* Miss: no mutation
 GoMiss ==
   /\ ~hasMatch
   /\ lastOp' = "miss"
   /\ UNCHANGED <<textLen, hasMatch, targetLen, caret>>
 
 Next ==
-  \/ \E n \in 1..MaxLen: Commit(n)
+  \/ \E n \in 1..MaxLen: CommitEnd(n)
+  \/ \E n \in 1..MaxLen: InsertAtCaret(n)
   \/ GoToHit
   \/ GoAfterHit
   \/ GoMiss
@@ -88,9 +109,6 @@ Next ==
 Spec == Init /\ [][Next]_vars
 
 ----
-GoPreservesBuffer ==
-  lastOp \in {"goTo", "goAfter", "miss"} => TRUE
-
 CaretInRange ==
   caret = -1 \/ (caret >= 0 /\ caret <= textLen)
 
