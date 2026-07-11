@@ -216,8 +216,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **move right** / **next word** — cursor right one word (⌥→); sets `sessionCaret` (end → append mode)
 - **move left N words** / **back N words** / **move previous N words** — cursor left N words (⌥← × N) + session caret. Does **not** steal bare **move left**
 - **move right N words** / **forward N words** / **move next N words** — cursor right N words (⌥→ × N) + session caret. Does **not** steal bare **move right**
-- **move left N characters** / **back N characters** — cursor left N characters (← × N)
-- **move right N characters** / **forward N characters** — cursor right N characters (→ × N). Dual: `MoveN.tla`
+- **move left N characters** / **back N characters** — cursor left N characters (← × N) + `sessionCaret` for mid-buffer insert (`CharacterCaret.tla`)
+- **move right N characters** / **forward N characters** — cursor right N characters (→ × N) + `sessionCaret`. Dual: `MoveN.tla` / `CharacterCaret.tla`
 - **move up** / **previous line** / **line up** / **up a line** / **go up** — cursor up one line (↑). Does **not** steal **select previous line**
 - **move down** / **next line** / **line down** / **down a line** / **go down** — cursor down one line (↓)
 - **go to start** / **beginning of line** — cursor to line start (⌘←)

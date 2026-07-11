@@ -3472,6 +3472,64 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("move left 5 characters"))
     }
 
+    @Test("move left 5 characters then content inserts mid-buffer")
+    func moveLeftCharactersThenContentInsertsMid() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["move left 5 characters"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["XX"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("XX") || state.transcribedText.contains("xx") { break }
+        }
+
+        let after = state.transcribedText
+        // "Hello world".count=11; left 5 → caret at 6 ("Hello ")
+        // insert XX → should not be pure trailing-only append of " XX" at end only
+        #expect(after.hasPrefix("Hello"), "prefix kept, got \"\(after)\"")
+        #expect(
+            after.contains("XX") || after.contains("xx") || after.contains("Xx"),
+            "inserted, got \"\(after)\""
+        )
+        #expect(after.lowercased().contains("world"), "tail kept, got \"\(after)\"")
+        #expect(
+            after.count > "Hello world".count,
+            "grew by insert, got \"\(after)\""
+        )
+        // Mid insert: "world" still present and XX not only after full original if space join
+        #expect(
+            !after.lowercased().hasSuffix("hello world xx")
+                || after.lowercased().contains("xx world")
+                || after.lowercased().contains(" xxworld")
+                || after.lowercased().contains("xxworld")
+                || after.lowercased().contains(" xx world"),
+            "XX should land mid-buffer, got \"\(after)\""
+        )
+    }
+
     @Test("forward one character moves without changing buffer")
     func moveNextCharactersCommand() async throws {
         let mock = MockTranscriber()

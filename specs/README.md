@@ -47,6 +47,7 @@ tlc specs/PipelineRebuild.tla
 | `CharacterEdit` | delete previous N characters clamps to bufferLen | `DictationCommand.deletePreviousCharacters` + `performDeletePreviousCharacters` |
 | `MoveN` | move N words/characters leaves session bufferLen unchanged | `DictationCommand.movePrevious/NextWords` + `movePrevious/NextCharacters` + `performMoveWords` / `performMoveCharacters` |
 | `WordCaret` | word move updates session caret; mid insert at caret; bufferLen rules | `TranscriptSelection.offsetAfterWordMove` + `performMoveWords` + `sessionCaret` |
+| `CharacterCaret` | character move updates session caret; mid insert at caret | `TranscriptSelection.offsetAfterCharacterMove` + `performMoveCharacters` |
 | `SelectLastWords` | select last N trailing words leaves session bufferLen unchanged | `DictationCommand.selectLastWords` + `TranscriptSelection.lastWords` + `performSelectLastWords` |
 | `SelectionCommit` | select any in-range window → re-dictate splices; typedToApp == textLen | `SelectionCommitDecision.bufferAfterRangeReplace` + `AppState.sessionSelection` |
 | `ReplacePhrase` | replace X with Y last match; miss is no-op; typedToApp == textLen | `PhraseReplaceDecision` + `AppState.performReplacePhrase` |

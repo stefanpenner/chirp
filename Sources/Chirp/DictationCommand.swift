@@ -1130,6 +1130,26 @@ enum TranscriptSelection {
         return SentenceRange(start: words[startIdx].start, end: words[endIdx].end)
     }
 
+    /// Session caret after moving N characters left or right.
+    /// `caret == nil` means end of buffer. Result clamped to `0...text.count`.
+    /// Dual of AppState.performMoveCharacters + sessionCaret (CharacterCaret.tla).
+    static func offsetAfterCharacterMove(
+        _ text: String,
+        caret: Int?,
+        left: Bool,
+        count: Int
+    ) -> Int {
+        let len = text.count
+        var pos = min(max(caret ?? len, 0), len)
+        guard count > 0 else { return pos }
+        if left {
+            pos = max(0, pos - count)
+        } else {
+            pos = min(len, pos + count)
+        }
+        return pos
+    }
+
     /// Session caret after moving N whitespace-delimited words left or right.
     /// `caret == nil` means end of buffer. Result clamped to `0...text.count`.
     /// Dual of AppState.performMoveWord(s) + sessionCaret (WordCaret.tla).

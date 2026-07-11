@@ -2724,7 +2724,8 @@ public final class AppState {
         lineSelectionActive = false
     }
 
-    /// Move cursor N characters (← / → × N). Buffer unchanged — cursor only.
+    /// Move cursor N characters (← / → × N). Buffer unchanged; sets sessionCaret.
+    /// Dual of TranscriptSelection.offsetAfterCharacterMove + CharacterCaret.tla.
     private func performMoveCharacters(direction: MoveDirection, count: Int) {
         guard count > 0 else { return }
         if direction == .left {
@@ -2732,6 +2733,19 @@ public final class AppState {
         } else {
             textInserter.moveForward(count: count)
         }
+        let to = TranscriptSelection.offsetAfterCharacterMove(
+            transcribedText,
+            caret: sessionCaret,
+            left: direction == .left,
+            count: count
+        )
+        setSessionCaret(to)
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Move cursor one line (↑ / ↓). Buffer unchanged — cursor only.

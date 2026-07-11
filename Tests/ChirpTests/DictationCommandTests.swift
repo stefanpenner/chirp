@@ -508,6 +508,28 @@ struct DictationCommandTests {
         #expect(TranscriptSelection.lastWords("a b", count: 0) == "")
     }
 
+    @Test("offsetAfterCharacterMove clamps character steps")
+    func offsetAfterCharacterMove() {
+        let t = "Hello world"
+        #expect(
+            TranscriptSelection.offsetAfterCharacterMove(t, caret: nil, left: true, count: 5)
+                == t.count - 5
+        )
+        #expect(
+            TranscriptSelection.offsetAfterCharacterMove(t, caret: nil, left: true, count: 100) == 0
+        )
+        #expect(
+            TranscriptSelection.offsetAfterCharacterMove(t, caret: 3, left: false, count: 2) == 5
+        )
+        #expect(
+            TranscriptSelection.offsetAfterCharacterMove(t, caret: 3, left: false, count: 100)
+                == t.count
+        )
+        #expect(
+            TranscriptSelection.offsetAfterCharacterMove(t, caret: 4, left: true, count: 0) == 4
+        )
+    }
+
     @Test("offsetAfterWordMove steps whitespace words left and right")
     func offsetAfterWordMove() {
         let t = "one two three four"
