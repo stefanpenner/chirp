@@ -11,6 +11,8 @@ enum DecodeReject {
         "yeah", "yes", "you", "the", "a", "um", "uh",
         // Short greetings/closings common on near-silence (frames ≤ 1 only)
         "ok", "okay", "hi", "bye", "hmm", "mhm",
+        // Vocalizations / filler noises (not bare "no"/"so"/"like" — real short speech)
+        "ah", "oh", "er", "mm", "huh",
     ]
 
     /// Reject ASR hyp when energy + text heuristics say garbage.

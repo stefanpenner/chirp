@@ -110,6 +110,17 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("hi?") == "")
         #expect(TextPostProcessor.process("you know.") == "")
         #expect(TextPostProcessor.process("i mean.") == "")
+        // Expanded Whisper-class silence dumps
+        #expect(TextPostProcessor.process("please like and subscribe.") == "")
+        #expect(TextPostProcessor.process("please like and subscribe") == "")
+        #expect(TextPostProcessor.process("thanks for watching!") == "")
+        #expect(TextPostProcessor.process("the end.") == "")
+        #expect(TextPostProcessor.process("the end") == "")
+        #expect(TextPostProcessor.process("subtitles by the amara.org community") == "")
+        #expect(TextPostProcessor.process("music") == "")
+        #expect(TextPostProcessor.process("[music]") == "")
+        #expect(TextPostProcessor.process("applause") == "")
+        #expect(TextPostProcessor.process("laughter") == "")
         // Legitimate single-word dictation must pass through (no trailing punct)
         #expect(TextPostProcessor.process("Yeah") == "Yeah")
         #expect(TextPostProcessor.process("Okay") == "Okay")
@@ -124,6 +135,7 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("okay let's go") == "okay let's go")
         #expect(TextPostProcessor.process("hello there") == "hello there")
         #expect(TextPostProcessor.process("you know what") == "you know what")
+        #expect(TextPostProcessor.process("the end of the road") == "the end of the road")
     }
 
     @Test("Collapses repeated punctuation")

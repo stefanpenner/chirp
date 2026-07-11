@@ -77,8 +77,9 @@ time ranges still win over cardinals), ratings
 (`four out of five` / `4 out of 5`→`4/5`, `four out of five stars`→`4/5 stars`;
 `out of order` stays), spoken cardinals
 (`one hundred`→`100`, `twenty five`→`25`, `three point five`→`3.5`,
-`five emails`/`ten items`→`5 emails`/`10 items` via quantity nouns; bare
-`one more thing` stays), ordinals
+`five emails`/`ten items`→`5 emails`/`10 items` via quantity nouns;
+`three times a day`/`ten times a week`→`3 times a day`/`10 times a week`
+(not bare `three times`); bare `one more thing` stays), ordinals
 (`twenty first`→`21st`, `first of all` stays), dates (`march fifth twenty
 twenty four`→`March 5, 2024`, `tomorrow`/`next monday` → absolute dates,
 weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
@@ -168,7 +169,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **delete next sentence** / **delete forward sentence** — progressive: remove next sentence from session cursor (from end = second). When target is last, stack-aware trailing peel; else middle string surgery (stack cleared). Resets sentence nav index. Does **not** steal **delete last sentence** / **delete previous sentence**
 - **select last paragraph** / **select previous paragraph** / **select paragraph** — select trailing paragraph
 - **select first paragraph** / **select the first paragraph** / **highlight first paragraph** / **select 1st paragraph** — select first paragraph (← session then ⇧→ × n). Buffer unchanged
-- **select next paragraph** / **select forward paragraph** / **highlight next paragraph** — select second paragraph (← session, → past first + separator, ⇧→ × n). Buffer unchanged. Does **not** steal **select last paragraph**
+- **select next paragraph** / **select forward paragraph** / **highlight next paragraph** — progressive: from end select second paragraph; further calls advance (collapse prior selection first). Buffer unchanged (`ParagraphCursor.tla`). Does **not** steal **select last paragraph**
 - **select last line** / **select previous line** / **select line** / **select this line** — select trailing line (content after last `\n`)
 - **select first line** / **select the first line** / **highlight first line** / **select 1st line** — select first line (← session then ⇧→ × n; content before first `\n`). Buffer unchanged. Does **not** steal **select last line**
 - **select all** — select all (⌘A)

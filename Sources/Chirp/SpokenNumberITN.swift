@@ -23,6 +23,7 @@ enum SpokenNumberITN {
 
     /// Count nouns after a number force bare-unit conversion ("ten items" → "10 items").
     /// Safer set only — skip ambiguous next words (of, more, times, point, birds…).
+    /// Frequency uses a separate pattern (`N times a day`), not bare "times".
     private static let quantityNouns: Set<String> = [
         "item", "items",
         "email", "emails",
@@ -36,6 +37,11 @@ enum SpokenNumberITN {
         "user", "users",
         "apple", "apples",
         "orange", "oranges",
+    ]
+
+    /// Periods for "N times a/an <period>" frequency ITN.
+    private static let frequencyPeriods: Set<String> = [
+        "day", "week", "month", "hour", "year", "minute", "second",
     ]
     private static let units: [String: Int] = [
         "zero": 0, "oh": 0,
@@ -205,7 +211,9 @@ enum SpokenNumberITN {
         // Next token after the number run (e.g. "items" in "ten items").
         let nextCore = j < parts.count ? normalizeToken(parts[j]) : ""
         let afterQuantity = !nextCore.isEmpty && quantityNouns.contains(nextCore)
-        let allowBare = forceConvert || afterQuantity
+        // Frequency: "three times a day" / "five times an hour" — not bare "three times".
+        let afterFrequency = isFrequencyTimesAPeriod(parts: parts, afterNumber: j)
+        let allowBare = forceConvert || afterQuantity || afterFrequency
 
         // Phone-style: consecutive single-digit units → concatenate
         // "five five five one two one two" → "5551212", "oh five five five" → "0555"
@@ -229,6 +237,18 @@ enum SpokenNumberITN {
             return (formatValue(value) + trailing, j)
         }
         return nil
+    }
+
+    /// True when tokens at `afterNumber` form `times a/an <period>` (e.g. "times a day").
+    /// Does not match bare "times" or "times faster".
+    private static func isFrequencyTimesAPeriod(parts: [String], afterNumber: Int) -> Bool {
+        guard afterNumber + 2 < parts.count else { return false }
+        let t0 = normalizeToken(parts[afterNumber])
+        let t1 = normalizeToken(parts[afterNumber + 1])
+        let t2 = normalizeToken(parts[afterNumber + 2])
+        guard t0 == "times" else { return false }
+        guard t1 == "a" || t1 == "an" else { return false }
+        return frequencyPeriods.contains(t2)
     }
 
     /// Parse a phrase of number words into a numeric value, or nil if invalid.

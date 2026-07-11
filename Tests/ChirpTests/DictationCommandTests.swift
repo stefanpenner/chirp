@@ -452,6 +452,37 @@ struct DictationCommandTests {
         #expect(TranscriptSelection.secondParagraphStartOffset("Line one\nLine two") == "Line one\n".count)
     }
 
+    @Test("paragraph ranges cover all paragraphs")
+    func paragraphRanges() {
+        #expect(TranscriptSelection.paragraphRanges("") == [])
+        let single = TranscriptSelection.paragraphRanges("Hello world")
+        #expect(single.count == 1)
+        #expect(single[0] == TranscriptSelection.SentenceRange(start: 0, end: "Hello world".count))
+
+        let two = TranscriptSelection.paragraphRanges("Para one\n\nPara two")
+        #expect(two.count == 2)
+        #expect(two[0] == TranscriptSelection.SentenceRange(start: 0, end: "Para one".count))
+        #expect(two[1] == TranscriptSelection.SentenceRange(
+            start: "Para one\n\n".count,
+            end: "Para one\n\nPara two".count
+        ))
+
+        let three = TranscriptSelection.paragraphRanges("A\n\nB\n\nC")
+        #expect(three.count == 3)
+        #expect(three[0] == TranscriptSelection.SentenceRange(start: 0, end: 1))
+        #expect(three[1] == TranscriptSelection.SentenceRange(start: "A\n\n".count, end: "A\n\nB".count))
+        #expect(three[2] == TranscriptSelection.SentenceRange(
+            start: "A\n\nB\n\n".count,
+            end: "A\n\nB\n\nC".count
+        ))
+
+        let lines = TranscriptSelection.paragraphRanges("Line one\nLine two\nLine three")
+        #expect(lines.count == 3)
+        #expect(lines[0].end == "Line one".count)
+        #expect(lines[1].start == "Line one\n".count)
+        #expect(lines[2].start == "Line one\nLine two\n".count)
+    }
+
     @Test("recognizes select first sentence")
     func selectFirstSentenceCommands() {
         #expect(DictationCommand.parse("select first sentence") == .selectFirstSentence)

@@ -100,6 +100,8 @@ struct DecodeRejectTests {
         for word in [
             "yeah", "yes", "you", "the", "a", "um", "uh", "Yeah", "UM",
             "ok", "okay", "hi", "bye", "hmm", "mhm", "OK", "Hi", "Bye",
+            // Expanded silence fillers (frames ≤ 1 only)
+            "ah", "oh", "er", "mm", "huh", "Ah", "OH",
         ] {
             #expect(
                 DecodeReject.shouldReject(
@@ -110,6 +112,10 @@ struct DecodeRejectTests {
                 "expected reject for filler \"\(word)\""
             )
         }
+        // "no" / "so" / "like" stay accepted (real short speech)
+        #expect(!DecodeReject.shouldReject(hyp: "no", meanLogProb: nil, speechFrameCount: 1))
+        #expect(!DecodeReject.shouldReject(hyp: "so", meanLogProb: nil, speechFrameCount: 1))
+        #expect(!DecodeReject.shouldReject(hyp: "like", meanLogProb: nil, speechFrameCount: 1))
     }
 
     @Test("known fillers on zero frames reject via silence rule")

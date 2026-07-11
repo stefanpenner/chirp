@@ -158,6 +158,10 @@ public final class AppState {
     /// Non-nil = 0-based sentence under caret (at content start of that sentence).
     private var sentenceNavIndex: Int? = nil
 
+    /// Progressive paragraph navigation index (select next paragraph).
+    /// `nil` = caret at end; non-nil = last selected paragraph (dual of ParagraphCursor).
+    private var paragraphNavIndex: Int? = nil
+
     public convenience init() {
         let transcriber = Transcriber()
         self.init(audioRecorder: AudioRecorder(), transcriber: transcriber, textInserter: TextInserter(), startListening: false)
@@ -558,6 +562,7 @@ public final class AppState {
         awaitingReplace = false
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
+        paragraphNavIndex = nil
         recordingSession &+= 1
         let session = recordingSession
         status = .recording
@@ -816,6 +821,7 @@ public final class AppState {
                         }
                         self.lastCommittedNormalized = TranscriptNormalize.key(text)
                         self.sentenceNavIndex = nil
+                        self.paragraphNavIndex = nil
                     }
                 }
             }
@@ -1010,6 +1016,7 @@ public final class AppState {
             editStack.push(joined.delta)
             lastCommittedNormalized = norm
             sentenceNavIndex = nil
+            paragraphNavIndex = nil
         }
     }
 
@@ -1337,6 +1344,7 @@ public final class AppState {
         editStack.clear()
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
+        paragraphNavIndex = nil
     }
 
     /// Select the last typed phrase (EditStack top delta). Buffer unchanged.
@@ -1529,6 +1537,7 @@ public final class AppState {
                 typesIncrementally: typesIncrementally
             )
             sentenceNavIndex = nil
+            paragraphNavIndex = nil
             return
         }
 
@@ -1550,6 +1559,7 @@ public final class AppState {
         editStack.clear()
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
+        paragraphNavIndex = nil
     }
 
     /// Select the last paragraph. Buffer unchanged.
@@ -1572,16 +1582,33 @@ public final class AppState {
         textInserter.selectForward(count: first.count)
     }
 
-    /// Select the second paragraph. Session-end caret model. Buffer unchanged.
+    /// Select the next paragraph (progressive). From end: second paragraph;
+    /// further calls advance (3rd, 4th, …). Collapses prior selection first.
+    /// Buffer unchanged. Dual of specs/ParagraphCursor.tla.
     private func performSelectNextParagraph(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         let text = transcribedText
-        let second = TranscriptSelection.secondParagraph(text)
-        guard !second.isEmpty else { return }
-        guard let startOffset = TranscriptSelection.secondParagraphStartOffset(text) else { return }
-        textInserter.moveBackward(count: text.count)
-        textInserter.moveForward(count: startOffset)
-        textInserter.selectForward(count: second.count)
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        let next: Int
+        if paragraphNavIndex == nil {
+            guard ranges.count >= 2 else { return }
+            next = 1
+            // From end of buffer → start of second paragraph.
+            textInserter.moveBackward(count: text.count)
+            textInserter.moveForward(count: ranges[next].start)
+        } else {
+            guard let idx = paragraphNavIndex, idx + 1 < ranges.count else { return }
+            next = idx + 1
+            // Prior select left a selection over ranges[idx]; collapse to its end.
+            textInserter.clearSelection()
+            let from = ranges[idx].end
+            let delta = ranges[next].start - from
+            if delta > 0 { textInserter.moveForward(count: delta) }
+            if delta < 0 { textInserter.moveBackward(count: -delta) }
+        }
+        let range = ranges[next]
+        textInserter.selectForward(count: range.end - range.start)
+        paragraphNavIndex = next
     }
 
     /// Select the last line. Buffer unchanged.
@@ -1789,6 +1816,7 @@ public final class AppState {
         awaitingReplace = false
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
+        paragraphNavIndex = nil
         audioLevel = 0
         processingPhase = .none
         hotkeyManager?.sessionActive = false

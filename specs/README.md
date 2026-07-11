@@ -40,7 +40,8 @@ tlc specs/PipelineRebuild.tla
 | `WordSelect` | select next/prev word leaves session bufferLen unchanged | `DictationCommand.selectNextWord/selectPreviousWord` + `performSelectWord` |
 | `SentenceSelect` | select first/last/next sentence leaves session bufferLen unchanged | `DictationCommand.selectLastSentence` + `performSelectLastSentence` (+ first/next sentence select contract) |
 | `MoveSentence` | previous/next sentence move leaves session bufferLen unchanged | `DictationCommand.moveToPreviousSentence/moveToNextSentence` + `performMoveTo*Sentence` |
-| `SentenceCursor` | progressive sentence nav index (`-1`/nil = end; next/prev walk) | future `AppState.sentenceNavIndex` (nil = end); design dual of progressive 3rd+ next |
+| `SentenceCursor` | progressive sentence nav index (`-1`/nil = end; next/prev walk) | `AppState.sentenceNavIndex` (nil = end); dual of progressive 3rd+ next |
+| `ParagraphCursor` | progressive paragraph select index (`-1`/nil = end; next walk) | `AppState.paragraphNavIndex` (nil = end); dual of progressive select next paragraph |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |
 

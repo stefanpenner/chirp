@@ -472,7 +472,7 @@ enum DictationCommand: Equatable, Sendable {
         ("select next sentence / select forward sentence", "Select second sentence (session-relative)"),
         ("select last paragraph / previous paragraph", "Select last paragraph"),
         ("select first paragraph / the first paragraph", "Select first paragraph"),
-        ("select next paragraph / select forward paragraph", "Select second paragraph (session-relative)"),
+        ("select next paragraph / select forward paragraph", "Select next paragraph (progressive)"),
         ("select last line / select line", "Select last line"),
         ("select first line / the first line", "Select first line"),
         ("select all", "Select all (⌘A)"),
@@ -636,31 +636,47 @@ enum TranscriptSelection {
     /// Second paragraph: after `firstParagraph` + one `\n\n` or `\n`, `firstParagraph` of remainder.
     /// Empty if no second paragraph.
     static func secondParagraph(_ text: String) -> String {
-        let first = firstParagraph(text)
-        guard !first.isEmpty, first.count < text.count else { return "" }
-        var idx = text.index(text.startIndex, offsetBy: first.count)
-        if text[idx...].hasPrefix("\n\n") {
-            idx = text.index(idx, offsetBy: 2)
-        } else if idx < text.endIndex && text[idx] == "\n" {
-            idx = text.index(after: idx)
-        }
-        guard idx < text.endIndex else { return "" }
-        return firstParagraph(String(text[idx...]))
+        let ranges = paragraphRanges(text)
+        guard ranges.count >= 2 else { return "" }
+        let r = ranges[1]
+        let start = text.index(text.startIndex, offsetBy: r.start)
+        let end = text.index(text.startIndex, offsetBy: r.end)
+        return String(text[start..<end])
     }
 
     /// Character offset of second-paragraph content start, or nil if none.
     static func secondParagraphStartOffset(_ text: String) -> Int? {
-        let first = firstParagraph(text)
-        guard !first.isEmpty, first.count < text.count else { return nil }
-        var idx = text.index(text.startIndex, offsetBy: first.count)
-        if text[idx...].hasPrefix("\n\n") {
-            idx = text.index(idx, offsetBy: 2)
-        } else if idx < text.endIndex && text[idx] == "\n" {
-            idx = text.index(after: idx)
+        let ranges = paragraphRanges(text)
+        guard ranges.count >= 2 else { return nil }
+        return ranges[1].start
+    }
+
+    /// All paragraph ranges in `text` (end exclusive).
+    /// Splits like `firstParagraph` / recursive remainder: prefer `\n\n`, else `\n`.
+    /// Empty → `[]`. Single block → one range `0..<count`.
+    static func paragraphRanges(_ text: String) -> [SentenceRange] {
+        guard !text.isEmpty else { return [] }
+        var ranges: [SentenceRange] = []
+        var searchStart = text.startIndex
+        while searchStart < text.endIndex {
+            let remainder = String(text[searchStart...])
+            let first = firstParagraph(remainder)
+            let start = text.distance(from: text.startIndex, to: searchStart)
+            let end = start + first.count
+            ranges.append(SentenceRange(start: start, end: end))
+            var idx = text.index(searchStart, offsetBy: first.count)
+            if idx >= text.endIndex { break }
+            if text[idx...].hasPrefix("\n\n") {
+                idx = text.index(idx, offsetBy: 2)
+            } else if text[idx] == "\n" {
+                idx = text.index(after: idx)
+            } else {
+                break
+            }
+            if idx >= text.endIndex { break }
+            searchStart = idx
         }
-        guard idx < text.endIndex else { return nil }
-        guard !secondParagraph(text).isEmpty else { return nil }
-        return text.distance(from: text.startIndex, to: idx)
+        return ranges
     }
 
     /// Last line: segment after final `\n` (content only, no leading separator).

@@ -36,6 +36,20 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("one more thing") == "one more thing")
     }
 
+    @Test("frequency: N times a day/week converts; bare three times stays")
+    func frequencyTimesAPeriod() {
+        #expect(SpokenNumberITN.apply("three times a day") == "3 times a day")
+        #expect(SpokenNumberITN.apply("ten times a week") == "10 times a week")
+        #expect(SpokenNumberITN.apply("two times a month") == "2 times a month")
+        #expect(SpokenNumberITN.apply("five times an hour") == "5 times an hour")
+        #expect(SpokenNumberITN.apply("four times a year") == "4 times a year")
+        #expect(SpokenNumberITN.apply("twenty five times a day") == "25 times a day")
+        // Bare "three times" / multiply sense — do not force
+        #expect(SpokenNumberITN.apply("three times") == "three times")
+        #expect(SpokenNumberITN.apply("two times faster") == "two times faster")
+        #expect(SpokenNumberITN.apply("times a day") == "times a day")
+    }
+
     @Test("converts teens and tens compounds")
     func teensAndCompounds() {
         #expect(SpokenNumberITN.apply("I saw fifteen birds") == "I saw 15 birds")

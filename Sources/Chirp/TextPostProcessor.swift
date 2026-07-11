@@ -297,8 +297,17 @@ enum TextPostProcessor {
         // Classic Whisper/Parakeet silence artifacts
         "thank you.", "thanks.", "thank you for watching.",
         "thanks for watching.", "thank you for watching",
+        "thanks for watching!", "thank you for watching!",
         "thanks for listening.", "thanks for listening",
         "subscribe.", "please subscribe.", "please subscribe",
+        "please like and subscribe.", "please like and subscribe",
+        "like and subscribe.", "like and subscribe",
+        // Subtitle / media dumps common on silence
+        "subtitles by the amara.org community",
+        "subtitles by the amara.org community.",
+        "the end.", "the end",
+        "music", "[music]", "(music)",
+        "applause", "[applause]", "laughter", "[laughter]",
         // Lone closings / greetings with punct (ASR silence dumps). Keep bare
         // "okay"/"hello"/"hi" without punct — those can be real short speech.
         "bye.", "bye",

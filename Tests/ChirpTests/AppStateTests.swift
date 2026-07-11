@@ -1843,6 +1843,55 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select next paragraph"))
     }
 
+    @Test("select next paragraph twice advances to third paragraph")
+    func selectNextParagraphProgressive() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["A\n\nB\n\nC"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("C") { break }
+        }
+
+        let text = "A\n\nB\n\nC"
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        #expect(ranges.count == 3)
+        #expect(state.transcribedText == text)
+
+        await mock.setFeedAudioResult(["select next paragraph"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+        // First hop: second paragraph "B"
+        #expect(inserter.selectForwardCounts.last == ranges[1].end - ranges[1].start)
+        #expect(inserter.selectForwardCounts.last == "B".count)
+
+        let clearsBefore = inserter.clearSelectionCallCount
+        await mock.setFeedAudioResult(["select next paragraph"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count >= 2 { break }
+        }
+        // Second hop: collapse prior selection, then select third "C"
+        #expect(inserter.clearSelectionCallCount > clearsBefore)
+        #expect(inserter.selectForwardCounts.last == "C".count)
+        #expect(state.transcribedText == text)
+        #expect(!inserter.typedTexts.contains("select next paragraph"))
+    }
+
     @Test("select all posts selectAll without changing buffer")
     func selectAllCommand() async throws {
         let mock = MockTranscriber()
