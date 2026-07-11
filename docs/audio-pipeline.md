@@ -154,6 +154,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select up N lines** / **select down 3 lines** — host ⇧↑/↓ × N; buffer unchanged (`SelectLinesN.tla`)
 - **page down N times** / **scroll up 3 pages** — Page Up/Down × N; buffer unchanged (`PageScrollN.tla`)
 - **move up N paragraphs** / **move down 3 paragraphs** — jump to paragraph start N steps (`MoveParagraphsN.tla`)
+- **select up N paragraphs** / **select down 2 paragraphs** — select N paras from caret (`SelectParagraphsN.tla`)
 - **replace that** — next phrase replaces last (text stays until then; HUD “Replace…”)
 - **replace X with Y** / **change X to Y** / **swap X for Y** — replace last case-insensitive occurrence of X with Y in the session buffer (select + type-over in host; `ReplacePhrase.tla`). No match → no-op. Does **not** steal bare **replace that**
 - **delete X** / **remove X** — delete last case-insensitive occurrence of phrase X (absorbs one adjacent space; `DeletePhrase.tla`). No match → no-op. Does **not** steal **delete that** / **delete last word** / unit deletes

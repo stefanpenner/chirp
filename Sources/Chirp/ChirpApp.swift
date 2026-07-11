@@ -1142,6 +1142,14 @@ public final class AppState {
                         self.performMoveParagraphs(direction: .up, count: count)
                     case .moveDownParagraphs(let count):
                         self.performMoveParagraphs(direction: .down, count: count)
+                    case .selectUpParagraphs(let count):
+                        self.performSelectParagraphs(
+                            direction: .up, count: count, typesIncrementally: false
+                        )
+                    case .selectDownParagraphs(let count):
+                        self.performSelectParagraphs(
+                            direction: .down, count: count, typesIncrementally: false
+                        )
                     case .moveToPreviousLine:
                         self.performMoveToPreviousLine()
                     case .moveToNextLine:
@@ -1456,6 +1464,14 @@ public final class AppState {
             performMoveParagraphs(direction: .up, count: count)
         case .moveDownParagraphs(let count):
             performMoveParagraphs(direction: .down, count: count)
+        case .selectUpParagraphs(let count):
+            performSelectParagraphs(
+                direction: .up, count: count, typesIncrementally: typesIncrementally
+            )
+        case .selectDownParagraphs(let count):
+            performSelectParagraphs(
+                direction: .down, count: count, typesIncrementally: typesIncrementally
+            )
         case .moveToPreviousLine:
             performMoveToPreviousLine()
         case .moveToNextLine:
@@ -3217,6 +3233,41 @@ public final class AppState {
             paragraphNavIndex = idx
         }
         paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        wordSelectionActive = false
+    }
+
+    /// Select N paragraphs up/down from caret (inclusive). Buffer unchanged.
+    /// Dual of TranscriptSelection.selectParagraphsSpan + SelectParagraphsN.tla.
+    private func performSelectParagraphs(
+        direction: MoveDirection,
+        count: Int = 1,
+        typesIncrementally: Bool
+    ) {
+        guard typesIncrementally else { return }
+        let n = ParagraphMoveDecision.clampCount(count)
+        guard let span = TranscriptSelection.selectParagraphsSpan(
+            transcribedText,
+            caret: sessionCaret,
+            up: direction == .up,
+            count: n
+        ) else { return }
+        armSessionSelection(start: span.start, length: span.length)
+        let from = SessionCaretDecision.hostFrom(
+            bufferCount: transcribedText.count,
+            sessionCaret: sessionCaret,
+            unitAnchor: nil
+        )
+        let delta = SessionCaretDecision.moveDelta(from: from, to: span.start)
+        if delta > 0 { textInserter.moveForward(count: delta) }
+        if delta < 0 { textInserter.moveBackward(count: -delta) }
+        textInserter.selectForward(count: span.length)
+        setSessionCaret(span.start)
+        paragraphNavIndex = span.navIndex
+        paragraphSelectionActive = true
         lineNavIndex = nil
         lineSelectionActive = false
         sentenceNavIndex = nil

@@ -1405,6 +1405,25 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("move up 3 lines") == .moveUpLines(count: 3))
     }
 
+    @Test("select up/down N paragraphs from caret (not buffer peels)")
+    func selectUpDownNParagraphs() {
+        #expect(DictationCommand.parse("select up 3 paragraphs") == .selectUpParagraphs(count: 3))
+        #expect(DictationCommand.parse("select down two paragraphs") == .selectDownParagraphs(count: 2))
+        #expect(DictationCommand.parse("select the up 4 paragraphs") == .selectUpParagraphs(count: 4))
+        #expect(DictationCommand.parse("please select down 2 paragraphs") == .selectDownParagraphs(count: 2))
+        #expect(DictationCommand.parse("select up a paragraph") == .selectUpParagraphs(count: 1))
+        #expect(DictationCommand.parse("select down a paragraph") == .selectDownParagraphs(count: 1))
+        #expect(DictationCommand.parse("select paragraph up") == .selectUpParagraphs(count: 1))
+        #expect(DictationCommand.parse("select paragraph down") == .selectDownParagraphs(count: 1))
+        // Buffer peels stay separate
+        #expect(DictationCommand.parse("select last 3 paragraphs") == .selectLastParagraphs(count: 3))
+        #expect(DictationCommand.parse("select previous 2 paragraphs") == .selectLastParagraphs(count: 2))
+        #expect(DictationCommand.parse("select next 2 paragraphs") == .selectNextParagraphs(count: 2))
+        #expect(DictationCommand.parse("select previous paragraph") == .selectPreviousParagraph)
+        #expect(DictationCommand.parse("move up 3 paragraphs") == .moveUpParagraphs(count: 3))
+        #expect(DictationCommand.parse("select up 3 lines") == .selectUpLines(count: 3))
+    }
+
     @Test("select up/down N lines keyboard (not buffer last/next peels)")
     func selectUpDownNLines() {
         #expect(DictationCommand.parse("select up 3 lines") == .selectUpLines(count: 3))

@@ -38,4 +38,27 @@ struct ParagraphMoveDecisionTests {
         )
         #expect(t == "aaa\n\nbbb\n\nccc\n\nddd")
     }
+
+    @Test("selectParagraphsSpan covers N paragraphs inclusive")
+    func selectSpan() {
+        let t = "aaa\n\nbbb\n\nccc\n\nddd"
+        let ranges = TranscriptSelection.paragraphRanges(t)
+        #expect(ranges.count == 4)
+        // from ddd, select up 2 → bbb..ddd
+        let up = TranscriptSelection.selectParagraphsSpan(
+            t, caret: ranges[3].start, up: true, count: 2
+        )
+        #expect(up != nil)
+        #expect(up!.start == ranges[2].start)
+        #expect(up!.start + up!.length == ranges[3].end)
+        // from aaa, select down 3 → aaa..ccc
+        let down = TranscriptSelection.selectParagraphsSpan(
+            t, caret: 0, up: false, count: 3
+        )
+        #expect(down != nil)
+        #expect(down!.start == ranges[0].start)
+        #expect(down!.start + down!.length == ranges[2].end)
+        #expect(TranscriptSelection.selectParagraphsSpan(t, caret: 0, up: true, count: 0) == nil)
+        #expect(TranscriptSelection.selectParagraphsSpan("", caret: 0, up: true, count: 1) == nil)
+    }
 }

@@ -252,6 +252,10 @@ enum DictationCommand: Equatable, Sendable {
     case moveUpParagraphs(count: Int)
     /// Move down N paragraphs (to start of paragraph). Dragon "move down N paragraphs".
     case moveDownParagraphs(count: Int)
+    /// Select N paragraphs upward from caret (inclusive). Buffer unchanged until type-over.
+    case selectUpParagraphs(count: Int)
+    /// Select N paragraphs downward from caret (inclusive). Buffer unchanged until type-over.
+    case selectDownParagraphs(count: Int)
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -796,6 +800,15 @@ enum DictationCommand: Equatable, Sendable {
                 #"^(?:move )?down "# + num + #" paragraphs?$"#,
                 { c in (1...20).contains(c) ? .moveDownParagraphs(count: c) : nil }
             ),
+            // Select up/down N paragraphs from caret (not buffer last/next peels).
+            (
+                #"^select (?:the )?up "# + num + #" paragraphs?$"#,
+                { c in (1...20).contains(c) ? .selectUpParagraphs(count: c) : nil }
+            ),
+            (
+                #"^select (?:the )?down "# + num + #" paragraphs?$"#,
+                { c in (1...20).contains(c) ? .selectDownParagraphs(count: c) : nil }
+            ),
         ]
 
         for spec in specs {
@@ -1225,6 +1238,11 @@ enum DictationCommand: Equatable, Sendable {
             return .moveUpParagraphs(count: 1)
         case "move down a paragraph", "down a paragraph", "move down paragraph":
             return .moveDownParagraphs(count: 1)
+        // Select one paragraph up/down from caret (not progressive select previous).
+        case "select up a paragraph", "select up paragraph", "select paragraph up":
+            return .selectUpParagraphs(count: 1)
+        case "select down a paragraph", "select down paragraph", "select paragraph down":
+            return .selectDownParagraphs(count: 1)
         default:
             return nil
         }
@@ -1330,6 +1348,7 @@ enum DictationCommand: Equatable, Sendable {
         ("move up / move down / line up / line down", "Cursor up/down one line (host ↑↓)"),
         ("move up N lines / move down 3 lines", "Cursor up/down N lines (host ↑↓ × N)"),
         ("move up N paragraphs / move down 3 paragraphs", "Jump N paragraphs (session dual)"),
+        ("select up N paragraphs / select down 2 paragraphs", "Select N paragraphs from caret"),
         ("select up N lines / select down 3 lines", "Select N lines up/down (⇧↑/↓; keyboard only)"),
         ("next line / previous line", "Progressive line start (session dual)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),
@@ -1839,6 +1858,35 @@ enum TranscriptSelection {
             targetIdx = min(ranges.count - 1, startIdx + count)
         }
         return ranges[targetIdx].start
+    }
+
+    /// Span for selecting `count` paragraphs up/down from caret (inclusive).
+    /// Dual of SelectParagraphsN.tla. Nil when empty or count ≤ 0.
+    static func selectParagraphsSpan(
+        _ text: String,
+        caret: Int?,
+        up: Bool,
+        count: Int
+    ) -> (start: Int, length: Int, navIndex: Int)? {
+        guard count > 0, !text.isEmpty else { return nil }
+        let ranges = paragraphRanges(text)
+        guard !ranges.isEmpty else { return nil }
+        let pos = min(max(caret ?? text.count, 0), text.count)
+        guard let idx = rangeIndexContaining(pos, ranges: ranges) else { return nil }
+        let n = min(count, ranges.count)
+        let startIdx: Int
+        let endIdx: Int
+        if up {
+            startIdx = max(0, idx - n + 1)
+            endIdx = idx
+        } else {
+            startIdx = idx
+            endIdx = min(ranges.count - 1, idx + n - 1)
+        }
+        let start = ranges[startIdx].start
+        let end = ranges[endIdx].end
+        guard end > start else { return nil }
+        return (start, end - start, up ? startIdx : endIdx)
     }
 
     /// Start of the line under caret. Dual of LineCaret.tla LineStart.
