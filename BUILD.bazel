@@ -169,6 +169,7 @@ swift_test(
         "Tests/ChirpTests/EnterDecisionTests.swift",
         "Tests/ChirpTests/SpaceDecisionTests.swift",
         "Tests/ChirpTests/PageScrollDecisionTests.swift",
+        "Tests/ChirpTests/ParagraphMoveDecisionTests.swift",
         "Tests/ChirpTests/CancelDecisionTests.swift",
         "Tests/ChirpTests/ConfidenceGateTests.swift",
         "Tests/ChirpTests/DecodeRejectTests.swift",

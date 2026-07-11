@@ -248,6 +248,10 @@ enum DictationCommand: Equatable, Sendable {
     case moveToPreviousParagraph
     /// Move cursor to start of next paragraph (progressive). Buffer unchanged.
     case moveToNextParagraph
+    /// Move up N paragraphs (to start of paragraph). Dragon "move up N paragraphs".
+    case moveUpParagraphs(count: Int)
+    /// Move down N paragraphs (to start of paragraph). Dragon "move down N paragraphs".
+    case moveDownParagraphs(count: Int)
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -782,6 +786,16 @@ enum DictationCommand: Equatable, Sendable {
                 #"^page down "# + num + #" pages?$"#,
                 { c in (1...20).contains(c) ? .pageDown(count: c) : nil }
             ),
+            // Dragon "move up/down N paragraphs" (N ≥ 1). Bare progressive
+            // "previous paragraph" stays matchExact (session cursor).
+            (
+                #"^(?:move )?up "# + num + #" paragraphs?$"#,
+                { c in (1...20).contains(c) ? .moveUpParagraphs(count: c) : nil }
+            ),
+            (
+                #"^(?:move )?down "# + num + #" paragraphs?$"#,
+                { c in (1...20).contains(c) ? .moveDownParagraphs(count: c) : nil }
+            ),
         ]
 
         for spec in specs {
@@ -1198,12 +1212,19 @@ enum DictationCommand: Equatable, Sendable {
              "move to next sentence", "forward a sentence":
             return .moveToNextSentence
         // Paragraph move — do not steal "select previous/next paragraph".
+        // Progressive session cursor (ParagraphCursor.tla).
         case "go to previous paragraph", "previous paragraph",
              "move to previous paragraph", "back a paragraph":
             return .moveToPreviousParagraph
         case "go to next paragraph", "next paragraph",
              "move to next paragraph", "forward a paragraph":
             return .moveToNextParagraph
+        // Dragon counted host-style paragraph jumps (session dual).
+        // "move up a paragraph" ≠ progressive "previous paragraph".
+        case "move up a paragraph", "up a paragraph", "move up paragraph":
+            return .moveUpParagraphs(count: 1)
+        case "move down a paragraph", "down a paragraph", "move down paragraph":
+            return .moveDownParagraphs(count: 1)
         default:
             return nil
         }
@@ -1308,6 +1329,7 @@ enum DictationCommand: Equatable, Sendable {
         ("move right / next word", "Cursor right one word (⌥→)"),
         ("move up / move down / line up / line down", "Cursor up/down one line (host ↑↓)"),
         ("move up N lines / move down 3 lines", "Cursor up/down N lines (host ↑↓ × N)"),
+        ("move up N paragraphs / move down 3 paragraphs", "Jump N paragraphs (session dual)"),
         ("select up N lines / select down 3 lines", "Select N lines up/down (⇧↑/↓; keyboard only)"),
         ("next line / previous line", "Progressive line start (session dual)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),
@@ -1792,6 +1814,31 @@ enum TranscriptSelection {
             }
         }
         return pos
+    }
+
+    /// Session caret after moving `count` paragraphs up/down to paragraph start.
+    /// Dual of MoveParagraphsN.tla. `caret == nil` means end of buffer.
+    static func offsetAfterParagraphMove(
+        _ text: String,
+        caret: Int?,
+        up: Bool,
+        count: Int
+    ) -> Int {
+        let len = text.count
+        let pos = min(max(caret ?? len, 0), len)
+        guard count > 0 else { return pos }
+        let ranges = paragraphRanges(text)
+        guard !ranges.isEmpty else { return pos }
+        guard let startIdx = rangeIndexContaining(pos, ranges: ranges) else {
+            return ranges[0].start
+        }
+        let targetIdx: Int
+        if up {
+            targetIdx = max(0, startIdx - count)
+        } else {
+            targetIdx = min(ranges.count - 1, startIdx + count)
+        }
+        return ranges[targetIdx].start
     }
 
     /// Start of the line under caret. Dual of LineCaret.tla LineStart.

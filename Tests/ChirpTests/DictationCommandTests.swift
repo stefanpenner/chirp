@@ -1386,6 +1386,25 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("select previous line") == .selectPreviousLine)
     }
 
+    @Test("Dragon move up/down N paragraphs")
+    func moveUpDownNParagraphs() {
+        #expect(DictationCommand.parse("move up 3 paragraphs") == .moveUpParagraphs(count: 3))
+        #expect(DictationCommand.parse("move down two paragraphs") == .moveDownParagraphs(count: 2))
+        #expect(DictationCommand.parse("up 4 paragraphs") == .moveUpParagraphs(count: 4))
+        #expect(DictationCommand.parse("down 5 paragraph") == .moveDownParagraphs(count: 5))
+        #expect(DictationCommand.parse("Move up 2 paragraphs.") == .moveUpParagraphs(count: 2))
+        #expect(DictationCommand.parse("please move down three paragraphs") == .moveDownParagraphs(count: 3))
+        #expect(DictationCommand.parse("move up a paragraph") == .moveUpParagraphs(count: 1))
+        #expect(DictationCommand.parse("move down a paragraph") == .moveDownParagraphs(count: 1))
+        #expect(DictationCommand.parse("up a paragraph") == .moveUpParagraphs(count: 1))
+        // Progressive session cursor not stolen
+        #expect(DictationCommand.parse("previous paragraph") == .moveToPreviousParagraph)
+        #expect(DictationCommand.parse("next paragraph") == .moveToNextParagraph)
+        #expect(DictationCommand.parse("go to previous paragraph") == .moveToPreviousParagraph)
+        // Lines stay line commands
+        #expect(DictationCommand.parse("move up 3 lines") == .moveUpLines(count: 3))
+    }
+
     @Test("select up/down N lines keyboard (not buffer last/next peels)")
     func selectUpDownNLines() {
         #expect(DictationCommand.parse("select up 3 lines") == .selectUpLines(count: 3))
