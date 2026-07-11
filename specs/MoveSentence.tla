@@ -11,7 +11,7 @@
     - previous: ← × lastSentence length (assumes caret at end)
     - next: from end, jump to start of second sentence
       (← full buffer, → past first sentence); single-sentence no-op
-    - progressive 3rd+ sentence needs session caretOffset (not modeled)
+    - progressive 3rd+ sentence: see SentenceCursor.tla (sentenceNavIndex dual)
 
   Grain: bufferLen only (0..4). Move-sentence actions leave bufferLen unchanged.
 *)

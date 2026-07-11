@@ -426,6 +426,28 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("Meeting at three pm") == "Meeting at 3 p.m.")
     }
 
+    @Test("Light ITN formats ratings N out of M as N/M")
+    func lightITNRatings() {
+        // Spoken → slash form
+        #expect(TextPostProcessor.process("four out of five") == "4/5")
+        #expect(TextPostProcessor.process("rated four out of five") == "rated 4/5")
+        // Digits after SpokenNumberITN / already numeric
+        #expect(TextPostProcessor.process("4 out of 5") == "4/5")
+        #expect(TextPostProcessor.process("rated 4 out of 5") == "rated 4/5")
+        // Optional trailing "stars" kept
+        #expect(TextPostProcessor.process("four out of five stars") == "4/5 stars")
+        #expect(TextPostProcessor.process("4 out of 5 stars") == "4/5 stars")
+        // Teens / decades
+        #expect(TextPostProcessor.process("ten out of ten") == "10/10")
+        #expect(TextPostProcessor.process("nine out of ten") == "9/10")
+        // Do not convert "out of order" without number bounds
+        #expect(TextPostProcessor.process("out of order") == "out of order")
+        #expect(TextPostProcessor.process("that is out of order") == "that is out of order")
+        // Quantity nouns still convert bare units (regression)
+        #expect(TextPostProcessor.process("five emails") == "5 emails")
+        #expect(TextPostProcessor.process("ten items") == "10 items")
+    }
+
     @Test("Light ITN formats percent and dollars")
     func lightITNPercentCurrency() {
         #expect(TextPostProcessor.process("about 50 percent done") == "about 50% done")

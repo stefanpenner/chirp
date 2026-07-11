@@ -607,6 +607,18 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "four out of five" / "4 out of 5" → "4/5". Optional "stars" not consumed.
+    /// Requires numeric bounds on both sides so "out of order" stays prose.
+    private static let ratingsITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+out\s+of\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     private static let spokenNumbers: [String: String] = [
         "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
         "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
@@ -633,6 +645,9 @@ enum TextPostProcessor {
         // "from 3-5 p.m." and not stolen as "from 3-5" + leftover "pm".
         // "from ten to twenty" / "from 10 to 20" → "from 10-20".
         result = applyCardinalRangeITN(result)
+        // Ratings after numbers: "four out of five" / "4 out of 5" → "4/5"
+        // (optional "stars" left in place: "4/5 stars"). Not "out of order".
+        result = applyRatingsITN(result)
         // Sterling/quid before units so "20 pounds sterling" → "£20" not "20 lb sterling".
         // Bare "pounds" stays weight via units; currency needs "sterling" or "quid".
         result = applySterlingCurrencyITN(result)
@@ -1023,6 +1038,26 @@ enum TextPostProcessor {
             let left = rangeDigits(from: String(result[leftRange]))
             let right = rangeDigits(from: String(result[rightRange]))
             result.replaceSubrange(fullRange, with: "\(fromPrefix)\(left)-\(right)")
+        }
+        return result
+    }
+
+    /// Ratings: "four out of five" / "4 out of 5" → "4/5". Keeps trailing "stars".
+    private static func applyRatingsITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = ratingsITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+
+        var result = text
+        for match in matches.reversed() {
+            // Groups: 1=N, 2=M
+            guard match.numberOfRanges >= 3,
+                  let leftRange = Range(match.range(at: 1), in: result),
+                  let rightRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let left = rangeDigits(from: String(result[leftRange]))
+            let right = rangeDigits(from: String(result[rightRange]))
+            result.replaceSubrange(fullRange, with: "\(left)/\(right)")
         }
         return result
     }

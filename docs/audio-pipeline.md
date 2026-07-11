@@ -73,7 +73,9 @@ meridiem: `from three to five pm`→`from 3-5 p.m.`, `three to five p.m.`→`3-5
 `three thirty to five pm`→`3:30-5 p.m.`; dual meridiem `nine am to five pm`→
 `9 a.m.-5 p.m.`; cardinal ranges without am/pm after time ranges:
 `from ten to twenty` / `from 10 to 20`→`from 10-20`, `10 to 20`→`10-20`;
-time ranges still win over cardinals), spoken cardinals
+time ranges still win over cardinals), ratings
+(`four out of five` / `4 out of 5`→`4/5`, `four out of five stars`→`4/5 stars`;
+`out of order` stays), spoken cardinals
 (`one hundred`→`100`, `twenty five`→`25`, `three point five`→`3.5`,
 `five emails`/`ten items`→`5 emails`/`10 items` via quantity nouns; bare
 `one more thing` stays), ordinals
@@ -162,12 +164,13 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **delete next word** / **delete forward word** — delete next word (⇧⌥→ then ⌫; keyboard only; buffer unchanged). Does **not** steal **delete last word**
 - **select last sentence** / **select previous sentence** / **select sentence** — select trailing sentence
 - **select first sentence** / **select the first sentence** / **highlight first sentence** / **select 1st sentence** — select first sentence (← session then ⇧→ × n). Buffer unchanged
-- **select next sentence** / **select forward sentence** / **highlight next sentence** — select second sentence (← session, → past first + whitespace, ⇧→ × n). Buffer unchanged. Does **not** steal bare **next sentence** (move) or **select last sentence**
-- **delete next sentence** / **delete forward sentence** — remove second sentence (session-relative). When second is also last, stack-aware trailing peel; else middle string surgery (stack cleared). Does **not** steal **delete last sentence** / **delete previous sentence**
+- **select next sentence** / **select forward sentence** / **highlight next sentence** — progressive: from end select second sentence (content start, skip whitespace); further calls advance. Buffer unchanged. Does **not** steal bare **next sentence** (move) or **select last sentence**
+- **delete next sentence** / **delete forward sentence** — progressive: remove next sentence from session cursor (from end = second). When target is last, stack-aware trailing peel; else middle string surgery (stack cleared). Resets sentence nav index. Does **not** steal **delete last sentence** / **delete previous sentence**
 - **select last paragraph** / **select previous paragraph** / **select paragraph** — select trailing paragraph
 - **select first paragraph** / **select the first paragraph** / **highlight first paragraph** / **select 1st paragraph** — select first paragraph (← session then ⇧→ × n). Buffer unchanged
 - **select next paragraph** / **select forward paragraph** / **highlight next paragraph** — select second paragraph (← session, → past first + separator, ⇧→ × n). Buffer unchanged. Does **not** steal **select last paragraph**
 - **select last line** / **select previous line** / **select line** / **select this line** — select trailing line (content after last `\n`)
+- **select first line** / **select the first line** / **highlight first line** / **select 1st line** — select first line (← session then ⇧→ × n; content before first `\n`). Buffer unchanged. Does **not** steal **select last line**
 - **select all** — select all (⌘A)
 - **unselect that** / **deselect** / **clear selection** — collapse selection to end (→)
 - **bold that** / **make that bold** — select last phrase + bold (⌘B), then unselect
@@ -184,8 +187,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **end of document** / **bottom of document** / **go to end of document** / **go to bottom of document** — cursor to document end (⌘↓)
 - **page up** / **scroll up** / **scroll page up** — Page Up key. Does **not** steal **move up**
 - **page down** / **scroll down** / **scroll page down** — Page Down key. Does **not** steal **move down**
-- **previous sentence** / **go to previous sentence** / **back a sentence** — cursor to start of last sentence (plain ← × n; assumes caret at end). Buffer unchanged (`MoveSentence.tla`)
-- **next sentence** / **go to next sentence** / **forward a sentence** / **move to next sentence** — session-relative jump to start of **second** sentence (← full session, → past first). Single-sentence buffer is a no-op. No progressive 3rd+ index yet (would need session caretOffset). Does **not** steal **select previous sentence**. Buffer unchanged (`MoveSentence.tla`)
+- **previous sentence** / **go to previous sentence** / **back a sentence** — progressive: from end → last sentence content start; further calls step back. Resets on content commit / clear / new session. Buffer unchanged (`MoveSentence.tla`, `SentenceCursor.tla`)
+- **next sentence** / **go to next sentence** / **forward a sentence** / **move to next sentence** — progressive session cursor (`sentenceNavIndex`; nil = end): from end → second sentence content start (skip whitespace); further calls advance to 3rd, 4th, …. Single-sentence buffer is a no-op. Same content offset as **select next sentence**. Does **not** steal **select previous sentence**. Buffer unchanged (`MoveSentence.tla`, `SentenceCursor.tla`)
 - Overlay badge shows sticky caps / spell mode when active
 - When spell mode is on, caps transform is skipped and multi-segment joins glue without spaces
 - **clear all** — wipe session transcript

@@ -40,6 +40,7 @@ tlc specs/PipelineRebuild.tla
 | `WordSelect` | select next/prev word leaves session bufferLen unchanged | `DictationCommand.selectNextWord/selectPreviousWord` + `performSelectWord` |
 | `SentenceSelect` | select first/last/next sentence leaves session bufferLen unchanged | `DictationCommand.selectLastSentence` + `performSelectLastSentence` (+ first/next sentence select contract) |
 | `MoveSentence` | previous/next sentence move leaves session bufferLen unchanged | `DictationCommand.moveToPreviousSentence/moveToNextSentence` + `performMoveTo*Sentence` |
+| `SentenceCursor` | progressive sentence nav index (`-1`/nil = end; next/prev walk) | future `AppState.sentenceNavIndex` (nil = end); design dual of progressive 3rd+ next |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |
 
@@ -72,6 +73,7 @@ tlc specs/KeyCommand.tla
 tlc specs/WordSelect.tla
 tlc specs/SentenceSelect.tla
 tlc specs/MoveSentence.tla
+tlc specs/SentenceCursor.tla
 tlc specs/ListCounter.tla
 tlc specs/PeekCommit.tla
 tlc specs/PipelineRebuild.tla
@@ -104,6 +106,7 @@ tlc -c KeyCommand_bait.cfg specs/KeyCommand.tla
 tlc -c WordSelect_bait.cfg specs/WordSelect.tla
 tlc -c SentenceSelect_bait.cfg specs/SentenceSelect.tla
 tlc -c MoveSentence_bait.cfg specs/MoveSentence.tla
+tlc -c SentenceCursor_bait.cfg specs/SentenceCursor.tla
 tlc -c ListCounter_bait.cfg specs/ListCounter.tla
 tlc -c PeekCommit_bait.cfg specs/PeekCommit.tla
 tlc -c PipelineRebuild_bait.cfg specs/PipelineRebuild.tla
@@ -139,6 +142,7 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | `WordSelect_bait` | select-word may change bufferLen | `SelectPreservesBuffer` |
 | `SentenceSelect_bait` | select-sentence may change bufferLen | `SelectPreservesBuffer` |
 | `MoveSentence_bait` | move-sentence may change bufferLen | `MovePreservesBuffer` |
+| `SentenceCursor_bait` | index may leave legal range | `IndexInRange` |
 | `ListCounter_bait` | end/reset may leave n ≠ 1 | `EndOrResetYieldsOne` |
 | `PeekCommit_bait` | speculative text may appear while idle | `SpecOnlyWhileRecording` |
 | `PipelineRebuild_bait` | type bounds may fail | `TypeOK` |

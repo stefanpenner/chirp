@@ -96,6 +96,8 @@ enum DictationCommand: Equatable, Sendable {
     case selectNextParagraph
     /// Select the last line (after final \n).
     case selectLastLine
+    /// Select the first line (before first \n).
+    case selectFirstLine
     /// Select all in the focused app (⌘A).
     case selectAll
     /// Collapse the current selection (right-arrow without shift).
@@ -361,6 +363,12 @@ enum DictationCommand: Equatable, Sendable {
              "select this line", "highlight last line", "highlight previous line",
              "highlight line", "highlight this line":
             return .selectLastLine
+        // "first" → "1st" via SpokenNumberITN before parse; match both.
+        case "select first line", "select the first line",
+             "select 1st line", "select the 1st line",
+             "highlight first line", "highlight the first line",
+             "highlight 1st line", "highlight the 1st line":
+            return .selectFirstLine
         case "select all", "highlight all", "select everything":
             return .selectAll
         case "unselect that", "unselect", "deselect that", "clear selection",
@@ -466,6 +474,7 @@ enum DictationCommand: Equatable, Sendable {
         ("select first paragraph / the first paragraph", "Select first paragraph"),
         ("select next paragraph / select forward paragraph", "Select second paragraph (session-relative)"),
         ("select last line / select line", "Select last line"),
+        ("select first line / the first line", "Select first line"),
         ("select all", "Select all (⌘A)"),
         ("unselect that / deselect", "Collapse selection (caret to end)"),
         ("bold that", "Select last phrase + bold (⌘B), then unselect"),
@@ -502,6 +511,46 @@ enum DictationCommand: Equatable, Sendable {
 /// Pure helpers for spoken select-first/last sentence / paragraph.
 /// Substrings feed `selectBackward` / `selectForward` via `String.count`.
 enum TranscriptSelection {
+    /// Character-offset range of one sentence (end exclusive).
+    /// Starts at sentence content (skips separator whitespace after prior punct).
+    struct SentenceRange: Equatable {
+        let start: Int
+        let end: Int
+    }
+
+    /// All sentence ranges in `text`, split on `[.?!]\s+` (punct stays with prior sentence).
+    /// Single sentence / no separator → one range `0..<count`. Empty → `[]`.
+    static func sentenceRanges(_ text: String) -> [SentenceRange] {
+        guard !text.isEmpty else { return [] }
+        let pattern = try! NSRegularExpression(pattern: #"[.?!]\s+"#)
+        var ranges: [SentenceRange] = []
+        var searchStart = text.startIndex
+
+        while searchStart < text.endIndex {
+            let searchNS = NSRange(searchStart..., in: text)
+            if let match = pattern.firstMatch(in: text, range: searchNS),
+               let matchRange = Range(match.range, in: text) {
+                // Include punct only (match is punct + whitespace).
+                let afterPunct = text.index(after: matchRange.lowerBound)
+                let start = text.distance(from: text.startIndex, to: searchStart)
+                let end = text.distance(from: text.startIndex, to: afterPunct)
+                ranges.append(SentenceRange(start: start, end: end))
+                // Next sentence content starts after separator whitespace.
+                var next = afterPunct
+                while next < text.endIndex && text[next].isWhitespace {
+                    next = text.index(after: next)
+                }
+                if next >= text.endIndex { return ranges }
+                searchStart = next
+            } else {
+                let start = text.distance(from: text.startIndex, to: searchStart)
+                ranges.append(SentenceRange(start: start, end: text.count))
+                break
+            }
+        }
+        return ranges
+    }
+
     /// Last sentence: segment after final `[.?!]` + whitespace, else whole buffer.
     /// Includes the whitespace after the terminator (matches select-last-word style).
     static func lastSentence(_ text: String) -> String {
@@ -622,6 +671,16 @@ enum TranscriptSelection {
         if let r = text.range(of: "\n", options: .backwards) {
             let after = String(text[r.upperBound...])
             return after.isEmpty ? "\n" : after
+        }
+        return text
+    }
+
+    /// First line: content before first `\n`, else whole buffer.
+    /// Leading newline (`\n…`) returns `""` (empty first line).
+    static func firstLine(_ text: String) -> String {
+        guard !text.isEmpty else { return "" }
+        if let r = text.range(of: "\n") {
+            return String(text[..<r.lowerBound])
         }
         return text
     }
