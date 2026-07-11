@@ -82,6 +82,23 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("select all") == .selectAll)
     }
 
+    @Test("recognizes go to / go after phrase without stealing structural go-tos")
+    func goToPhraseCommands() {
+        #expect(DictationCommand.parse("go to world") == .goToPhrase(target: "world"))
+        #expect(DictationCommand.parse("Go to World.") == .goToPhrase(target: "World"))
+        #expect(DictationCommand.parse("move to hello world") == .goToPhrase(target: "hello world"))
+        #expect(DictationCommand.parse("jump to planet") == .goToPhrase(target: "planet"))
+        #expect(DictationCommand.parse("go after world") == .goAfterPhrase(target: "world"))
+        #expect(DictationCommand.parse("move after foo") == .goAfterPhrase(target: "foo"))
+        #expect(DictationCommand.parse("please go to bar") == .goToPhrase(target: "bar"))
+        // Structural destinations stay exact
+        #expect(DictationCommand.parse("go to start") == .moveToStart)
+        #expect(DictationCommand.parse("go to end") == .moveToEnd)
+        #expect(DictationCommand.parse("go to next sentence") == .moveToNextSentence)
+        #expect(DictationCommand.parse("go to previous paragraph") == .moveToPreviousParagraph)
+        #expect(DictationCommand.parse("beginning of document") == .moveToDocumentStart)
+    }
+
     @Test("recognizes delete last word")
     func deleteLastWord() {
         #expect(DictationCommand.parse("delete last word") == .deleteLastWord)

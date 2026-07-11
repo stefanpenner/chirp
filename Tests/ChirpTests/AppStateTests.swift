@@ -2071,6 +2071,99 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select that"))
     }
 
+    @Test("go to X moves caret without arming type-over; next content appends")
+    func goToPhraseThenContentAppends() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello world foo"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("world") { break }
+        }
+
+        await mock.setFeedAudioResult(["go to world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+
+        // From end of "hello world foo" back to start of "world"
+        let text = state.transcribedText
+        let worldStart = text.lowercased().range(of: "world")!.lowerBound
+        let offset = text.distance(from: text.startIndex, to: worldStart)
+        let fromEnd = text.count - offset
+        #expect(inserter.moveBackwardCounts.last == fromEnd)
+        #expect(inserter.selectForwardCounts.isEmpty)
+        #expect(state.transcribedText.lowercased().contains("world"))
+        #expect(!inserter.typedTexts.contains("go to world"))
+
+        await mock.setFeedAudioResult(["planet"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("planet") { break }
+        }
+
+        // Navigation only — next content appends (does not splice over "world")
+        let after = state.transcribedText.lowercased()
+        #expect(after.contains("world"), "go to must not replace, got \"\(state.transcribedText)\"")
+        #expect(after.contains("planet"))
+        #expect(after.contains("hello") && after.contains("foo"))
+    }
+
+    @Test("go after X moves to end of match; miss is no-op")
+    func goAfterPhraseCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello world foo"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("world") { break }
+        }
+
+        await mock.setFeedAudioResult(["go after world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+
+        let text = state.transcribedText
+        let worldRange = text.lowercased().range(of: "world")!
+        let afterOffset = text.distance(from: text.startIndex, to: worldRange.upperBound)
+        let fromEnd = text.count - afterOffset
+        #expect(inserter.moveBackwardCounts.last == fromEnd)
+        #expect(state.transcribedText == text)
+
+        let movesBefore = inserter.moveBackwardCounts.count
+        await mock.setFeedAudioResult(["go to zzz"])
+        recorder.lastOnSamples?([0.1])
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(inserter.moveBackwardCounts.count == movesBefore)
+        #expect(!inserter.typedTexts.contains("go to zzz"))
+    }
+
     @Test("select X arms middle phrase then content type-over replaces only that span")
     func selectPhraseThenContentReplaces() async throws {
         let mock = MockTranscriber()

@@ -16,6 +16,10 @@ enum DictationCommand: Equatable, Sendable {
     case deletePhrase(target: String)
     /// Single-utterance select last occurrence of `target` (arms type-over).
     case selectPhrase(target: String)
+    /// Move caret to start of last occurrence of `target` (no selection arm).
+    case goToPhrase(target: String)
+    /// Move caret to end of last occurrence of `target` (no selection arm).
+    case goAfterPhrase(target: String)
     /// Delete the last whitespace-delimited word.
     case deleteLastWord
     /// Delete the last N whitespace-delimited words (N ≥ 2).
@@ -238,6 +242,9 @@ enum DictationCommand: Equatable, Sendable {
         if let cmd = matchPhraseSelect(text) {
             return cmd
         }
+        if let cmd = matchPhraseGo(text) {
+            return cmd
+        }
         return .none
     }
 
@@ -389,6 +396,72 @@ enum DictationCommand: Equatable, Sendable {
                 continue
             }
             return .selectPhrase(target: target)
+        }
+        return nil
+    }
+
+    /// "go to X" / "move to X" / "go after X" / "move after X".
+    /// Exact structural go-tos win first (start/end/sentence/…).
+    private static func matchPhraseGo(_ text: String) -> DictationCommand? {
+        var n = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let last = n.last, ".!?,".contains(last) {
+            n.removeLast()
+        }
+        n = n.trimmingCharacters(in: .whitespaces)
+        var tokens = n.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        let fillers: Set<String> = ["please", "now", "thanks", "thank", "you"]
+        while let first = tokens.first, fillers.contains(first.lowercased()) {
+            tokens.removeFirst()
+        }
+        while let last = tokens.last, fillers.contains(last.lowercased()) {
+            tokens.removeLast()
+        }
+        n = tokens.joined(separator: " ")
+
+        let specs: [(pattern: String, after: Bool)] = [
+            (#"(?i)^go after (.+)$"#, true),
+            (#"(?i)^move after (.+)$"#, true),
+            (#"(?i)^jump after (.+)$"#, true),
+            (#"(?i)^go to (.+)$"#, false),
+            (#"(?i)^move to (.+)$"#, false),
+            (#"(?i)^jump to (.+)$"#, false),
+        ]
+        for spec in specs {
+            guard let regex = try? NSRegularExpression(pattern: spec.pattern),
+                  let match = regex.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)),
+                  match.numberOfRanges >= 2,
+                  let tRange = Range(match.range(at: 1), in: n) else {
+                continue
+            }
+            let target = String(n[tRange]).trimmingCharacters(in: .whitespaces)
+            guard !target.isEmpty else { continue }
+            let low = target.lowercased()
+            // Structural destinations already handled by matchExact
+            let blocked: Set<String> = [
+                "start", "end", "beginning", "top", "bottom",
+                "start of document", "end of document", "beginning of document",
+                "top of document", "bottom of document",
+                "start of the document", "end of the document",
+                "beginning of line", "end of line",
+                "previous sentence", "next sentence", "forward sentence",
+                "previous paragraph", "next paragraph", "forward paragraph",
+                "previous line", "next line", "forward line",
+                "the previous sentence", "the next sentence",
+                "the previous paragraph", "the next paragraph",
+                "the previous line", "the next line",
+            ]
+            if blocked.contains(low) { continue }
+            if low.hasPrefix("start of ") || low.hasPrefix("end of ")
+                || low.hasPrefix("beginning of ") || low.hasPrefix("top of ")
+                || low.hasPrefix("bottom of ")
+                || low.hasPrefix("previous ") || low.hasPrefix("next ")
+                || low.hasPrefix("forward ") || low.hasPrefix("prior ")
+                || low.hasPrefix("the previous ") || low.hasPrefix("the next ") {
+                continue
+            }
+            return spec.after
+                ? .goAfterPhrase(target: target)
+                : .goToPhrase(target: target)
         }
         return nil
     }
@@ -875,6 +948,8 @@ enum DictationCommand: Equatable, Sendable {
         ("replace X with Y / change X to Y / swap X for Y", "Replace last occurrence of X with Y"),
         ("delete X / remove X", "Delete last occurrence of phrase X"),
         ("select X / highlight X", "Select last occurrence of phrase X (type-over next)"),
+        ("go to X / move to X", "Move caret to start of last occurrence of X"),
+        ("go after X / move after X", "Move caret to end of last occurrence of X"),
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
         ("delete last two words / delete previous 3 words", "Remove last N words"),

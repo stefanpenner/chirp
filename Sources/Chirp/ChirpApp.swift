@@ -808,6 +808,10 @@ public final class AppState {
                         self.performSelectThat(typesIncrementally: false)
                     case .selectPhrase(let target):
                         self.performSelectPhrase(target: target, typesIncrementally: false)
+                    case .goToPhrase(let target):
+                        self.performGoToPhrase(target: target, after: false, typesIncrementally: false)
+                    case .goAfterPhrase(let target):
+                        self.performGoToPhrase(target: target, after: true, typesIncrementally: false)
                     case .selectLastWord:
                         self.performSelectLastWord(typesIncrementally: false)
                     case .selectLastWords(let count):
@@ -1092,6 +1096,10 @@ public final class AppState {
             performSelectThat(typesIncrementally: typesIncrementally)
         case .selectPhrase(let target):
             performSelectPhrase(target: target, typesIncrementally: typesIncrementally)
+        case .goToPhrase(let target):
+            performGoToPhrase(target: target, after: false, typesIncrementally: typesIncrementally)
+        case .goAfterPhrase(let target):
+            performGoToPhrase(target: target, after: true, typesIncrementally: typesIncrementally)
         case .selectLastWord:
             performSelectLastWord(typesIncrementally: typesIncrementally)
         case .selectLastWords(let count):
@@ -1820,6 +1828,30 @@ public final class AppState {
         armSessionSelection(start: match.start, length: match.length)
         moveToSessionOffset(match.start)
         textInserter.selectForward(count: match.length)
+    }
+
+    /// Move caret to start (or end if `after`) of last occurrence of `target`.
+    /// Navigation only — does not arm type-over. Dual of specs/GoToPhrase.tla.
+    private func performGoToPhrase(target: String, after: Bool, typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        guard let match = PhraseReplaceDecision.findLastRange(
+            target: target,
+            in: transcribedText
+        ) else {
+            return
+        }
+        // Clear any armed selection so next content appends (nav-only contract).
+        sessionSelection = nil
+        textInserter.clearSelection()
+        let offset = after ? match.start + match.length : match.start
+        moveToSessionOffset(offset)
+        // Reset progressive unit nav — caret is no longer at a known unit edge.
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Select last phrase (when available) then apply bold/italic/underline.
