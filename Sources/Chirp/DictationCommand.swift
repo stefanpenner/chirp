@@ -203,6 +203,10 @@ enum DictationCommand: Equatable, Sendable {
     case moveUpLine
     /// Move cursor one line down (↓). Buffer unchanged.
     case moveDownLine
+    /// Progressive session: move caret to previous line start (dual LineCursor.tla).
+    case moveToPreviousLine
+    /// Progressive session: move caret to next line start (dual LineCursor.tla).
+    case moveToNextLine
     /// Move cursor to line start (⌘←). Buffer unchanged.
     case moveToStart
     /// Move cursor to line end (⌘→). Buffer unchanged.
@@ -915,10 +919,11 @@ enum DictationCommand: Equatable, Sendable {
         case "move right", "right word", "next word", "go right",
              "forward one word":
             return .moveRightWord
-        // Navigation — do not match "select previous line" (selectLastLine).
-        case "move up", "up a line", "previous line", "go up", "line up":
+        // Host arrow line moves (↑/↓). Progressive "next/previous line" is below
+        // (aligned with next/previous sentence). Do not match "select previous line".
+        case "move up", "up a line", "go up", "line up":
             return .moveUpLine
-        case "move down", "down a line", "next line", "go down", "line down":
+        case "move down", "down a line", "go down", "line down":
             return .moveDownLine
         // Document edges before line edges so "… of document" phrases win as full matches
         // (exact match; line phrases stay separate strings).
@@ -953,6 +958,14 @@ enum DictationCommand: Equatable, Sendable {
             return .pageUp
         case "page down", "scroll down", "scroll page down":
             return .pageDown
+        // Progressive line move — dual LineCursor.tla (like next/previous sentence).
+        // Do not steal "select next line" / "delete next line" (exact match elsewhere).
+        case "go to previous line", "previous line",
+             "move to previous line", "back a line":
+            return .moveToPreviousLine
+        case "go to next line", "next line",
+             "move to next line", "forward a line":
+            return .moveToNextLine
         // Navigation — do not match "select previous sentence" (selectLastSentence).
         case "go to previous sentence", "previous sentence",
              "move to previous sentence", "back a sentence":
@@ -1059,8 +1072,8 @@ enum DictationCommand: Equatable, Sendable {
         ("cut that", "Select last phrase + cut (⌘X)"),
         ("move left / previous word", "Cursor left one word (⌥←)"),
         ("move right / next word", "Cursor right one word (⌥→)"),
-        ("move up / previous line / line up", "Cursor up one line (↑)"),
-        ("move down / next line / line down", "Cursor down one line (↓)"),
+        ("move up / move down / line up / line down", "Cursor up/down one line (host ↑↓)"),
+        ("next line / previous line", "Progressive line start (session dual)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),
         ("go to end / end of line", "Cursor to line end (⌘→)"),
         ("start of sentence / end of sentence", "Caret to sentence edge under cursor"),

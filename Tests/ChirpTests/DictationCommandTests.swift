@@ -962,7 +962,11 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("Select next line.") == .selectNextLine)
         #expect(DictationCommand.parse("select last line") == .selectLastLine)
         #expect(DictationCommand.parse("select line") == .selectLastLine)
-        #expect(DictationCommand.parse("next line") == .moveDownLine)
+        // Bare "next line" is progressive session move (like next sentence)
+        #expect(DictationCommand.parse("next line") == .moveToNextLine)
+        #expect(DictationCommand.parse("previous line") == .moveToPreviousLine)
+        #expect(DictationCommand.parse("move down") == .moveDownLine)
+        #expect(DictationCommand.parse("move up") == .moveUpLine)
     }
 
     @Test("recognizes delete next line (not delete last)")
@@ -1151,7 +1155,6 @@ struct DictationCommandTests {
     func moveUpDownLineCommands() {
         #expect(DictationCommand.parse("move up") == .moveUpLine)
         #expect(DictationCommand.parse("up a line") == .moveUpLine)
-        #expect(DictationCommand.parse("previous line") == .moveUpLine)
         #expect(DictationCommand.parse("go up") == .moveUpLine)
         #expect(DictationCommand.parse("line up") == .moveUpLine)
         #expect(DictationCommand.parse("Move up.") == .moveUpLine)
@@ -1159,16 +1162,22 @@ struct DictationCommandTests {
 
         #expect(DictationCommand.parse("move down") == .moveDownLine)
         #expect(DictationCommand.parse("down a line") == .moveDownLine)
-        #expect(DictationCommand.parse("next line") == .moveDownLine)
         #expect(DictationCommand.parse("go down") == .moveDownLine)
         #expect(DictationCommand.parse("line down") == .moveDownLine)
         #expect(DictationCommand.parse("please go down") == .moveDownLine)
+
+        // Progressive session line moves (aligned with next/previous sentence)
+        #expect(DictationCommand.parse("previous line") == .moveToPreviousLine)
+        #expect(DictationCommand.parse("next line") == .moveToNextLine)
+        #expect(DictationCommand.parse("go to next line") == .moveToNextLine)
+        #expect(DictationCommand.parse("move to previous line") == .moveToPreviousLine)
 
         // Select phrases must not be stolen by move
         #expect(DictationCommand.parse("select previous line") == .selectPreviousLine)
         #expect(DictationCommand.parse("select last line") == .selectLastLine)
         #expect(DictationCommand.parse("select line") == .selectLastLine)
         #expect(DictationCommand.parse("highlight previous line") == .selectPreviousLine)
+        #expect(DictationCommand.parse("select next line") == .selectNextLine)
     }
 
     @Test("recognizes duplicate that")

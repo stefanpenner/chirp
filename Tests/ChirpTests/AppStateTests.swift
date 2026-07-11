@@ -4115,7 +4115,7 @@ struct AppStateTests {
         #expect(inserter.moveLineDirections == [.up])
         #expect(!inserter.typedTexts.contains("move up"))
 
-        await mock.setFeedAudioResult(["next line"])
+        await mock.setFeedAudioResult(["move down"])
         recorder.lastOnSamples?([0.1])
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 100_000_000)
@@ -4123,7 +4123,55 @@ struct AppStateTests {
         }
         #expect(state.transcribedText == "Hello world")
         #expect(inserter.moveLineDirections == [.up, .down])
+        #expect(!inserter.typedTexts.contains("move down"))
+    }
+
+    @Test("next line progressive then content inserts at second line start")
+    func nextLineThenContentInsertsMid() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Line one\nLine two\nLine three"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("\n") { break }
+        }
+
+        await mock.setFeedAudioResult(["next line"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty || !inserter.moveForwardCounts.isEmpty { break }
+        }
         #expect(!inserter.typedTexts.contains("next line"))
+
+        await mock.setFeedAudioResult(["XX"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("XX") || state.transcribedText.contains("xx") { break }
+        }
+
+        let after = state.transcribedText
+        let lines = after.split(separator: "\n", omittingEmptySubsequences: false)
+        #expect(lines.count >= 2, "still multi-line, got \"\(after)\"")
+        if lines.count >= 2 {
+            let second = String(lines[1]).lowercased()
+            #expect(
+                second.contains("xx") || second.hasPrefix("xx"),
+                "insert on second line after next line, got \"\(after)\""
+            )
+        }
+        #expect(after.lowercased().contains("line one") || after.lowercased().contains("line"))
     }
 
     @Test("beginning / end of document moves document cursor without changing buffer")

@@ -1,16 +1,22 @@
 ---- MODULE LineCursor ----
 (*
-  Progressive line navigation index (select / delete next line).
+  Progressive line navigation index (select / delete / move next line).
 
   Dual of:
     AppState.lineNavIndex: Int?   \* nil = at end (dual of index = -1)
     DictationCommand select/delete next line progressive path
+    AppState.performMoveToNextLine / performMoveToPreviousLine
     TranscriptSelection.lineRanges
 
   Grain:
     lineCount \in 0..MaxCount
     index = -1 means caret at end of buffer
     index \in 0..(lineCount-1) means line under caret (0-based)
+
+  Product (move, mirrors next sentence):
+    - next from end: index' = 1 (second line) when lineCount >= 2
+    - previous from end: index' = lineCount - 1
+    - Buffer length unchanged on move (caret only; insert dual = SessionCaret)
 *)
 
 EXTENDS Integers, TLC

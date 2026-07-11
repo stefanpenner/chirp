@@ -1131,6 +1131,10 @@ public final class AppState {
                         self.performMoveLine(direction: .up)
                     case .moveDownLine:
                         self.performMoveLine(direction: .down)
+                    case .moveToPreviousLine:
+                        self.performMoveToPreviousLine()
+                    case .moveToNextLine:
+                        self.performMoveToNextLine()
                     case .moveToStart:
                         self.performMoveToLineStart()
                     case .moveToEnd:
@@ -1430,6 +1434,10 @@ public final class AppState {
             performMoveLine(direction: .up)
         case .moveDownLine:
             performMoveLine(direction: .down)
+        case .moveToPreviousLine:
+            performMoveToPreviousLine()
+        case .moveToNextLine:
+            performMoveToNextLine()
         case .moveToStart:
             performMoveToLineStart()
         case .moveToEnd:
@@ -3042,6 +3050,7 @@ public final class AppState {
 
     /// Move cursor one line (↑ / ↓). Buffer unchanged; sets sessionCaret for mid-insert.
     /// Dual of TranscriptSelection.offsetAfterLineMove + LineCaret.tla.
+    /// Updates `lineNavIndex` so progressive next/previous line stays coherent.
     private func performMoveLine(direction: MoveDirection) {
         textInserter.moveLine(direction: direction)
         let to = TranscriptSelection.offsetAfterLineMove(
@@ -3051,7 +3060,64 @@ public final class AppState {
             count: 1
         )
         setSessionCaret(to)
-        clearUnitNavAfterLineOrDocMove()
+        let ranges = TranscriptSelection.lineRanges(transcribedText)
+        if let idx = TranscriptSelection.rangeIndexContaining(to, ranges: ranges) {
+            lineNavIndex = idx
+        }
+        lineSelectionActive = false
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+    }
+
+    /// Progressive "previous line" — dual of LineCursor.tla PrevLine + sessionCaret.
+    /// From end: last line start; further calls step back.
+    private func performMoveToPreviousLine() {
+        let text = transcribedText
+        let ranges = TranscriptSelection.lineRanges(text)
+        guard !ranges.isEmpty else { return }
+        let next: Int
+        if lineNavIndex == nil {
+            next = ranges.count - 1
+        } else if let idx = lineNavIndex, idx > 0 {
+            next = idx - 1
+        } else {
+            return
+        }
+        let offset = ranges[next].start
+        moveToLineOffset(offset)
+        setSessionCaret(offset)
+        lineNavIndex = next
+        lineSelectionActive = false
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+    }
+
+    /// Progressive "next line" — dual of LineCursor.tla NextLine + sessionCaret.
+    /// From end: second line start; further calls advance. Single-line buffer is a no-op.
+    private func performMoveToNextLine() {
+        let text = transcribedText
+        let ranges = TranscriptSelection.lineRanges(text)
+        let next: Int
+        if lineNavIndex == nil {
+            guard ranges.count >= 2 else { return }
+            next = 1
+        } else {
+            guard let idx = lineNavIndex, idx + 1 < ranges.count else { return }
+            next = idx + 1
+        }
+        let offset = ranges[next].start
+        moveToLineOffset(offset)
+        setSessionCaret(offset)
+        lineNavIndex = next
+        lineSelectionActive = false
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
     }
 
     /// Move cursor to line start (⌘←). Buffer unchanged; sets sessionCaret.
