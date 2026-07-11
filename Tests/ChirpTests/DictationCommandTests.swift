@@ -581,16 +581,22 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("select line") == .selectLastLine)
     }
 
-    @Test("recognizes counted select/delete words and delete last N sentences")
+    @Test("recognizes counted select/delete words and multi-unit peels")
     func countedSelectDeleteCommands() {
         #expect(DictationCommand.parse("select previous two words") == .selectPreviousWords(count: 2))
         #expect(DictationCommand.parse("select next 3 words") == .selectNextWords(count: 3))
         #expect(DictationCommand.parse("delete next two words") == .deleteNextWords(count: 2))
         #expect(DictationCommand.parse("delete last two sentences") == .deleteLastSentences(count: 2))
         #expect(DictationCommand.parse("delete previous three sentences") == .deleteLastSentences(count: 3))
+        #expect(DictationCommand.parse("delete last two paragraphs") == .deleteLastParagraphs(count: 2))
+        #expect(DictationCommand.parse("delete previous 3 lines") == .deleteLastLines(count: 3))
+        #expect(DictationCommand.parse("select last two sentences") == .selectLastSentences(count: 2))
+        #expect(DictationCommand.parse("select previous three paragraphs") == .selectLastParagraphs(count: 3))
+        #expect(DictationCommand.parse("select last 2 lines") == .selectLastLines(count: 2))
         // Single units stay non-counted cases
         #expect(DictationCommand.parse("select previous word") == .selectPreviousWord)
         #expect(DictationCommand.parse("delete last sentence") == .deleteLastSentence)
+        #expect(DictationCommand.parse("select previous sentence") == .selectPreviousSentence)
     }
 
     @Test("recognizes select next sentence (not move next / select last)")

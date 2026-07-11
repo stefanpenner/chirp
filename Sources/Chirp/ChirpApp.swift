@@ -806,6 +806,18 @@ public final class AppState {
                     case .deleteLastSentences(let count):
                         self.awaitingReplace = false
                         self.performDeleteLastSentences(count: count, typesIncrementally: false)
+                    case .deleteLastParagraphs(let count):
+                        self.awaitingReplace = false
+                        self.performDeleteLastParagraphs(count: count, typesIncrementally: false)
+                    case .deleteLastLines(let count):
+                        self.awaitingReplace = false
+                        self.performDeleteLastLines(count: count, typesIncrementally: false)
+                    case .selectLastSentences(let count):
+                        self.performSelectLastUnits(kind: .sentence, count: count, typesIncrementally: false)
+                    case .selectLastParagraphs(let count):
+                        self.performSelectLastUnits(kind: .paragraph, count: count, typesIncrementally: false)
+                    case .selectLastLines(let count):
+                        self.performSelectLastUnits(kind: .line, count: count, typesIncrementally: false)
                     case .selectLastSentence:
                         self.performSelectLastSentence(typesIncrementally: false)
                     case .selectFirstSentence:
@@ -1032,6 +1044,18 @@ public final class AppState {
         case .deleteLastSentences(let count):
             awaitingReplace = false
             performDeleteLastSentences(count: count, typesIncrementally: typesIncrementally)
+        case .deleteLastParagraphs(let count):
+            awaitingReplace = false
+            performDeleteLastParagraphs(count: count, typesIncrementally: typesIncrementally)
+        case .deleteLastLines(let count):
+            awaitingReplace = false
+            performDeleteLastLines(count: count, typesIncrementally: typesIncrementally)
+        case .selectLastSentences(let count):
+            performSelectLastUnits(kind: .sentence, count: count, typesIncrementally: typesIncrementally)
+        case .selectLastParagraphs(let count):
+            performSelectLastUnits(kind: .paragraph, count: count, typesIncrementally: typesIncrementally)
+        case .selectLastLines(let count):
+            performSelectLastUnits(kind: .line, count: count, typesIncrementally: typesIncrementally)
         case .selectLastSentence:
             performSelectLastSentence(typesIncrementally: typesIncrementally)
         case .selectFirstSentence:
@@ -1742,26 +1766,93 @@ public final class AppState {
         sentenceSelectionActive = true
     }
 
+    private enum TrailingUnit {
+        case sentence, paragraph, line
+    }
+
     /// Delete last N sentences (trailing peel). N ≥ 1.
     private func performDeleteLastSentences(count: Int, typesIncrementally: Bool) {
+        performDeleteLastUnits(kind: .sentence, count: count, typesIncrementally: typesIncrementally)
+    }
+
+    /// Delete last N paragraphs (trailing peel). N ≥ 1.
+    private func performDeleteLastParagraphs(count: Int, typesIncrementally: Bool) {
+        performDeleteLastUnits(kind: .paragraph, count: count, typesIncrementally: typesIncrementally)
+    }
+
+    /// Delete last N lines (trailing peel). N ≥ 1.
+    private func performDeleteLastLines(count: Int, typesIncrementally: Bool) {
+        performDeleteLastUnits(kind: .line, count: count, typesIncrementally: typesIncrementally)
+    }
+
+    /// Peel last N trailing units in one cut (range-based, not repeated last-segment).
+    /// Avoids blank-separator peels eating N budget without removing content units.
+    private func performDeleteLastUnits(kind: TrailingUnit, count: Int, typesIncrementally: Bool) {
         guard count > 0 else { return }
-        let original = transcribedText
-        for _ in 0..<count {
-            let selected = TranscriptSelection.lastSentence(transcribedText)
-            guard !selected.isEmpty else { break }
-            let before = transcribedText
-            // Buffer-only peels; one keyboard delete for total at end.
-            performDeleteTrailingSelection(selected: selected, typesIncrementally: false)
-            if transcribedText == before { break }
+        let text = transcribedText
+        let ranges: [TranscriptSelection.SentenceRange]
+        switch kind {
+        case .sentence: ranges = TranscriptSelection.sentenceRanges(text)
+        case .paragraph: ranges = TranscriptSelection.paragraphRanges(text)
+        case .line: ranges = TranscriptSelection.lineRanges(text)
         }
-        let remove = original.count - transcribedText.count
-        guard remove > 0 else { return }
-        if typesIncrementally {
+        guard !ranges.isEmpty else { return }
+        let n = min(count, ranges.count)
+        let startIdx = ranges.count - n
+        // Keep through end of unit before the first deleted one (includes no trailing sep).
+        // Cut from prior unit end so the separator before the deleted span is removed.
+        let cutStart = startIdx == 0 ? 0 : ranges[startIdx - 1].end
+        guard cutStart < text.count else { return }
+        let newText = String(text.prefix(cutStart))
+        let remove = text.count - cutStart
+        transcribedText = newText
+        if typesIncrementally, remove > 0 {
             textInserter.deleteBackward(count: remove)
+        }
+        let removed = String(text.suffix(remove))
+        if !editStack.dropTrailingSuffix(removed) {
+            editStack.clear()
         }
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
         sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
+    }
+
+    /// Select last N trailing sentences/paragraphs/lines via selectBackward.
+    private func performSelectLastUnits(kind: TrailingUnit, count: Int, typesIncrementally: Bool) {
+        guard typesIncrementally, count > 0 else { return }
+        let text = transcribedText
+        let ranges: [TranscriptSelection.SentenceRange]
+        switch kind {
+        case .sentence: ranges = TranscriptSelection.sentenceRanges(text)
+        case .paragraph: ranges = TranscriptSelection.paragraphRanges(text)
+        case .line: ranges = TranscriptSelection.lineRanges(text)
+        }
+        guard !ranges.isEmpty else { return }
+        let n = min(count, ranges.count)
+        let startIdx = ranges.count - n
+        let start = ranges[startIdx].start
+        // From end of buffer, select back to start of first unit in the group.
+        // When selection already active at end of a unit, collapse first if needed.
+        let fromEnd = text.count - start
+        guard fromEnd > 0 else { return }
+        textInserter.selectBackward(count: fromEnd)
+        // Nav index: land on first of the selected group
+        switch kind {
+        case .sentence:
+            sentenceNavIndex = startIdx
+            sentenceSelectionActive = true
+        case .paragraph:
+            paragraphNavIndex = startIdx
+            paragraphSelectionActive = true
+        case .line:
+            lineNavIndex = startIdx
+            lineSelectionActive = true
+        }
     }
 
     /// Select previous paragraph (progressive). From end: last; further step back.

@@ -43,6 +43,7 @@ tlc specs/PipelineRebuild.tla
 | `SentenceCursor` | progressive sentence nav index (`-1`/nil = end; next/prev walk) | `AppState.sentenceNavIndex` (nil = end); dual of progressive 3rd+ next |
 | `ParagraphCursor` | progressive paragraph nav index (`-1`/nil = end; next/prev/delete) | `AppState.paragraphNavIndex` (nil = end); dual of select/move/delete next paragraph |
 | `LineCursor` | progressive line nav index (`-1`/nil = end; next/prev/delete) | `AppState.lineNavIndex` (nil = end); dual of select next/previous/delete next line |
+| `MultiUnitEdit` | delete last N trailing units clamps and stays non-negative | `DictationCommand.deleteLast*`(count) + `performDeleteLastUnits` |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |
 | `PeekCommitHyp` | reuse peek hyp on commit when speech-window sig matches | `DecodePolicy.shouldReuseCommitHyp` + `Transcriber` feed/flush |

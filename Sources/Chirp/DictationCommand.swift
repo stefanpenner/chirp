@@ -106,6 +106,16 @@ enum DictationCommand: Equatable, Sendable {
     case deleteNextWords(count: Int)
     /// Delete last N sentences from session buffer (N ≥ 2).
     case deleteLastSentences(count: Int)
+    /// Delete last N paragraphs from session buffer (N ≥ 2).
+    case deleteLastParagraphs(count: Int)
+    /// Delete last N lines from session buffer (N ≥ 2).
+    case deleteLastLines(count: Int)
+    /// Select last N sentences (session trailing). Buffer unchanged.
+    case selectLastSentences(count: Int)
+    /// Select last N paragraphs (session trailing). Buffer unchanged.
+    case selectLastParagraphs(count: Int)
+    /// Select last N lines (session trailing). Buffer unchanged.
+    case selectLastLines(count: Int)
     /// Select the last sentence (after [.?!] + whitespace).
     case selectLastSentence
     /// Select the first sentence (before first [.?!] + whitespace).
@@ -185,34 +195,56 @@ enum DictationCommand: Equatable, Sendable {
         return .none
     }
 
-    /// Counted forms: "delete last two words", "select previous 3 words", etc.
+    /// Counted forms: "delete last two words", "select previous 3 sentences", etc.
     /// Requires N ≥ 2 for multi-unit peels (single stays uncounted case).
+    /// Voice Control / SpeechPulse style multi-unit edit.
     private static func matchCounted(_ n: String) -> DictationCommand? {
         let num = #"(\d+|two|three|four|five|six|seven|eight|nine|ten)"#
+        let inRange: (Int) -> Bool = { (2...20).contains($0) }
         let specs: [(pattern: String, make: (Int) -> DictationCommand?)] = [
-            // Buffer peel: delete last/previous N words
+            // Buffer peel: delete last/previous N words|sentences|paragraphs|lines
             (
                 #"^delete (?:the )?(?:last|previous|prior) "# + num + #" words?$"#,
-                { c in (2...20).contains(c) ? .deleteLastWords(count: c) : nil }
+                { c in inRange(c) ? .deleteLastWords(count: c) : nil }
             ),
-            // Buffer peel: delete last/previous N sentences
             (
                 #"^delete (?:the )?(?:last|previous|prior) "# + num + #" sentences?$"#,
-                { c in (2...20).contains(c) ? .deleteLastSentences(count: c) : nil }
+                { c in inRange(c) ? .deleteLastSentences(count: c) : nil }
+            ),
+            (
+                #"^delete (?:the )?(?:last|previous|prior) "# + num + #" paragraphs?$"#,
+                { c in inRange(c) ? .deleteLastParagraphs(count: c) : nil }
+            ),
+            (
+                #"^delete (?:the )?(?:last|previous|prior) "# + num + #" lines?$"#,
+                { c in inRange(c) ? .deleteLastLines(count: c) : nil }
+            ),
+            // Buffer select: select last/previous N sentences|paragraphs|lines
+            (
+                #"^select (?:the )?(?:last|previous|prior) "# + num + #" sentences?$"#,
+                { c in inRange(c) ? .selectLastSentences(count: c) : nil }
+            ),
+            (
+                #"^select (?:the )?(?:last|previous|prior) "# + num + #" paragraphs?$"#,
+                { c in inRange(c) ? .selectLastParagraphs(count: c) : nil }
+            ),
+            (
+                #"^select (?:the )?(?:last|previous|prior) "# + num + #" lines?$"#,
+                { c in inRange(c) ? .selectLastLines(count: c) : nil }
             ),
             // Keyboard: select previous/next N words
             (
                 #"^select (?:the )?(?:previous|prior) "# + num + #" words?$"#,
-                { c in (2...20).contains(c) ? .selectPreviousWords(count: c) : nil }
+                { c in inRange(c) ? .selectPreviousWords(count: c) : nil }
             ),
             (
                 #"^select (?:the )?(?:next|forward) "# + num + #" words?$"#,
-                { c in (2...20).contains(c) ? .selectNextWords(count: c) : nil }
+                { c in inRange(c) ? .selectNextWords(count: c) : nil }
             ),
             // Keyboard: delete next N words only (previous N words = buffer peel above)
             (
                 #"^delete (?:the )?(?:next|forward) "# + num + #" words?$"#,
-                { c in (2...20).contains(c) ? .deleteNextWords(count: c) : nil }
+                { c in inRange(c) ? .deleteNextWords(count: c) : nil }
             ),
         ]
 
@@ -624,7 +656,8 @@ enum DictationCommand: Equatable, Sendable {
         ("select first line / the first line", "Select first line"),
         ("select next line / select forward line", "Select next line (progressive)"),
         ("select previous two words / select next 3 words", "Select N words (keyboard)"),
-        ("delete last two sentences", "Remove last N sentences"),
+        ("delete last two sentences / paragraphs / lines", "Remove last N sentences/paragraphs/lines"),
+        ("select last two sentences / previous 3 paragraphs", "Select last N sentences/paragraphs/lines"),
         ("select all", "Select all (⌘A)"),
         ("unselect that / deselect", "Collapse selection (caret to end)"),
         ("bold that", "Select last phrase + bold (⌘B), then unselect"),
