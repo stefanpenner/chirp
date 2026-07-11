@@ -612,9 +612,13 @@ struct TextPostProcessorTests {
         // Cue without a number stays put
         #expect(TextPostProcessor.process("hit the room") == "hit the room")
         #expect(TextPostProcessor.process("nice suite") == "nice suite")
-        // v1: label rewrite still applies when more content words follow
-        // (address-style common: "Room 5 people" acceptable for now)
-        #expect(TextPostProcessor.process("room 5 people") == "Room 5 people")
+        // Mid-phrase content after digits: do not force Suite/Room label
+        #expect(TextPostProcessor.process("room 5 people") == "room 5 people")
+        #expect(TextPostProcessor.process("suite 12 is large") == "suite 12 is large")
+        // Address-adjacent still rewrites (comma / state / ZIP / EOS)
+        #expect(TextPostProcessor.process("suite 12,") == "Suite 12,")
+        #expect(TextPostProcessor.process("Room 101 CA") == "Room 101 CA")
+        #expect(TextPostProcessor.process("suite 12 90210") == "Suite 12 90210")
     }
 
     @Test("Light ITN suite / room with spoken digit runs after cue")

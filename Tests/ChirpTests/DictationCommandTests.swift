@@ -50,6 +50,30 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("please delete previous paragraph") == .deleteLastParagraph)
     }
 
+    @Test("recognizes delete next paragraph (not delete last)")
+    func deleteNextParagraphCommands() {
+        #expect(DictationCommand.parse("delete next paragraph") == .deleteNextParagraph)
+        #expect(DictationCommand.parse("delete forward paragraph") == .deleteNextParagraph)
+        #expect(DictationCommand.parse("remove next paragraph") == .deleteNextParagraph)
+        #expect(DictationCommand.parse("Delete next paragraph.") == .deleteNextParagraph)
+        #expect(DictationCommand.parse("please delete next paragraph") == .deleteNextParagraph)
+        #expect(DictationCommand.parse("delete last paragraph") == .deleteLastParagraph)
+        #expect(DictationCommand.parse("delete previous paragraph") == .deleteLastParagraph)
+    }
+
+    @Test("recognizes next/previous paragraph move (not select)")
+    func moveParagraphCommands() {
+        #expect(DictationCommand.parse("next paragraph") == .moveToNextParagraph)
+        #expect(DictationCommand.parse("go to next paragraph") == .moveToNextParagraph)
+        #expect(DictationCommand.parse("move to next paragraph") == .moveToNextParagraph)
+        #expect(DictationCommand.parse("forward a paragraph") == .moveToNextParagraph)
+        #expect(DictationCommand.parse("previous paragraph") == .moveToPreviousParagraph)
+        #expect(DictationCommand.parse("go to previous paragraph") == .moveToPreviousParagraph)
+        #expect(DictationCommand.parse("back a paragraph") == .moveToPreviousParagraph)
+        #expect(DictationCommand.parse("select next paragraph") == .selectNextParagraph)
+        #expect(DictationCommand.parse("select previous paragraph") == .selectLastParagraph)
+    }
+
     @Test("recognizes delete last line / previous line")
     func deleteLastLineCommands() {
         #expect(DictationCommand.parse("delete last line") == .deleteLastLine)

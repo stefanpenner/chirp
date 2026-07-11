@@ -1225,12 +1225,13 @@ enum TextPostProcessor {
     // MARK: - Suite / room / extension ITN
 
     /// "suite 12" / "room 101" / "floor 5" / "ext 55" / "apartment 4" after SpokenNumberITN.
-    /// Digit-only body for v1 (spoken runs are forced to digits in SpokenNumberITN).
-    /// v1: still rewrites when more content words follow ("room 5 people" → "Room 5 people");
-    /// address-style is common; no end-of-phrase guard yet.
+    /// Digit-only body (spoken runs are forced to digits in SpokenNumberITN).
+    /// End-of-phrase / address-adjacent only: do not rewrite "room 5 people".
+    /// Lookahead: EOS + optional punct, comma, USPS state, or ZIP.
     private static let suiteRoomExtPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(suite|apartment|apt\.?|unit|room|floor|extension|ext\.?)\s+(\d{1,6})\b"#,
+            pattern:
+                #"\b(suite|apartment|apt\.?|unit|room|floor|extension|ext\.?)\s+(\d{1,6})\b(?=\s*[.,;:!?]*\s*$|\s*,|\s+(?:A[KLRZ]|C[AOT]|D[CE]|FL|GA|HI|I[ADLN]|K[SY]|LA|M[ADEHINOST]|N[CDEHJMVY]|O[HKR]|P[AR]|RI|S[CD]|T[NX]|UT|V[AIT]|W[AIVY])\b|\s+\d{5}(?:-\d{4})?\b)"#,
             options: .caseInsensitive
         )
     }()

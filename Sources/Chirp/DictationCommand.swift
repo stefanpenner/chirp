@@ -18,6 +18,8 @@ enum DictationCommand: Equatable, Sendable {
     case deleteNextSentence
     /// Delete the last paragraph (after \n\n or \n).
     case deleteLastParagraph
+    /// Delete the next paragraph (progressive). Does not steal delete last/previous.
+    case deleteNextParagraph
     /// Delete the last line (after final \n).
     case deleteLastLine
     /// Clear the entire session transcript and typed text.
@@ -134,6 +136,10 @@ enum DictationCommand: Equatable, Sendable {
     case moveToPreviousSentence
     /// Move cursor to start of second sentence (← × full, then → past first). Buffer unchanged.
     case moveToNextSentence
+    /// Move cursor to start of previous paragraph (progressive). Buffer unchanged.
+    case moveToPreviousParagraph
+    /// Move cursor to start of next paragraph (progressive). Buffer unchanged.
+    case moveToNextParagraph
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -215,6 +221,10 @@ enum DictationCommand: Equatable, Sendable {
         case "delete last paragraph", "delete previous paragraph", "delete paragraph",
              "remove last paragraph", "remove previous paragraph", "remove paragraph":
             return .deleteLastParagraph
+        // Do not steal "delete last paragraph" / "delete previous paragraph".
+        case "delete next paragraph", "delete forward paragraph",
+             "remove next paragraph", "remove forward paragraph":
+            return .deleteNextParagraph
         case "delete last line", "delete previous line", "delete line",
              "remove last line", "remove previous line", "remove line":
             return .deleteLastLine
@@ -418,6 +428,13 @@ enum DictationCommand: Equatable, Sendable {
         case "go to next sentence", "next sentence",
              "move to next sentence", "forward a sentence":
             return .moveToNextSentence
+        // Paragraph move — do not steal "select previous/next paragraph".
+        case "go to previous paragraph", "previous paragraph",
+             "move to previous paragraph", "back a paragraph":
+            return .moveToPreviousParagraph
+        case "go to next paragraph", "next paragraph",
+             "move to next paragraph", "forward a paragraph":
+            return .moveToNextParagraph
         default:
             return nil
         }
@@ -434,6 +451,7 @@ enum DictationCommand: Equatable, Sendable {
         ("delete last sentence / previous sentence", "Remove last sentence"),
         ("delete next sentence / delete forward sentence", "Remove second sentence (session-relative)"),
         ("delete last paragraph / previous paragraph", "Remove last paragraph"),
+        ("delete next paragraph / delete forward paragraph", "Remove next paragraph (progressive)"),
         ("delete last line / delete line", "Remove last line"),
         ("clear all", "Wipe session text"),
         ("press enter", "Insert Return"),
@@ -473,6 +491,8 @@ enum DictationCommand: Equatable, Sendable {
         ("select last paragraph / previous paragraph", "Select last paragraph"),
         ("select first paragraph / the first paragraph", "Select first paragraph"),
         ("select next paragraph / select forward paragraph", "Select next paragraph (progressive)"),
+        ("next paragraph / go to next paragraph", "Move to next paragraph start (progressive)"),
+        ("previous paragraph / go to previous paragraph", "Move to previous paragraph start (progressive)"),
         ("select last line / select line", "Select last line"),
         ("select first line / the first line", "Select first line"),
         ("select all", "Select all (⌘A)"),

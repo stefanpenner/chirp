@@ -162,9 +162,13 @@ public final class AppState {
     /// After `clearSelection`, caret is at end of that sentence; after move, at start.
     private var sentenceSelectionActive = false
 
-    /// Progressive paragraph navigation index (select next paragraph).
-    /// `nil` = caret at end; non-nil = last selected paragraph (dual of ParagraphCursor).
+    /// Progressive paragraph navigation index (select/move/delete next paragraph).
+    /// `nil` = caret at end; non-nil = paragraph under cursor (dual of ParagraphCursor).
     private var paragraphNavIndex: Int? = nil
+
+    /// True when a paragraph selection is active (select first/last/next).
+    /// After `clearSelection`, caret is at end of that paragraph; after move, at start.
+    private var paragraphSelectionActive = false
 
     public convenience init() {
         let transcriber = Transcriber()
@@ -568,6 +572,7 @@ public final class AppState {
         sentenceNavIndex = nil
         sentenceSelectionActive = false
         paragraphNavIndex = nil
+        paragraphSelectionActive = false
         recordingSession &+= 1
         let session = recordingSession
         status = .recording
@@ -677,6 +682,9 @@ public final class AppState {
                             selected: TranscriptSelection.lastParagraph(self.transcribedText),
                             typesIncrementally: false
                         )
+                    case .deleteNextParagraph:
+                        self.awaitingReplace = false
+                        self.performDeleteNextParagraph(typesIncrementally: false)
                     case .deleteLastLine:
                         self.awaitingReplace = false
                         self.performDeleteTrailingSelection(
@@ -813,6 +821,10 @@ public final class AppState {
                         self.performMoveToPreviousSentence()
                     case .moveToNextSentence:
                         self.performMoveToNextSentence()
+                    case .moveToPreviousParagraph:
+                        self.performMoveToPreviousParagraph()
+                    case .moveToNextParagraph:
+                        self.performMoveToNextParagraph()
                     case .none:
                         // One-shot type: replace buffer + stack so scratch undoes the
                         // whole batch (mid-session segments were not typed/pushed).
@@ -828,6 +840,7 @@ public final class AppState {
                         self.sentenceNavIndex = nil
                         self.sentenceSelectionActive = false
                         self.paragraphNavIndex = nil
+                        self.paragraphSelectionActive = false
                     }
                 }
             }
@@ -872,6 +885,9 @@ public final class AppState {
                 selected: TranscriptSelection.lastParagraph(transcribedText),
                 typesIncrementally: typesIncrementally
             )
+        case .deleteNextParagraph:
+            awaitingReplace = false
+            performDeleteNextParagraph(typesIncrementally: typesIncrementally)
         case .deleteLastLine:
             awaitingReplace = false
             performDeleteTrailingSelection(
@@ -993,6 +1009,10 @@ public final class AppState {
             performMoveToPreviousSentence()
         case .moveToNextSentence:
             performMoveToNextSentence()
+        case .moveToPreviousParagraph:
+            performMoveToPreviousParagraph()
+        case .moveToNextParagraph:
+            performMoveToNextParagraph()
         case .none:
             // Multi-step replace: undo last phrase, then insert replacement.
             if ReplaceDecision.shouldUndoBeforeCommit(awaitingReplace: awaitingReplace) {
@@ -1024,6 +1044,7 @@ public final class AppState {
             sentenceNavIndex = nil
             sentenceSelectionActive = false
             paragraphNavIndex = nil
+            paragraphSelectionActive = false
         }
     }
 
@@ -1353,6 +1374,7 @@ public final class AppState {
         sentenceNavIndex = nil
         sentenceSelectionActive = false
         paragraphNavIndex = nil
+        paragraphSelectionActive = false
     }
 
     /// Select the last typed phrase (EditStack top delta). Buffer unchanged.
@@ -1561,6 +1583,7 @@ public final class AppState {
             sentenceNavIndex = nil
             sentenceSelectionActive = false
             paragraphNavIndex = nil
+            paragraphSelectionActive = false
             return
         }
 
@@ -1584,6 +1607,7 @@ public final class AppState {
         sentenceNavIndex = nil
         sentenceSelectionActive = false
         paragraphNavIndex = nil
+        paragraphSelectionActive = false
     }
 
     /// Select the last paragraph. Buffer unchanged.
@@ -1592,35 +1616,30 @@ public final class AppState {
         let text = transcribedText
         let ranges = TranscriptSelection.paragraphRanges(text)
         guard !ranges.isEmpty else { return }
+        let last = ranges.count - 1
         let selected = TranscriptSelection.lastParagraph(text)
         guard !selected.isEmpty else { return }
-        textInserter.selectBackward(count: selected.count)
-        paragraphNavIndex = ranges.count - 1
+        if paragraphNavIndex == nil && !paragraphSelectionActive {
+            textInserter.selectBackward(count: selected.count)
+        } else {
+            moveToParagraphOffset(ranges[last].start)
+            textInserter.selectForward(count: ranges[last].end - ranges[last].start)
+        }
+        paragraphNavIndex = last
+        paragraphSelectionActive = true
     }
 
-    /// Select the first paragraph. Assumes caret at end of session text.
+    /// Select the first paragraph. Sets `paragraphNavIndex` for progressive next.
     private func performSelectFirstParagraph(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         let text = transcribedText
         let ranges = TranscriptSelection.paragraphRanges(text)
         guard !ranges.isEmpty else { return }
         let range = ranges[0]
-        // From end (or after prior para select collapse is not modeled here);
-        // first select assumes session-end caret like the original path.
-        if paragraphNavIndex == nil {
-            textInserter.moveBackward(count: text.count)
-            textInserter.moveForward(count: range.start)
-        } else {
-            // Collapse prior progressive selection then hop.
-            textInserter.clearSelection()
-            let idx = paragraphNavIndex!
-            let from = ranges.indices.contains(idx) ? ranges[idx].end : text.count
-            let delta = range.start - from
-            if delta > 0 { textInserter.moveForward(count: delta) }
-            if delta < 0 { textInserter.moveBackward(count: -delta) }
-        }
+        moveToParagraphOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         paragraphNavIndex = 0
+        paragraphSelectionActive = true
     }
 
     /// Select the next paragraph (progressive). From end: second paragraph;
@@ -1634,22 +1653,69 @@ public final class AppState {
         if paragraphNavIndex == nil {
             guard ranges.count >= 2 else { return }
             next = 1
-            // From end of buffer → start of second paragraph.
-            textInserter.moveBackward(count: text.count)
-            textInserter.moveForward(count: ranges[next].start)
         } else {
             guard let idx = paragraphNavIndex, idx + 1 < ranges.count else { return }
             next = idx + 1
-            // Prior select left a selection over ranges[idx]; collapse to its end.
-            textInserter.clearSelection()
-            let from = ranges[idx].end
-            let delta = ranges[next].start - from
-            if delta > 0 { textInserter.moveForward(count: delta) }
-            if delta < 0 { textInserter.moveBackward(count: -delta) }
         }
         let range = ranges[next]
+        moveToParagraphOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         paragraphNavIndex = next
+        paragraphSelectionActive = true
+    }
+
+    /// Delete the next paragraph (progressive). From end: second paragraph;
+    /// further calls use `paragraphNavIndex`. Trailing → stack-aware peel;
+    /// middle → string surgery (stack cleared). Resets nav indices.
+    private func performDeleteNextParagraph(typesIncrementally: Bool) {
+        let text = transcribedText
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        let target: Int
+        if paragraphNavIndex == nil {
+            guard ranges.count >= 2 else { return }
+            target = 1
+        } else {
+            guard let idx = paragraphNavIndex, idx + 1 < ranges.count else { return }
+            target = idx + 1
+        }
+
+        let range = ranges[target]
+        let remainderAfter = String(text.dropFirst(range.end))
+        let isTrailing = remainderAfter.allSatisfy(\.isWhitespace)
+
+        if isTrailing {
+            performDeleteTrailingSelection(
+                selected: TranscriptSelection.lastParagraph(text),
+                typesIncrementally: typesIncrementally
+            )
+            sentenceNavIndex = nil
+            sentenceSelectionActive = false
+            paragraphNavIndex = nil
+            paragraphSelectionActive = false
+            return
+        }
+
+        // Middle delete: keep through prior paragraph end + remainder after target.
+        // Include separator between prior and target in the deleted gap.
+        let priorEnd = ranges[target - 1].end
+        let keepEndIdx = text.index(text.startIndex, offsetBy: priorEnd)
+        let afterIdx = text.index(text.startIndex, offsetBy: range.end)
+        let newText = String(text[..<keepEndIdx]) + String(text[afterIdx...])
+        let gapAndTargetCount = range.end - priorEnd
+
+        if typesIncrementally, gapAndTargetCount > 0 {
+            moveToParagraphOffset(priorEnd)
+            textInserter.selectForward(count: gapAndTargetCount)
+            textInserter.deleteBackward(count: 1)
+        }
+
+        transcribedText = newText
+        editStack.clear()
+        lastCommittedNormalized = ""
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
     }
 
     /// Select the last line. Buffer unchanged.
@@ -1753,7 +1819,7 @@ public final class AppState {
         sentenceSelectionActive = false
     }
 
-    /// Move caret to a Character offset within the session buffer.
+    /// Move caret to a Character offset within the session buffer (sentence nav).
     /// Current position:
     /// - end when `sentenceNavIndex == nil`
     /// - start of that sentence after a move
@@ -1769,6 +1835,68 @@ public final class AppState {
                     textInserter.clearSelection()
                     from = ranges[idx].end
                     sentenceSelectionActive = false
+                } else {
+                    from = ranges[idx].start
+                }
+            } else {
+                from = text.count
+            }
+        } else {
+            from = text.count
+        }
+        let delta = offset - from
+        if delta > 0 { textInserter.moveForward(count: delta) }
+        if delta < 0 { textInserter.moveBackward(count: -delta) }
+    }
+
+    /// Move cursor to start of previous paragraph (progressive).
+    /// From end: last paragraph content start; further calls step back.
+    private func performMoveToPreviousParagraph() {
+        let text = transcribedText
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        guard !ranges.isEmpty else { return }
+        let next: Int
+        if paragraphNavIndex == nil {
+            next = ranges.count - 1
+        } else if let idx = paragraphNavIndex, idx > 0 {
+            next = idx - 1
+        } else {
+            return
+        }
+        moveToParagraphOffset(ranges[next].start)
+        paragraphNavIndex = next
+        paragraphSelectionActive = false
+    }
+
+    /// Session-relative progressive "next paragraph" move.
+    /// From end: jump to second paragraph start; further calls advance.
+    private func performMoveToNextParagraph() {
+        let text = transcribedText
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        let next: Int
+        if paragraphNavIndex == nil {
+            guard ranges.count >= 2 else { return }
+            next = 1
+        } else {
+            guard let idx = paragraphNavIndex, idx + 1 < ranges.count else { return }
+            next = idx + 1
+        }
+        moveToParagraphOffset(ranges[next].start)
+        paragraphNavIndex = next
+        paragraphSelectionActive = false
+    }
+
+    /// Move caret to a Character offset within the session buffer (paragraph nav).
+    private func moveToParagraphOffset(_ offset: Int) {
+        let text = transcribedText
+        let from: Int
+        if let idx = paragraphNavIndex {
+            let ranges = TranscriptSelection.paragraphRanges(text)
+            if ranges.indices.contains(idx) {
+                if paragraphSelectionActive {
+                    textInserter.clearSelection()
+                    from = ranges[idx].end
+                    paragraphSelectionActive = false
                 } else {
                     from = ranges[idx].start
                 }
@@ -1875,6 +2003,7 @@ public final class AppState {
         sentenceNavIndex = nil
         sentenceSelectionActive = false
         paragraphNavIndex = nil
+        paragraphSelectionActive = false
         audioLevel = 0
         processingPhase = .none
         hotkeyManager?.sessionActive = false

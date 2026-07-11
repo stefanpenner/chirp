@@ -1936,8 +1936,9 @@ struct AppStateTests {
         }
 
         #expect(state.transcribedText.contains("Para two"))
-        #expect(inserter.moveBackwardCounts.last == state.transcribedText.count)
-        #expect(inserter.moveForwardCounts.last == "Para one\n\n".count)
+        // From end → second-paragraph content start, then select
+        let start = TranscriptSelection.secondParagraphStartOffset(state.transcribedText)!
+        #expect(inserter.moveBackwardCounts.last == state.transcribedText.count - start)
         #expect(inserter.selectForwardCounts.last == "Para two".count)
         #expect(!inserter.typedTexts.contains("select next paragraph"))
     }
@@ -1989,6 +1990,117 @@ struct AppStateTests {
         #expect(inserter.selectForwardCounts.last == "C".count)
         #expect(state.transcribedText == text)
         #expect(!inserter.typedTexts.contains("select next paragraph"))
+    }
+
+    @Test("delete next paragraph removes second when it is also last")
+    func deleteNextParagraphTwoParas() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Para one\n\nPara two"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("Para two") { break }
+        }
+
+        await mock.setFeedAudioResult(["delete next paragraph"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Para one" || state.transcribedText.hasPrefix("Para one") && !state.transcribedText.contains("Para two") {
+                break
+            }
+        }
+
+        #expect(!state.transcribedText.contains("Para two"))
+        #expect(state.transcribedText.hasPrefix("Para one") || state.transcribedText == "Para one")
+        #expect(!inserter.typedTexts.contains("delete next paragraph"))
+    }
+
+    @Test("delete next paragraph removes middle when three present")
+    func deleteNextParagraphMiddle() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["A\n\nB\n\nC"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("C") { break }
+        }
+
+        #expect(state.transcribedText == "A\n\nB\n\nC")
+        await mock.setFeedAudioResult(["delete next paragraph"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "A\n\nC" || state.transcribedText.contains("C") && !state.transcribedText.contains("B") {
+                break
+            }
+        }
+
+        #expect(state.transcribedText == "A\n\nC")
+        #expect(!inserter.typedTexts.contains("delete next paragraph"))
+    }
+
+    @Test("next paragraph twice advances to third paragraph start")
+    func moveToNextParagraphProgressive() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["A\n\nB\n\nC"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "A\n\nB\n\nC" { break }
+        }
+
+        let text = "A\n\nB\n\nC"
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        #expect(ranges.count == 3)
+
+        await mock.setFeedAudioResult(["next paragraph"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+        #expect(inserter.moveBackwardCounts.last == text.count - ranges[1].start)
+
+        await mock.setFeedAudioResult(["next paragraph"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveForwardCounts.isEmpty { break }
+        }
+        #expect(inserter.moveForwardCounts.last == ranges[2].start - ranges[1].start)
+        #expect(state.transcribedText == text)
+        #expect(!inserter.typedTexts.contains("next paragraph"))
     }
 
     @Test("select all posts selectAll without changing buffer")

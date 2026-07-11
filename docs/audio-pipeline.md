@@ -143,6 +143,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **delete last word** — drop trailing word (stack-aware; redo restores)
 - **delete last sentence** / **delete previous sentence** / **delete sentence** — drop trailing sentence (stack-aware; redo restores). Does **not** steal **delete last word** or **delete that**
 - **delete last paragraph** / **delete previous paragraph** / **delete paragraph** — drop trailing paragraph (stack-aware; redo restores)
+- **delete next paragraph** / **delete forward paragraph** — progressive: remove next paragraph from session cursor (from end = second). Trailing peel stack-aware; middle surgery clears stack. Resets paragraph nav index. Does **not** steal **delete last paragraph**
 - **delete last line** / **delete previous line** / **delete line** — drop trailing line content after last `\n` (stack-aware; redo restores). Trailing empty line (`…\n`) peels the newline (not a no-op)
 - **caps on / all caps on / no caps on** — sticky casing (`CapsMode`)
 - **caps off** — back to normal casing
@@ -171,6 +172,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select last paragraph** / **select previous paragraph** / **select paragraph** — select trailing paragraph
 - **select first paragraph** / **select the first paragraph** / **highlight first paragraph** / **select 1st paragraph** — select first paragraph (← session then ⇧→ × n). Buffer unchanged
 - **select next paragraph** / **select forward paragraph** / **highlight next paragraph** — progressive: from end select second paragraph; further calls advance (collapse prior selection first). Buffer unchanged (`ParagraphCursor.tla`). Does **not** steal **select last paragraph**
+- **previous paragraph** / **go to previous paragraph** / **back a paragraph** — progressive move to previous paragraph start. Buffer unchanged (`ParagraphCursor.tla`)
+- **next paragraph** / **go to next paragraph** / **forward a paragraph** — progressive move to next paragraph start (from end = second). Buffer unchanged (`ParagraphCursor.tla`). Does **not** steal **select next paragraph**
 - **select last line** / **select previous line** / **select line** / **select this line** — select trailing line (content after last `\n`)
 - **select first line** / **select the first line** / **highlight first line** / **select 1st line** — select first line (← session then ⇧→ × n; content before first `\n`). Buffer unchanged. Does **not** steal **select last line**
 - **select all** — select all (⌘A)
