@@ -175,18 +175,23 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select next word** / **select forward word** — select next word (⇧⌥→; keyboard only; buffer unchanged)
 - **select previous word** / **select prior word** — select previous word (⇧⌥←; keyboard only; buffer unchanged). Does **not** steal **select last word** or bare **previous word** (move left)
 - **delete next word** / **delete forward word** — delete next word (⇧⌥→ then ⌫; keyboard only; buffer unchanged). Does **not** steal **delete last word**
-- **select last sentence** / **select previous sentence** / **select sentence** — select trailing sentence
+- **select last sentence** / **select sentence** — select trailing sentence
+- **select previous sentence** / **select prior sentence** — progressive: from end select last; further calls step back (`SentenceCursor.tla`). Buffer unchanged
 - **select first sentence** / **select the first sentence** / **highlight first sentence** / **select 1st sentence** — select first sentence (← session then ⇧→ × n). Buffer unchanged
 - **select next sentence** / **select forward sentence** / **highlight next sentence** — progressive: from end select second sentence; further calls collapse prior selection then advance. **select first/last** set `sentenceNavIndex`. Buffer unchanged. Does **not** steal bare **next sentence** (move) or **select last sentence**
 - **delete next sentence** / **delete forward sentence** — progressive: remove next sentence from session cursor (from end = second). When target is last, stack-aware trailing peel; else middle string surgery (stack cleared). Resets sentence nav index. Does **not** steal **delete last sentence** / **delete previous sentence**
-- **select last paragraph** / **select previous paragraph** / **select paragraph** — select trailing paragraph
+- **select last paragraph** / **select paragraph** — select trailing paragraph
+- **select previous paragraph** / **select prior paragraph** — progressive: from end select last; further step back (`ParagraphCursor.tla`)
 - **select first paragraph** / **select the first paragraph** / **highlight first paragraph** / **select 1st paragraph** — select first paragraph (← session then ⇧→ × n). Buffer unchanged
 - **select next paragraph** / **select forward paragraph** / **highlight next paragraph** — progressive: from end select second paragraph; further calls advance (collapse prior selection first). Buffer unchanged (`ParagraphCursor.tla`). Does **not** steal **select last paragraph**
 - **previous paragraph** / **go to previous paragraph** / **back a paragraph** — progressive move to previous paragraph start. Buffer unchanged (`ParagraphCursor.tla`)
 - **next paragraph** / **go to next paragraph** / **forward a paragraph** — progressive move to next paragraph start (from end = second). Buffer unchanged (`ParagraphCursor.tla`). Does **not** steal **select next paragraph**
-- **select last line** / **select previous line** / **select line** / **select this line** — select trailing line (content after last `\n`)
+- **select last line** / **select line** / **select this line** — select trailing line (content after last `\n`)
+- **select previous line** / **select prior line** — progressive: from end select last; further step back (`LineCursor.tla`)
 - **select first line** / **select the first line** / **highlight first line** / **select 1st line** — select first line (← session then ⇧→ × n; content before first `\n`). Buffer unchanged. Does **not** steal **select last line**
 - **select next line** / **select forward line** / **highlight next line** — progressive: from end select second line; further calls advance (`LineCursor.tla`). Buffer unchanged. Does **not** steal bare **next line** (move down) or **select last line**
+- **select previous N words** / **select next N words** — keyboard ⇧⌥←/→ × N (N ≥ 2)
+- **delete last N sentences** — peel last N trailing sentences (N ≥ 2)
 - **select all** — select all (⌘A)
 - **unselect that** / **deselect** / **clear selection** — collapse selection to end (→)
 - **bold that** / **make that bold** — select last phrase + bold (⌘B), then unselect

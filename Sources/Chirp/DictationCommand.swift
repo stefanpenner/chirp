@@ -96,24 +96,40 @@ enum DictationCommand: Equatable, Sendable {
     case deleteNextWord
     /// Delete previous word via ⇧⌥← then backspace. Keyboard-only; buffer unchanged.
     case deletePreviousWord
+    /// Select previous N words via ⇧⌥← × N. Keyboard-only; buffer unchanged.
+    case selectPreviousWords(count: Int)
+    /// Select next N words via ⇧⌥→ × N. Keyboard-only; buffer unchanged.
+    case selectNextWords(count: Int)
+    /// Delete previous N words via ⇧⌥← × N then backspace. Keyboard-only.
+    case deletePreviousWords(count: Int)
+    /// Delete next N words via ⇧⌥→ × N then backspace. Keyboard-only.
+    case deleteNextWords(count: Int)
+    /// Delete last N sentences from session buffer (N ≥ 2).
+    case deleteLastSentences(count: Int)
     /// Select the last sentence (after [.?!] + whitespace).
     case selectLastSentence
     /// Select the first sentence (before first [.?!] + whitespace).
     case selectFirstSentence
     /// Select the second sentence (session-relative "next"). Buffer unchanged.
     case selectNextSentence
+    /// Select previous sentence (progressive; from end = last). Buffer unchanged.
+    case selectPreviousSentence
     /// Select the last paragraph (after \n\n or \n).
     case selectLastParagraph
     /// Select the first paragraph (before first \n\n or \n).
     case selectFirstParagraph
     /// Select the second paragraph (session-relative "next"). Buffer unchanged.
     case selectNextParagraph
+    /// Select previous paragraph (progressive; from end = last). Buffer unchanged.
+    case selectPreviousParagraph
     /// Select the last line (after final \n).
     case selectLastLine
     /// Select the first line (before first \n).
     case selectFirstLine
     /// Select the next line (progressive). Buffer unchanged.
     case selectNextLine
+    /// Select previous line (progressive; from end = last). Buffer unchanged.
+    case selectPreviousLine
     /// Select all in the focused app (⌘A).
     case selectAll
     /// Collapse the current selection (right-arrow without shift).
@@ -169,31 +185,58 @@ enum DictationCommand: Equatable, Sendable {
         return .none
     }
 
-    /// Counted delete forms: "delete last two words", "delete previous 3 words".
-    /// Requires N ≥ 2 (single word stays `deleteLastWord`).
+    /// Counted forms: "delete last two words", "select previous 3 words", etc.
+    /// Requires N ≥ 2 for multi-unit peels (single stays uncounted case).
     private static func matchCounted(_ n: String) -> DictationCommand? {
-        // delete (last|previous|prior|the last|the previous) <num> words?
-        let pattern = #"^delete (?:the )?(?:last|previous|prior) (\d+|two|three|four|five|six|seven|eight|nine|ten) words?$"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)),
-              match.numberOfRanges >= 2,
-              let numRange = Range(match.range(at: 1), in: n) else {
-            return nil
+        let num = #"(\d+|two|three|four|five|six|seven|eight|nine|ten)"#
+        let specs: [(pattern: String, make: (Int) -> DictationCommand?)] = [
+            // Buffer peel: delete last/previous N words
+            (
+                #"^delete (?:the )?(?:last|previous|prior) "# + num + #" words?$"#,
+                { c in (2...20).contains(c) ? .deleteLastWords(count: c) : nil }
+            ),
+            // Buffer peel: delete last/previous N sentences
+            (
+                #"^delete (?:the )?(?:last|previous|prior) "# + num + #" sentences?$"#,
+                { c in (2...20).contains(c) ? .deleteLastSentences(count: c) : nil }
+            ),
+            // Keyboard: select previous/next N words
+            (
+                #"^select (?:the )?(?:previous|prior) "# + num + #" words?$"#,
+                { c in (2...20).contains(c) ? .selectPreviousWords(count: c) : nil }
+            ),
+            (
+                #"^select (?:the )?(?:next|forward) "# + num + #" words?$"#,
+                { c in (2...20).contains(c) ? .selectNextWords(count: c) : nil }
+            ),
+            // Keyboard: delete next N words only (previous N words = buffer peel above)
+            (
+                #"^delete (?:the )?(?:next|forward) "# + num + #" words?$"#,
+                { c in (2...20).contains(c) ? .deleteNextWords(count: c) : nil }
+            ),
+        ]
+
+        for spec in specs {
+            guard let regex = try? NSRegularExpression(pattern: spec.pattern),
+                  let match = regex.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)),
+                  match.numberOfRanges >= 2,
+                  let numRange = Range(match.range(at: 1), in: n),
+                  let count = parseCountToken(String(n[numRange])),
+                  let cmd = spec.make(count) else {
+                continue
+            }
+            return cmd
         }
-        let raw = String(n[numRange])
-        let count: Int
-        if let d = Int(raw) {
-            count = d
-        } else {
-            let words: [String: Int] = [
-                "two": 2, "three": 3, "four": 4, "five": 5,
-                "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
-            ]
-            guard let c = words[raw] else { return nil }
-            count = c
-        }
-        guard count >= 2, count <= 20 else { return nil }
-        return .deleteLastWords(count: count)
+        return nil
+    }
+
+    private static func parseCountToken(_ raw: String) -> Int? {
+        if let d = Int(raw) { return d }
+        let words: [String: Int] = [
+            "two": 2, "three": 3, "four": 4, "five": 5,
+            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        ]
+        return words[raw]
     }
 
     /// Build match candidates: raw normalize, then strip politeness fillers.
@@ -403,10 +446,13 @@ enum DictationCommand: Equatable, Sendable {
         case "delete previous word", "delete prior word",
              "remove previous word", "remove prior word":
             return .deletePreviousWord
-        case "select last sentence", "select previous sentence",
-             "select sentence", "highlight last sentence",
-             "highlight previous sentence", "highlight sentence":
+        case "select last sentence", "select sentence",
+             "highlight last sentence", "highlight sentence":
             return .selectLastSentence
+        // Progressive previous — from end lands on last; further steps walk back.
+        case "select previous sentence", "select prior sentence",
+             "highlight previous sentence", "highlight prior sentence":
+            return .selectPreviousSentence
         // "first" → "1st" via SpokenNumberITN before parse; match both.
         case "select first sentence", "select the first sentence",
              "select 1st sentence", "select the 1st sentence",
@@ -417,10 +463,12 @@ enum DictationCommand: Equatable, Sendable {
         case "select next sentence", "select forward sentence",
              "highlight next sentence", "highlight forward sentence":
             return .selectNextSentence
-        case "select last paragraph", "select previous paragraph",
-             "select paragraph", "highlight last paragraph",
-             "highlight previous paragraph", "highlight paragraph":
+        case "select last paragraph", "select paragraph",
+             "highlight last paragraph", "highlight paragraph":
             return .selectLastParagraph
+        case "select previous paragraph", "select prior paragraph",
+             "highlight previous paragraph", "highlight prior paragraph":
+            return .selectPreviousParagraph
         // "first" → "1st" via SpokenNumberITN before parse; match both.
         case "select first paragraph", "select the first paragraph",
              "select 1st paragraph", "select the 1st paragraph",
@@ -433,10 +481,12 @@ enum DictationCommand: Equatable, Sendable {
             return .selectNextParagraph
         // Select line — listed before move "previous line" so select wins on
         // full phrases; bare "previous line" is moveUpLine only.
-        case "select last line", "select previous line", "select line",
-             "select this line", "highlight last line", "highlight previous line",
-             "highlight line", "highlight this line":
+        case "select last line", "select line", "select this line",
+             "highlight last line", "highlight line", "highlight this line":
             return .selectLastLine
+        case "select previous line", "select prior line",
+             "highlight previous line", "highlight prior line":
+            return .selectPreviousLine
         // "first" → "1st" via SpokenNumberITN before parse; match both.
         case "select first line", "select the first line",
              "select 1st line", "select the 1st line",
@@ -559,17 +609,22 @@ enum DictationCommand: Equatable, Sendable {
         ("select next word / select forward word", "Select next word (⇧⌥→; keyboard only)"),
         ("select previous word / select prior word", "Select previous word (⇧⌥←; keyboard only)"),
         ("delete next word / delete forward word", "Delete next word (⇧⌥→ then ⌫; keyboard only)"),
-        ("select last sentence / previous sentence", "Select last sentence"),
+        ("select last sentence", "Select last sentence"),
+        ("select previous sentence / select prior sentence", "Select previous sentence (progressive)"),
         ("select first sentence / the first sentence", "Select first sentence"),
-        ("select next sentence / select forward sentence", "Select second sentence (session-relative)"),
-        ("select last paragraph / previous paragraph", "Select last paragraph"),
+        ("select next sentence / select forward sentence", "Select next sentence (progressive)"),
+        ("select last paragraph", "Select last paragraph"),
+        ("select previous paragraph / select prior paragraph", "Select previous paragraph (progressive)"),
         ("select first paragraph / the first paragraph", "Select first paragraph"),
         ("select next paragraph / select forward paragraph", "Select next paragraph (progressive)"),
         ("next paragraph / go to next paragraph", "Move to next paragraph start (progressive)"),
         ("previous paragraph / go to previous paragraph", "Move to previous paragraph start (progressive)"),
         ("select last line / select line", "Select last line"),
+        ("select previous line / select prior line", "Select previous line (progressive)"),
         ("select first line / the first line", "Select first line"),
         ("select next line / select forward line", "Select next line (progressive)"),
+        ("select previous two words / select next 3 words", "Select N words (keyboard)"),
+        ("delete last two sentences", "Remove last N sentences"),
         ("select all", "Select all (⌘A)"),
         ("unselect that / deselect", "Collapse selection (caret to end)"),
         ("bold that", "Select last phrase + bold (⌘B), then unselect"),

@@ -18,7 +18,7 @@ EXTENDS Integers, TLC
 VARIABLES
   lineCount,  \* number of lines in the session buffer
   index,      \* -1 = end; else 0-based line under caret
-  lastOp      \* "none" | "commit" | "next" | "delete"
+  lastOp      \* "none" | "commit" | "next" | "prev" | "delete"
 
 vars == <<lineCount, index, lastOp>>
 
@@ -27,7 +27,7 @@ MaxCount == 4
 TypeOK ==
   /\ lineCount \in 0..MaxCount
   /\ index \in -1..MaxCount
-  /\ lastOp \in {"none", "commit", "next", "delete"}
+  /\ lastOp \in {"none", "commit", "next", "prev", "delete"}
 
 IndexInRange ==
   \/ index = -1
@@ -56,6 +56,16 @@ NextLine ==
   /\ lastOp' = "next"
   /\ UNCHANGED lineCount
 
+\* Progressive prev: from end land on last line; else step back while > 0
+PrevLine ==
+  /\ lineCount >= 1
+  /\ IF index = -1
+     THEN index' = lineCount - 1
+     ELSE /\ index > 0
+          /\ index' = index - 1
+  /\ lastOp' = "prev"
+  /\ UNCHANGED lineCount
+
 DeleteNextLine ==
   /\ lineCount >= 2
   /\ IF index = -1
@@ -68,6 +78,7 @@ DeleteNextLine ==
 Next ==
   \/ Commit
   \/ NextLine
+  \/ PrevLine
   \/ DeleteNextLine
 
 Spec == Init /\ [][Next]_vars
@@ -76,6 +87,9 @@ Spec == Init /\ [][Next]_vars
 NextLandsInRange ==
   lastOp = "next" => (index >= 1 /\ index < lineCount)
 
+PrevLandsInRange ==
+  lastOp = "prev" => (index >= 0 /\ index < lineCount)
+
 CommitResetsToEnd ==
   lastOp \in {"commit", "delete"} => index = -1
 
@@ -83,6 +97,7 @@ Inv ==
   /\ TypeOK
   /\ IndexInRange
   /\ NextLandsInRange
+  /\ PrevLandsInRange
   /\ CommitResetsToEnd
 
 BaitInv == ~IndexInRange

@@ -795,24 +795,41 @@ public final class AppState {
                         self.performDeleteWord(direction: .right)
                     case .deletePreviousWord:
                         self.performDeleteWord(direction: .left)
+                    case .selectPreviousWords(let count):
+                        self.performSelectWords(direction: .left, count: count)
+                    case .selectNextWords(let count):
+                        self.performSelectWords(direction: .right, count: count)
+                    case .deletePreviousWords(let count):
+                        self.performDeleteWords(direction: .left, count: count)
+                    case .deleteNextWords(let count):
+                        self.performDeleteWords(direction: .right, count: count)
+                    case .deleteLastSentences(let count):
+                        self.awaitingReplace = false
+                        self.performDeleteLastSentences(count: count, typesIncrementally: false)
                     case .selectLastSentence:
                         self.performSelectLastSentence(typesIncrementally: false)
                     case .selectFirstSentence:
                         self.performSelectFirstSentence(typesIncrementally: false)
                     case .selectNextSentence:
                         self.performSelectNextSentence(typesIncrementally: false)
+                    case .selectPreviousSentence:
+                        self.performSelectPreviousSentence(typesIncrementally: false)
                     case .selectLastParagraph:
                         self.performSelectLastParagraph(typesIncrementally: false)
                     case .selectFirstParagraph:
                         self.performSelectFirstParagraph(typesIncrementally: false)
                     case .selectNextParagraph:
                         self.performSelectNextParagraph(typesIncrementally: false)
+                    case .selectPreviousParagraph:
+                        self.performSelectPreviousParagraph(typesIncrementally: false)
                     case .selectLastLine:
                         self.performSelectLastLine(typesIncrementally: false)
                     case .selectFirstLine:
                         self.performSelectFirstLine(typesIncrementally: false)
                     case .selectNextLine:
                         self.performSelectNextLine(typesIncrementally: false)
+                    case .selectPreviousLine:
+                        self.performSelectPreviousLine(typesIncrementally: false)
                     case .selectAll:
                         self.performSelectAll(typesIncrementally: false)
                     case .unselectThat:
@@ -1004,24 +1021,41 @@ public final class AppState {
             performDeleteWord(direction: .right)
         case .deletePreviousWord:
             performDeleteWord(direction: .left)
+        case .selectPreviousWords(let count):
+            performSelectWords(direction: .left, count: count)
+        case .selectNextWords(let count):
+            performSelectWords(direction: .right, count: count)
+        case .deletePreviousWords(let count):
+            performDeleteWords(direction: .left, count: count)
+        case .deleteNextWords(let count):
+            performDeleteWords(direction: .right, count: count)
+        case .deleteLastSentences(let count):
+            awaitingReplace = false
+            performDeleteLastSentences(count: count, typesIncrementally: typesIncrementally)
         case .selectLastSentence:
             performSelectLastSentence(typesIncrementally: typesIncrementally)
         case .selectFirstSentence:
             performSelectFirstSentence(typesIncrementally: typesIncrementally)
         case .selectNextSentence:
             performSelectNextSentence(typesIncrementally: typesIncrementally)
+        case .selectPreviousSentence:
+            performSelectPreviousSentence(typesIncrementally: typesIncrementally)
         case .selectLastParagraph:
             performSelectLastParagraph(typesIncrementally: typesIncrementally)
         case .selectFirstParagraph:
             performSelectFirstParagraph(typesIncrementally: typesIncrementally)
         case .selectNextParagraph:
             performSelectNextParagraph(typesIncrementally: typesIncrementally)
+        case .selectPreviousParagraph:
+            performSelectPreviousParagraph(typesIncrementally: typesIncrementally)
         case .selectLastLine:
             performSelectLastLine(typesIncrementally: typesIncrementally)
         case .selectFirstLine:
             performSelectFirstLine(typesIncrementally: typesIncrementally)
         case .selectNextLine:
             performSelectNextLine(typesIncrementally: typesIncrementally)
+        case .selectPreviousLine:
+            performSelectPreviousLine(typesIncrementally: typesIncrementally)
         case .selectAll:
             performSelectAll(typesIncrementally: typesIncrementally)
         case .unselectThat:
@@ -1578,9 +1612,26 @@ public final class AppState {
         textInserter.selectWord(direction: direction)
     }
 
+    /// Select N words in direction (⇧⌥←/→ × N). Keyboard-only; buffer unchanged.
+    private func performSelectWords(direction: MoveDirection, count: Int) {
+        guard count > 0 else { return }
+        for _ in 0..<count {
+            textInserter.selectWord(direction: direction)
+        }
+    }
+
     /// Delete one word via select then backspace. Buffer unchanged — caret-relative.
     private func performDeleteWord(direction: MoveDirection) {
         textInserter.deleteWord(direction: direction)
+    }
+
+    /// Delete N words in direction (select × N then backspace). Keyboard-only.
+    private func performDeleteWords(direction: MoveDirection, count: Int) {
+        guard count > 0 else { return }
+        for _ in 0..<count {
+            textInserter.selectWord(direction: direction)
+        }
+        textInserter.deleteBackward(count: 1)
     }
 
     /// Select the last whitespace-delimited word. Buffer unchanged.
@@ -1668,6 +1719,91 @@ public final class AppState {
         textInserter.selectForward(count: range.end - range.start)
         sentenceNavIndex = next
         sentenceSelectionActive = true
+    }
+
+    /// Select previous sentence (progressive). From end: last; further step back.
+    private func performSelectPreviousSentence(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let text = transcribedText
+        let ranges = TranscriptSelection.sentenceRanges(text)
+        guard !ranges.isEmpty else { return }
+        let next: Int
+        if sentenceNavIndex == nil {
+            next = ranges.count - 1
+        } else if let idx = sentenceNavIndex, idx > 0 {
+            next = idx - 1
+        } else {
+            return
+        }
+        let range = ranges[next]
+        moveToSessionOffset(range.start)
+        textInserter.selectForward(count: range.end - range.start)
+        sentenceNavIndex = next
+        sentenceSelectionActive = true
+    }
+
+    /// Delete last N sentences (trailing peel). N ≥ 1.
+    private func performDeleteLastSentences(count: Int, typesIncrementally: Bool) {
+        guard count > 0 else { return }
+        let original = transcribedText
+        for _ in 0..<count {
+            let selected = TranscriptSelection.lastSentence(transcribedText)
+            guard !selected.isEmpty else { break }
+            let before = transcribedText
+            // Buffer-only peels; one keyboard delete for total at end.
+            performDeleteTrailingSelection(selected: selected, typesIncrementally: false)
+            if transcribedText == before { break }
+        }
+        let remove = original.count - transcribedText.count
+        guard remove > 0 else { return }
+        if typesIncrementally {
+            textInserter.deleteBackward(count: remove)
+        }
+        lastCommittedNormalized = ""
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+    }
+
+    /// Select previous paragraph (progressive). From end: last; further step back.
+    private func performSelectPreviousParagraph(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let text = transcribedText
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        guard !ranges.isEmpty else { return }
+        let next: Int
+        if paragraphNavIndex == nil {
+            next = ranges.count - 1
+        } else if let idx = paragraphNavIndex, idx > 0 {
+            next = idx - 1
+        } else {
+            return
+        }
+        let range = ranges[next]
+        moveToParagraphOffset(range.start)
+        textInserter.selectForward(count: range.end - range.start)
+        paragraphNavIndex = next
+        paragraphSelectionActive = true
+    }
+
+    /// Select previous line (progressive). From end: last; further step back.
+    private func performSelectPreviousLine(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let text = transcribedText
+        let ranges = TranscriptSelection.lineRanges(text)
+        guard !ranges.isEmpty else { return }
+        let next: Int
+        if lineNavIndex == nil {
+            next = ranges.count - 1
+        } else if let idx = lineNavIndex, idx > 0 {
+            next = idx - 1
+        } else {
+            return
+        }
+        let range = ranges[next]
+        moveToLineOffset(range.start)
+        textInserter.selectForward(count: range.end - range.start)
+        lineNavIndex = next
+        lineSelectionActive = true
     }
 
     /// Delete the next sentence (progressive). From end: second sentence; further
