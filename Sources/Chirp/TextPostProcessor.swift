@@ -177,12 +177,28 @@ enum TextPostProcessor {
             (#"\s+degree sign\b"#, "°"),
             // Degrees after numbers: handled in applyUnitsITN (after SpokenNumberITN)
             // so multi-word compounds ("seventy two degrees") become digits first.
-            // Common fractions
+            // Common fractions (unicode glyphs)
             (#"\bone half\b"#, "½"),
             (#"\bone quarter\b"#, "¼"),
             (#"\bthree quarters\b"#, "¾"),
             (#"\bone third\b"#, "⅓"),
             (#"\btwo thirds\b"#, "⅔"),
+            (#"\bone fifth\b"#, "⅕"),
+            (#"\btwo fifths\b"#, "⅖"),
+            (#"\bthree fifths\b"#, "⅗"),
+            (#"\bfour fifths\b"#, "⅘"),
+            (#"\bone sixth\b"#, "⅙"),
+            (#"\bfive sixths\b"#, "⅚"),
+            (#"\bone eighth\b"#, "⅛"),
+            (#"\bthree eighths\b"#, "⅜"),
+            (#"\bfive eighths\b"#, "⅝"),
+            (#"\bseven eighths\b"#, "⅞"),
+            // Mixed numbers
+            (#"\btwo and a half\b"#, "2½"),
+            (#"\bthree and a half\b"#, "3½"),
+            (#"\bfour and a half\b"#, "4½"),
+            (#"\bfive and a half\b"#, "5½"),
+            (#"\bone and a half\b"#, "1½"),
             // Spoken web/domain fragments (email "local at host dots" handled in applySpokenEmail)
             (#"\s+dot com\b"#, ".com"),
             (#"\s+dot org\b"#, ".org"),

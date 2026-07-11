@@ -214,6 +214,47 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("delete word") == .deleteLastWord)
     }
 
+    @Test("recognizes delete previous word (keyboard)")
+    func deletePreviousWord() {
+        #expect(DictationCommand.parse("delete previous word") == .deletePreviousWord)
+        #expect(DictationCommand.parse("delete prior word") == .deletePreviousWord)
+        #expect(DictationCommand.parse("remove previous word") == .deletePreviousWord)
+        #expect(DictationCommand.parse("Delete previous word.") == .deletePreviousWord)
+        #expect(DictationCommand.parse("please delete prior word") == .deletePreviousWord)
+        // Does not steal delete last / delete previous sentence
+        #expect(DictationCommand.parse("delete last word") == .deleteLastWord)
+        #expect(DictationCommand.parse("delete previous sentence") == .deleteLastSentence)
+    }
+
+    @Test("recognizes delete last N words")
+    func deleteLastWordsCounted() {
+        #expect(DictationCommand.parse("delete last two words") == .deleteLastWords(count: 2))
+        #expect(DictationCommand.parse("delete previous three words") == .deleteLastWords(count: 3))
+        #expect(DictationCommand.parse("delete last 5 words") == .deleteLastWords(count: 5))
+        #expect(DictationCommand.parse("delete the last four words") == .deleteLastWords(count: 4))
+        #expect(DictationCommand.parse("delete prior 2 words") == .deleteLastWords(count: 2))
+        #expect(DictationCommand.parse("please delete last two words") == .deleteLastWords(count: 2))
+        // Single word stays deleteLastWord
+        #expect(DictationCommand.parse("delete last word") == .deleteLastWord)
+        #expect(DictationCommand.parse("delete last 1 words") == .none)
+    }
+
+    @Test("recognizes delete first sentence/paragraph/line")
+    func deleteFirstSegmentCommands() {
+        #expect(DictationCommand.parse("delete first sentence") == .deleteFirstSentence)
+        #expect(DictationCommand.parse("delete the first sentence") == .deleteFirstSentence)
+        #expect(DictationCommand.parse("delete 1st sentence") == .deleteFirstSentence)
+        #expect(DictationCommand.parse("delete first paragraph") == .deleteFirstParagraph)
+        #expect(DictationCommand.parse("delete the first paragraph") == .deleteFirstParagraph)
+        #expect(DictationCommand.parse("delete first line") == .deleteFirstLine)
+        #expect(DictationCommand.parse("delete the first line") == .deleteFirstLine)
+        #expect(DictationCommand.parse("delete 1st line") == .deleteFirstLine)
+        // last forms stay last
+        #expect(DictationCommand.parse("delete last sentence") == .deleteLastSentence)
+        #expect(DictationCommand.parse("delete last paragraph") == .deleteLastParagraph)
+        #expect(DictationCommand.parse("delete last line") == .deleteLastLine)
+    }
+
     @Test("recognizes insert date / insert time")
     func insertDateTime() {
         #expect(DictationCommand.parse("insert date") == .insertDate)

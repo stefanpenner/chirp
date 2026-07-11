@@ -145,10 +145,15 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **replace that** — next phrase replaces last (text stays until then; HUD “Replace…”)
 - **redo that** — restore last scratched / word-deleted segment
 - **delete last word** — drop trailing word (stack-aware; redo restores)
+- **delete last two words** / **delete previous 3 words** / **delete the last four words** — drop last N words (N ≥ 2; spoken or digits)
+- **delete previous word** / **delete prior word** — delete previous word (⇧⌥← then ⌫; keyboard only; buffer unchanged). Does **not** steal **delete last word** or **delete previous sentence**
 - **delete last sentence** / **delete previous sentence** / **delete sentence** — drop trailing sentence (stack-aware; redo restores). Does **not** steal **delete last word** or **delete that**
+- **delete first sentence** / **delete the first sentence** — drop first sentence (+ separator). Does **not** steal **delete last sentence**
 - **delete last paragraph** / **delete previous paragraph** / **delete paragraph** — drop trailing paragraph (stack-aware; redo restores)
+- **delete first paragraph** / **delete the first paragraph** — drop first paragraph (+ separator)
 - **delete next paragraph** / **delete forward paragraph** — progressive: remove next paragraph from session cursor (from end = second). Trailing peel stack-aware; middle surgery clears stack. Resets paragraph nav index. Does **not** steal **delete last paragraph**
 - **delete last line** / **delete previous line** / **delete line** — drop trailing line content after last `\n` (stack-aware; redo restores). Trailing empty line (`…\n`) peels the newline (not a no-op)
+- **delete first line** / **delete the first line** — drop first line (+ newline)
 - **delete next line** / **delete forward line** — progressive: remove next line from session cursor (from end = second). Does **not** steal **delete last line**
 - **caps on / all caps on / no caps on** — sticky casing (`CapsMode`)
 - **caps off** — back to normal casing

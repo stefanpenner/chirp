@@ -676,6 +676,9 @@ public final class AppState {
                     case .deleteLastWord:
                         self.awaitingReplace = false
                         self.performDeleteLastWord(typesIncrementally: false)
+                    case .deleteLastWords(let count):
+                        self.awaitingReplace = false
+                        self.performDeleteLastWords(count: count, typesIncrementally: false)
                     case .deleteLastSentence:
                         self.awaitingReplace = false
                         self.performDeleteTrailingSelection(
@@ -685,6 +688,9 @@ public final class AppState {
                     case .deleteNextSentence:
                         self.awaitingReplace = false
                         self.performDeleteNextSentence(typesIncrementally: false)
+                    case .deleteFirstSentence:
+                        self.awaitingReplace = false
+                        self.performDeleteFirstSentence(typesIncrementally: false)
                     case .deleteLastParagraph:
                         self.awaitingReplace = false
                         self.performDeleteTrailingSelection(
@@ -694,6 +700,9 @@ public final class AppState {
                     case .deleteNextParagraph:
                         self.awaitingReplace = false
                         self.performDeleteNextParagraph(typesIncrementally: false)
+                    case .deleteFirstParagraph:
+                        self.awaitingReplace = false
+                        self.performDeleteFirstParagraph(typesIncrementally: false)
                     case .deleteLastLine:
                         self.awaitingReplace = false
                         self.performDeleteTrailingSelection(
@@ -703,6 +712,9 @@ public final class AppState {
                     case .deleteNextLine:
                         self.awaitingReplace = false
                         self.performDeleteNextLine(typesIncrementally: false)
+                    case .deleteFirstLine:
+                        self.awaitingReplace = false
+                        self.performDeleteFirstLine(typesIncrementally: false)
                     case .clearAll:
                         self.awaitingReplace = false
                         self.performClearAll(typesIncrementally: false)
@@ -781,6 +793,8 @@ public final class AppState {
                         self.performSelectWord(direction: .left)
                     case .deleteNextWord:
                         self.performDeleteWord(direction: .right)
+                    case .deletePreviousWord:
+                        self.performDeleteWord(direction: .left)
                     case .selectLastSentence:
                         self.performSelectLastSentence(typesIncrementally: false)
                     case .selectFirstSentence:
@@ -886,12 +900,18 @@ public final class AppState {
         case .deleteLastWord:
             awaitingReplace = false
             performDeleteLastWord(typesIncrementally: typesIncrementally)
+        case .deleteLastWords(let count):
+            awaitingReplace = false
+            performDeleteLastWords(count: count, typesIncrementally: typesIncrementally)
         case .deleteLastSentence:
             awaitingReplace = false
             performDeleteTrailingSelection(
                 selected: TranscriptSelection.lastSentence(transcribedText),
                 typesIncrementally: typesIncrementally
             )
+        case .deleteFirstSentence:
+            awaitingReplace = false
+            performDeleteFirstSentence(typesIncrementally: typesIncrementally)
         case .deleteNextSentence:
             awaitingReplace = false
             performDeleteNextSentence(typesIncrementally: typesIncrementally)
@@ -901,6 +921,9 @@ public final class AppState {
                 selected: TranscriptSelection.lastParagraph(transcribedText),
                 typesIncrementally: typesIncrementally
             )
+        case .deleteFirstParagraph:
+            awaitingReplace = false
+            performDeleteFirstParagraph(typesIncrementally: typesIncrementally)
         case .deleteNextParagraph:
             awaitingReplace = false
             performDeleteNextParagraph(typesIncrementally: typesIncrementally)
@@ -910,6 +933,9 @@ public final class AppState {
                 selected: TranscriptSelection.lastLine(transcribedText),
                 typesIncrementally: typesIncrementally
             )
+        case .deleteFirstLine:
+            awaitingReplace = false
+            performDeleteFirstLine(typesIncrementally: typesIncrementally)
         case .deleteNextLine:
             awaitingReplace = false
             performDeleteNextLine(typesIncrementally: typesIncrementally)
@@ -976,6 +1002,8 @@ public final class AppState {
             performSelectWord(direction: .left)
         case .deleteNextWord:
             performDeleteWord(direction: .right)
+        case .deletePreviousWord:
+            performDeleteWord(direction: .left)
         case .selectLastSentence:
             performSelectLastSentence(typesIncrementally: typesIncrementally)
         case .selectFirstSentence:
@@ -1340,30 +1368,40 @@ public final class AppState {
     /// Prefers adjusting EditStack so prior segments remain undoable and
     /// "redo that" can restore the deleted word.
     private func performDeleteLastWord(typesIncrementally: Bool) {
-        let trimmed = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        performDeleteLastWords(count: 1, typesIncrementally: typesIncrementally)
+    }
 
-        // Drop trailing spaces from buffer, then the last word
+    /// Delete the last `count` whitespace-delimited words (session buffer).
+    private func performDeleteLastWords(count: Int, typesIncrementally: Bool) {
+        guard count > 0 else { return }
+        let original = transcribedText
+        for _ in 0..<count {
+            guard !transcribedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { break }
+            peelOneTrailingWordFromBuffer()
+        }
+        let remove = original.count - transcribedText.count
+        guard remove > 0 else { return }
+        if typesIncrementally {
+            textInserter.deleteBackward(count: remove)
+        }
+        let removed = String(original.suffix(remove))
+        if !editStack.dropTrailingSuffix(removed) {
+            editStack.clear()
+        }
+        lastCommittedNormalized = ""
+    }
+
+    /// Peel one trailing word (+ leading space) from `transcribedText` only.
+    private func peelOneTrailingWordFromBuffer() {
         var buffer = transcribedText
         while buffer.last?.isWhitespace == true {
             buffer.removeLast()
         }
         guard let lastSpace = buffer.lastIndex(where: { $0.isWhitespace }) else {
-            // Single word — clear all
-            let remove = transcribedText.count
-            let removed = transcribedText
             transcribedText = ""
-            if typesIncrementally, remove > 0 {
-                textInserter.deleteBackward(count: remove)
-            }
-            if !editStack.dropTrailingSuffix(removed) {
-                editStack.clear()
-            }
-            lastCommittedNormalized = ""
             return
         }
         let wordStart = buffer.index(after: lastSpace)
-        // Also remove one trailing space before the word if present
         var start = wordStart
         if start > transcribedText.startIndex {
             let before = transcribedText.index(before: start)
@@ -1371,17 +1409,69 @@ public final class AppState {
                 start = before
             }
         }
-        let removed = String(transcribedText[start...])
-        let remove = removed.count
         transcribedText = String(transcribedText[..<start])
-        if typesIncrementally, remove > 0 {
-            textInserter.deleteBackward(count: remove)
+    }
+
+    /// Delete the first sentence (and separator before the second). Resets nav.
+    private func performDeleteFirstSentence(typesIncrementally: Bool) {
+        let text = transcribedText
+        let ranges = TranscriptSelection.sentenceRanges(text)
+        guard !ranges.isEmpty else { return }
+        if ranges.count == 1 {
+            performClearAll(typesIncrementally: typesIncrementally)
+            return
         }
-        // Keep multi-level undo when stack explains the deleted suffix
-        if !editStack.dropTrailingSuffix(removed) {
-            editStack.clear()
+        let keepStart = ranges[1].start
+        performDeletePrefix(through: keepStart, typesIncrementally: typesIncrementally)
+    }
+
+    /// Delete the first paragraph (and separator before the second). Resets nav.
+    private func performDeleteFirstParagraph(typesIncrementally: Bool) {
+        let text = transcribedText
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        guard !ranges.isEmpty else { return }
+        if ranges.count == 1 {
+            performClearAll(typesIncrementally: typesIncrementally)
+            return
         }
+        let keepStart = ranges[1].start
+        performDeletePrefix(through: keepStart, typesIncrementally: typesIncrementally)
+    }
+
+    /// Delete the first line (and newline before the second). Resets nav.
+    private func performDeleteFirstLine(typesIncrementally: Bool) {
+        let text = transcribedText
+        let ranges = TranscriptSelection.lineRanges(text)
+        guard !ranges.isEmpty else { return }
+        if ranges.count == 1 {
+            performClearAll(typesIncrementally: typesIncrementally)
+            return
+        }
+        let keepStart = ranges[1].start
+        performDeletePrefix(through: keepStart, typesIncrementally: typesIncrementally)
+    }
+
+    /// Remove buffer prefix `[0, through)` and type-delete when incremental.
+    private func performDeletePrefix(through keepStart: Int, typesIncrementally: Bool) {
+        let text = transcribedText
+        guard keepStart > 0, keepStart <= text.count else { return }
+        let keepIdx = text.index(text.startIndex, offsetBy: keepStart)
+        let newText = String(text[keepIdx...])
+        if typesIncrementally {
+            // From end: go to start, select prefix, delete.
+            textInserter.moveBackward(count: text.count)
+            textInserter.selectForward(count: keepStart)
+            textInserter.deleteBackward(count: 1)
+        }
+        transcribedText = newText
+        editStack.clear()
         lastCommittedNormalized = ""
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Clear the entire session transcript (spoken "clear all").

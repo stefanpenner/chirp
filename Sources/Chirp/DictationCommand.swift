@@ -12,16 +12,24 @@ enum DictationCommand: Equatable, Sendable {
     case replaceThat
     /// Delete the last whitespace-delimited word.
     case deleteLastWord
+    /// Delete the last N whitespace-delimited words (N ≥ 2).
+    case deleteLastWords(count: Int)
     /// Delete the last sentence (after [.?!] + whitespace).
     case deleteLastSentence
+    /// Delete the first sentence.
+    case deleteFirstSentence
     /// Delete the second sentence (session-relative "next"). Does not steal delete last/previous.
     case deleteNextSentence
     /// Delete the last paragraph (after \n\n or \n).
     case deleteLastParagraph
+    /// Delete the first paragraph.
+    case deleteFirstParagraph
     /// Delete the next paragraph (progressive). Does not steal delete last/previous.
     case deleteNextParagraph
     /// Delete the last line (after final \n).
     case deleteLastLine
+    /// Delete the first line.
+    case deleteFirstLine
     /// Delete the next line (progressive). Does not steal delete last/previous.
     case deleteNextLine
     /// Clear the entire session transcript and typed text.
@@ -86,6 +94,8 @@ enum DictationCommand: Equatable, Sendable {
     case selectPreviousWord
     /// Delete next word via ⇧⌥→ then backspace. Keyboard-only; buffer unchanged.
     case deleteNextWord
+    /// Delete previous word via ⇧⌥← then backspace. Keyboard-only; buffer unchanged.
+    case deletePreviousWord
     /// Select the last sentence (after [.?!] + whitespace).
     case selectLastSentence
     /// Select the first sentence (before first [.?!] + whitespace).
@@ -152,8 +162,38 @@ enum DictationCommand: Equatable, Sendable {
             if let cmd = matchExact(candidate) {
                 return cmd
             }
+            if let cmd = matchCounted(candidate) {
+                return cmd
+            }
         }
         return .none
+    }
+
+    /// Counted delete forms: "delete last two words", "delete previous 3 words".
+    /// Requires N ≥ 2 (single word stays `deleteLastWord`).
+    private static func matchCounted(_ n: String) -> DictationCommand? {
+        // delete (last|previous|prior|the last|the previous) <num> words?
+        let pattern = #"^delete (?:the )?(?:last|previous|prior) (\d+|two|three|four|five|six|seven|eight|nine|ten) words?$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)),
+              match.numberOfRanges >= 2,
+              let numRange = Range(match.range(at: 1), in: n) else {
+            return nil
+        }
+        let raw = String(n[numRange])
+        let count: Int
+        if let d = Int(raw) {
+            count = d
+        } else {
+            let words: [String: Int] = [
+                "two": 2, "three": 3, "four": 4, "five": 5,
+                "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+            ]
+            guard let c = words[raw] else { return nil }
+            count = c
+        }
+        guard count >= 2, count <= 20 else { return nil }
+        return .deleteLastWords(count: count)
     }
 
     /// Build match candidates: raw normalize, then strip politeness fillers.
@@ -218,6 +258,10 @@ enum DictationCommand: Equatable, Sendable {
         case "delete last sentence", "delete previous sentence", "delete sentence",
              "remove last sentence", "remove previous sentence", "remove sentence":
             return .deleteLastSentence
+        case "delete first sentence", "delete the first sentence",
+             "remove first sentence", "remove the first sentence",
+             "delete 1st sentence", "delete the 1st sentence":
+            return .deleteFirstSentence
         // Do not steal "delete last sentence" / "delete previous sentence".
         case "delete next sentence", "delete forward sentence",
              "remove next sentence", "remove forward sentence":
@@ -225,6 +269,10 @@ enum DictationCommand: Equatable, Sendable {
         case "delete last paragraph", "delete previous paragraph", "delete paragraph",
              "remove last paragraph", "remove previous paragraph", "remove paragraph":
             return .deleteLastParagraph
+        case "delete first paragraph", "delete the first paragraph",
+             "remove first paragraph", "remove the first paragraph",
+             "delete 1st paragraph", "delete the 1st paragraph":
+            return .deleteFirstParagraph
         // Do not steal "delete last paragraph" / "delete previous paragraph".
         case "delete next paragraph", "delete forward paragraph",
              "remove next paragraph", "remove forward paragraph":
@@ -232,6 +280,10 @@ enum DictationCommand: Equatable, Sendable {
         case "delete last line", "delete previous line", "delete line",
              "remove last line", "remove previous line", "remove line":
             return .deleteLastLine
+        case "delete first line", "delete the first line",
+             "remove first line", "remove the first line",
+             "delete 1st line", "delete the 1st line":
+            return .deleteFirstLine
         // Do not steal "delete last line" / "delete previous line".
         case "delete next line", "delete forward line",
              "remove next line", "remove forward line":
@@ -347,6 +399,10 @@ enum DictationCommand: Equatable, Sendable {
         case "delete next word", "delete forward word",
              "remove next word", "remove forward word":
             return .deleteNextWord
+        // Keyboard delete previous word — do not steal "delete last word" / "delete previous sentence".
+        case "delete previous word", "delete prior word",
+             "remove previous word", "remove prior word":
+            return .deletePreviousWord
         case "select last sentence", "select previous sentence",
              "select sentence", "highlight last sentence",
              "highlight previous sentence", "highlight sentence":
@@ -460,11 +516,16 @@ enum DictationCommand: Equatable, Sendable {
         ("replace that", "Next phrase replaces last (multi-step)"),
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
+        ("delete last two words / delete previous 3 words", "Remove last N words"),
+        ("delete previous word / delete prior word", "Delete previous word (⇧⌥← then ⌫; keyboard only)"),
         ("delete last sentence / previous sentence", "Remove last sentence"),
+        ("delete first sentence", "Remove first sentence"),
         ("delete next sentence / delete forward sentence", "Remove second sentence (session-relative)"),
         ("delete last paragraph / previous paragraph", "Remove last paragraph"),
+        ("delete first paragraph", "Remove first paragraph"),
         ("delete next paragraph / delete forward paragraph", "Remove next paragraph (progressive)"),
         ("delete last line / delete line", "Remove last line"),
+        ("delete first line", "Remove first line"),
         ("delete next line / delete forward line", "Remove next line (progressive)"),
         ("clear all", "Wipe session text"),
         ("press enter", "Insert Return"),

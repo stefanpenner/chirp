@@ -313,6 +313,10 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("a plus sign b").contains("+"))
         #expect(TextPostProcessor.process("x equals sign y").contains("="))
         #expect(TextPostProcessor.process("one half cup").contains("½"))
+        #expect(TextPostProcessor.process("one fifth cup").contains("⅕"))
+        #expect(TextPostProcessor.process("three eighths").contains("⅜"))
+        #expect(TextPostProcessor.process("two and a half cups").contains("2½"))
+        #expect(TextPostProcessor.process("one and a half") == "1½" || TextPostProcessor.process("one and a half").contains("1½"))
         #expect(TextPostProcessor.process("site dot edu") == "site.edu")
         // Tilde at start of string (path prefix) and mid-phrase
         #expect(TextPostProcessor.process("tilde") == "~")
