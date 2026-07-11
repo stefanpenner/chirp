@@ -545,6 +545,36 @@ struct DictationCommandTests {
         )
     }
 
+    @Test("line caret offsets for multi-line buffer")
+    func lineCaretOffsets() {
+        let t = "Hello\nWorld\nFoo"
+        // lines: Hello 0..5, World 6..11, Foo 12..15
+        #expect(TranscriptSelection.lineIndexContaining(0, ranges: TranscriptSelection.lineRanges(t)) == 0)
+        #expect(TranscriptSelection.lineIndexContaining(5, ranges: TranscriptSelection.lineRanges(t)) == 0)
+        #expect(TranscriptSelection.lineIndexContaining(6, ranges: TranscriptSelection.lineRanges(t)) == 1)
+        #expect(TranscriptSelection.lineIndexContaining(15, ranges: TranscriptSelection.lineRanges(t)) == 2)
+
+        #expect(TranscriptSelection.offsetAtLineStart(t, caret: nil) == 12) // last line
+        #expect(TranscriptSelection.offsetAtLineEnd(t, caret: nil) == 15)
+        #expect(TranscriptSelection.offsetAtLineStart(t, caret: 8) == 6)
+        #expect(TranscriptSelection.offsetAtLineEnd(t, caret: 8) == 11)
+
+        // Up from end of Foo (col 3) → World col 3 → offset 9
+        #expect(
+            TranscriptSelection.offsetAfterLineMove(t, caret: nil, up: true, count: 1) == 9
+                || TranscriptSelection.offsetAfterLineMove(t, caret: 15, up: true, count: 1) == 9
+        )
+        // Down from start of Hello → start of World
+        #expect(
+            TranscriptSelection.offsetAfterLineMove(t, caret: 0, up: false, count: 1) == 6
+        )
+        // Doc edges
+        #expect(TranscriptSelection.offsetAtLineStart(t, caret: 0) == 0)
+        #expect(
+            TranscriptSelection.offsetAfterLineMove(t, caret: 0, up: true, count: 1) == 0
+        )
+    }
+
     @Test("offsetAfterWordMove steps whitespace words left and right")
     func offsetAfterWordMove() {
         let t = "one two three four"

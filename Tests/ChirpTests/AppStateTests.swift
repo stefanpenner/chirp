@@ -3898,6 +3898,102 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("end of line"))
     }
 
+    @Test("beginning of document then content inserts at start (sessionCaret dual)")
+    func documentStartThenContentInsertsMid() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("hello") { break }
+        }
+
+        await mock.setFeedAudioResult(["beginning of document"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveToDocumentStartCalled { break }
+        }
+        #expect(inserter.moveToDocumentStartCalled)
+
+        await mock.setFeedAudioResult(["XX"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("XX") || state.transcribedText.contains("xx") { break }
+        }
+
+        let after = state.transcribedText
+        // Must insert at document start — not pure trailing append only.
+        #expect(
+            after.hasPrefix("XX") || after.hasPrefix("Xx") || after.hasPrefix("xx")
+                || after.lowercased().hasPrefix("xx"),
+            "content at doc start, got \"\(after)\""
+        )
+        #expect(after.lowercased().contains("hello"))
+        #expect(!inserter.typedTexts.contains("beginning of document"))
+    }
+
+    @Test("go to start of multi-line then content inserts at line start")
+    func lineStartThenContentInsertsMid() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Line one\nLine two"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("\n") { break }
+        }
+
+        // From end of second line, go to start of that line, insert YY
+        await mock.setFeedAudioResult(["go to start"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveToLineStartCalled { break }
+        }
+        #expect(inserter.moveToLineStartCalled)
+
+        await mock.setFeedAudioResult(["YY"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("YY") || state.transcribedText.contains("yy") { break }
+        }
+
+        let after = state.transcribedText
+        #expect(after.contains("Line one"), "first line kept, got \"\(after)\"")
+        // YY should sit on second line (not only as trailing " YY" after whole buffer with no mid dual)
+        let lines = after.split(separator: "\n", omittingEmptySubsequences: false)
+        #expect(lines.count >= 2, "still multi-line, got \"\(after)\"")
+        if lines.count >= 2 {
+            let second = String(lines[1]).lowercased()
+            #expect(
+                second.contains("yy"),
+                "insert on second line after go to start, got \"\(after)\""
+            )
+        }
+    }
+
     @Test("move up / down line moves cursor without changing buffer")
     func moveUpDownLineCommands() async throws {
         let mock = MockTranscriber()

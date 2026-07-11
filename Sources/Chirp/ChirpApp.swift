@@ -550,6 +550,15 @@ public final class AppState {
             lastCommittedNormalized = ""
             sessionSelection = nil
             sessionCaret = nil
+            // Progressive nav is invalid after a trailing rewrite.
+            sentenceNavIndex = nil
+            sentenceSelectionActive = false
+            paragraphNavIndex = nil
+            paragraphSelectionActive = false
+            lineNavIndex = nil
+            lineSelectionActive = false
+            wordNavIndex = nil
+            wordSelectionActive = false
 
         case .fullBuffer(let old):
             guard cleaned != old else { return }
@@ -2989,29 +2998,62 @@ public final class AppState {
         lineSelectionActive = false
     }
 
-    /// Move cursor one line (↑ / ↓). Buffer unchanged — cursor only.
+    /// Move cursor one line (↑ / ↓). Buffer unchanged; sets sessionCaret for mid-insert.
+    /// Dual of TranscriptSelection.offsetAfterLineMove + LineCaret.tla.
     private func performMoveLine(direction: MoveDirection) {
         textInserter.moveLine(direction: direction)
+        let to = TranscriptSelection.offsetAfterLineMove(
+            transcribedText,
+            caret: sessionCaret,
+            up: direction == .up,
+            count: 1
+        )
+        setSessionCaret(to)
+        clearUnitNavAfterLineOrDocMove()
     }
 
-    /// Move cursor to line start (⌘←). Buffer unchanged.
+    /// Move cursor to line start (⌘←). Buffer unchanged; sets sessionCaret.
+    /// Dual of TranscriptSelection.offsetAtLineStart + LineCaret.tla.
     private func performMoveToLineStart() {
         textInserter.moveToLineStart()
+        let to = TranscriptSelection.offsetAtLineStart(transcribedText, caret: sessionCaret)
+        setSessionCaret(to)
+        clearUnitNavAfterLineOrDocMove()
     }
 
-    /// Move cursor to line end (⌘→). Buffer unchanged.
+    /// Move cursor to line end (⌘→). Buffer unchanged; sets sessionCaret.
+    /// Dual of TranscriptSelection.offsetAtLineEnd + LineCaret.tla.
     private func performMoveToLineEnd() {
         textInserter.moveToLineEnd()
+        let to = TranscriptSelection.offsetAtLineEnd(transcribedText, caret: sessionCaret)
+        setSessionCaret(to)
+        clearUnitNavAfterLineOrDocMove()
     }
 
-    /// Move cursor to document start (⌘↑). Buffer unchanged.
+    /// Move cursor to document start (⌘↑). Buffer unchanged; sessionCaret = 0.
+    /// Dual of LineCaret.tla DocStart.
     private func performMoveToDocumentStart() {
         textInserter.moveToDocumentStart()
+        setSessionCaret(0)
+        clearUnitNavAfterLineOrDocMove()
     }
 
-    /// Move cursor to document end (⌘↓). Buffer unchanged.
+    /// Move cursor to document end (⌘↓). Buffer unchanged; sessionCaret = end (nil).
+    /// Dual of LineCaret.tla DocEnd.
     private func performMoveToDocumentEnd() {
         textInserter.moveToDocumentEnd()
+        setSessionCaret(transcribedText.count)
+        clearUnitNavAfterLineOrDocMove()
+    }
+
+    /// Clear progressive unit nav after line/doc host moves (same as word/char).
+    private func clearUnitNavAfterLineOrDocMove() {
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Scroll one page (Page Up / Page Down). Buffer unchanged.

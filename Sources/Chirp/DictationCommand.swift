@@ -1387,8 +1387,8 @@ enum TranscriptSelection {
         return text
     }
 
-    /// All line ranges in `text` (end exclusive), split on `\n`.
-    /// Content only (separator not included). Empty → `[]`.
+    /// All line ranges in `text` (end exclusive of content; caret may sit at `end`).
+    /// Split on `\n`. Empty → `[]`.
     static func lineRanges(_ text: String) -> [SentenceRange] {
         guard !text.isEmpty else { return [] }
         var ranges: [SentenceRange] = []
@@ -1411,5 +1411,79 @@ enum TranscriptSelection {
             }
         }
         return ranges
+    }
+
+    /// 0-based line index for `pos` (caret may sit at line.end). Nil when no lines.
+    /// Dual of LineCaret.tla line-under-caret.
+    static func lineIndexContaining(_ pos: Int, ranges: [SentenceRange]) -> Int? {
+        guard !ranges.isEmpty else { return nil }
+        let p = max(0, pos)
+        for (i, r) in ranges.enumerated() {
+            if p >= r.start && p <= r.end { return i }
+        }
+        // On the `\n` between lines → treat as end of previous line.
+        for (i, r) in ranges.enumerated() {
+            if i + 1 < ranges.count {
+                let next = ranges[i + 1]
+                if p > r.end && p < next.start { return i }
+            }
+        }
+        return ranges.count - 1
+    }
+
+    /// Session caret after ↑ / ↓ by `count` lines, preserving column when possible.
+    /// `caret == nil` means end of buffer. Dual of LineCaret.tla MoveUp/MoveDown.
+    static func offsetAfterLineMove(
+        _ text: String,
+        caret: Int?,
+        up: Bool,
+        count: Int
+    ) -> Int {
+        let len = text.count
+        var pos = min(max(caret ?? len, 0), len)
+        guard count > 0 else { return pos }
+        let ranges = lineRanges(text)
+        guard !ranges.isEmpty else { return pos }
+
+        for _ in 0..<count {
+            guard let idx = lineIndexContaining(pos, ranges: ranges) else { break }
+            let col = pos - ranges[idx].start
+            if up {
+                guard idx > 0 else {
+                    let first = ranges[0]
+                    pos = first.start + min(col, first.end - first.start)
+                    break
+                }
+                let prev = ranges[idx - 1]
+                pos = prev.start + min(col, prev.end - prev.start)
+            } else {
+                guard idx + 1 < ranges.count else {
+                    let last = ranges[idx]
+                    pos = last.start + min(col, last.end - last.start)
+                    break
+                }
+                let next = ranges[idx + 1]
+                pos = next.start + min(col, next.end - next.start)
+            }
+        }
+        return pos
+    }
+
+    /// Start of the line under caret. Dual of LineCaret.tla LineStart.
+    static func offsetAtLineStart(_ text: String, caret: Int?) -> Int {
+        let len = text.count
+        let pos = min(max(caret ?? len, 0), len)
+        let ranges = lineRanges(text)
+        guard let idx = lineIndexContaining(pos, ranges: ranges) else { return 0 }
+        return ranges[idx].start
+    }
+
+    /// End of the line under caret (before `\n` / buffer end). Dual of LineCaret.tla LineEnd.
+    static func offsetAtLineEnd(_ text: String, caret: Int?) -> Int {
+        let len = text.count
+        let pos = min(max(caret ?? len, 0), len)
+        let ranges = lineRanges(text)
+        guard let idx = lineIndexContaining(pos, ranges: ranges) else { return len }
+        return ranges[idx].end
     }
 }
