@@ -191,6 +191,13 @@ public final class AppState {
     /// True when a line selection is active (select first/last/next).
     private var lineSelectionActive = false
 
+    /// Progressive word navigation index (select next/previous word walk).
+    /// `nil` = end / unknown; non-nil = 0-based word under selection (WordCursor.tla).
+    private var wordNavIndex: Int? = nil
+
+    /// True when a word selection is active (select next/previous/last word).
+    private var wordSelectionActive = false
+
     public convenience init() {
         let transcriber = Transcriber()
         self.init(audioRecorder: AudioRecorder(), transcriber: transcriber, textInserter: TextInserter(), startListening: false)
@@ -598,6 +605,8 @@ public final class AppState {
         paragraphSelectionActive = false
         lineNavIndex = nil
         lineSelectionActive = false
+        wordNavIndex = nil
+        wordSelectionActive = false
         recordingSession &+= 1
         let session = recordingSession
         status = .recording
@@ -1289,6 +1298,7 @@ public final class AppState {
                 paragraphSelectionActive = false
                 lineNavIndex = nil
                 lineSelectionActive = false
+                clearWordNav()
                 return
             }
             sessionSelection = nil
@@ -1322,6 +1332,7 @@ public final class AppState {
                 paragraphSelectionActive = false
                 lineNavIndex = nil
                 lineSelectionActive = false
+                clearWordNav()
                 return
             }
             sessionCaret = nil
@@ -1346,6 +1357,7 @@ public final class AppState {
             paragraphSelectionActive = false
             lineNavIndex = nil
             lineSelectionActive = false
+            clearWordNav()
         }
     }
 
@@ -1369,6 +1381,14 @@ public final class AppState {
     private func setSessionCaret(_ offset: Int) {
         sessionSelection = nil
         sessionCaret = offset < transcribedText.count ? offset : nil
+        // Caret-only nav is independent of progressive word selection walk.
+        wordNavIndex = nil
+        wordSelectionActive = false
+    }
+
+    private func clearWordNav() {
+        wordNavIndex = nil
+        wordSelectionActive = false
     }
 
     /// Shape a content segment: one-shot "spell as …", sticky spell mode, or caps.
@@ -1987,7 +2007,7 @@ public final class AppState {
     }
 
     /// Select N words. Previous: trailing session words + arm.
-    /// Next: N words from sessionCaret + arm (WordSelect.tla / wordRanges).
+    /// Next: progressive wordNavIndex (or first word at/after sessionCaret). Dual: WordCursor.tla.
     private func performSelectWords(direction: MoveDirection, count: Int, typesIncrementally: Bool) {
         guard count > 0 else { return }
         if direction == .left,
@@ -1996,20 +2016,37 @@ public final class AppState {
             performSelectLastWords(count: count, typesIncrementally: true)
             return
         }
-        if direction == .right,
-           typesIncrementally,
-           let range = TranscriptSelection.nextWordsRange(
-            transcribedText,
-            caret: sessionCaret,
-            count: count
-           ) {
-            let length = range.end - range.start
-            guard length > 0 else { return }
-            // armSessionSelection clears sessionCaret; type-over uses the range.
-            armSessionSelection(start: range.start, length: length)
-            moveToSessionOffset(range.start)
-            textInserter.selectForward(count: length)
-            return
+        if direction == .right, typesIncrementally {
+            let words = TranscriptSelection.wordRanges(transcribedText)
+            if !words.isEmpty {
+                let startIdx: Int?
+                if let idx = wordNavIndex {
+                    let next = idx + 1
+                    startIdx = next < words.count ? next : nil
+                } else if let range = TranscriptSelection.nextWordsRange(
+                    transcribedText,
+                    caret: sessionCaret,
+                    count: 1
+                ) {
+                    startIdx = words.firstIndex(where: { $0.start == range.start })
+                } else {
+                    startIdx = nil
+                }
+                if let startIdx {
+                    let endIdx = min(startIdx + count - 1, words.count - 1)
+                    let start = words[startIdx].start
+                    let end = words[endIdx].end
+                    let length = end - start
+                    guard length > 0 else { return }
+                    // armSessionSelection clears sessionCaret; wordNavIndex survives.
+                    armSessionSelection(start: start, length: length)
+                    moveToSessionOffset(start)
+                    textInserter.selectForward(count: length)
+                    wordNavIndex = endIdx
+                    wordSelectionActive = true
+                    return
+                }
+            }
         }
         for _ in 0..<count {
             textInserter.selectWord(direction: direction)
@@ -2075,6 +2112,12 @@ public final class AppState {
         guard !selected.isEmpty else { return }
         armSessionSelection(start: transcribedText.count - selected.count, length: selected.count)
         textInserter.selectBackward(count: selected.count)
+        let words = TranscriptSelection.wordRanges(transcribedText)
+        if !words.isEmpty {
+            let n = min(count, words.count)
+            wordNavIndex = words.count - n
+            wordSelectionActive = true
+        }
     }
 
     /// Select the last sentence. Buffer unchanged.
@@ -3019,6 +3062,8 @@ public final class AppState {
         paragraphSelectionActive = false
         lineNavIndex = nil
         lineSelectionActive = false
+        wordNavIndex = nil
+        wordSelectionActive = false
         audioLevel = 0
         processingPhase = .none
         hotkeyManager?.sessionActive = false

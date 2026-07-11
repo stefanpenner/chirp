@@ -854,6 +854,60 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select next word"))
     }
 
+    @Test("select next word twice advances progressive word index")
+    func selectNextWordProgressive() async throws {
+        let mock = MockTranscriber()
+        // Avoid spoken-number ITN ("one two three four" → "1234")
+        await mock.setFeedAudioResult(["alpha beta gamma delta"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("alpha") { break }
+        }
+
+        // Caret at start of "alpha"
+        await mock.setFeedAudioResult(["go to alpha"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["select next word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+        #expect(inserter.selectForwardCounts.last == "alpha".count
+            || inserter.selectForwardCounts.last == "Alpha".count)
+        #expect(inserter.selectWordDirections.isEmpty)
+
+        let selectCountBefore = inserter.selectForwardCounts.count
+        await mock.setFeedAudioResult(["select next word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count > selectCountBefore { break }
+        }
+
+        #expect(inserter.selectForwardCounts.last == "beta".count
+            || inserter.selectForwardCounts.last == "Beta".count)
+        #expect(inserter.selectWordDirections.isEmpty, "2nd select next must not fall back to keyboard")
+        #expect(state.transcribedText.lowercased().contains("alpha"))
+        #expect(state.transcribedText.lowercased().contains("delta"))
+    }
+
     @Test("move left then select next word arms type-over for that word")
     func selectNextWordFromCaretThenContentReplaces() async throws {
         let mock = MockTranscriber()

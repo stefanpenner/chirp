@@ -178,7 +178,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select that** / **highlight that** — select last phrase (shift+left). Next content **replaces** the selection in both host and session buffer (`SelectionCommit.tla`); **unselect that** / format that clears the arm so next speech appends again
 - **select first / next / previous sentence** (and paragraph / line) — same replace-on-next-content contract for middle ranges (splice, not append)
 - **select last word** — select trailing word only (same replace-on-next-content contract)
-- **select next word** / **select forward word** — select first word at/after `sessionCaret` and arm type-over (after move left/go-to). At session end → keyboard ⇧⌥→ fallback. `WordSelect.tla`
+- **select next word** / **select forward word** — select first word at/after `sessionCaret` and arm type-over; further **select next word** advances `wordNavIndex` (`WordCursor.tla`). At session end with no index → keyboard ⇧⌥→ fallback.
 - **select previous word** / **select prior word** — select trailing session word and arm type-over (same span as **select last word**; `SelectionCommit.tla`). Does **not** steal bare **previous word** (move left)
 - **select previous N words** — select trailing N session words and arm type-over (same as **select last N words** when at session end)
 - **select next N words** — N words from `sessionCaret` + arm type-over (keyboard fallback at end)
