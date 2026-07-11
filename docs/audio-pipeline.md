@@ -91,18 +91,22 @@ weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
 (`five foot ten` / `5 feet 10 inches`→`5'10"`; bare `ten feet` still→`10 ft`),
 temperature (`72 degrees fahrenheit` / `seventy two degrees fahrenheit` /
 `72 fahrenheit`→`72°F`; `90 degrees`→`90°`), street suffixes after a house number
-(`35 Lexington avenue`→`35 Lexington Ave.`; `hit the road` stays), suite/room/
+(`35 Lexington avenue`→`35 Lexington Ave.`; multi-word names
+`100 martin luther king boulevard`→`100 Martin Luther King Blvd.`;
+`hit the road` stays), suite/room/
 floor/apt/unit/extension (`suite 12`→`Suite 12`, `room 101`→`Room 101`,
 `floor 5`→`Floor 5`, `extension 55` / `ext 55`→`ext. 55`, `apt 4`→`Apt. 4`;
 spoken digit runs after these cues (min length 1): `suite five`→`Suite 5`,
 `suite five five`→`Suite 55`, `floor five five`→`Floor 55`; `hit the room` stays;
-v1 still rewrites when more words follow — `room 5 people`→`Room 5 people`),
+end-of-phrase only — `room 5 people` stays plain),
 version numbers (`version two`→`v2`, `version 3`→`v3`,
 `version one point two`→`v1.2`; prose `the version is fine` stays — cue needs a number), US states →
 USPS codes (multi-word always: `new york`→`NY`; single-word only with address
 cue left of match — street abbrev, ZIP, or `state of` — so `I love california`
 stays, `35 Lexington avenue california`→`35 Lexington Ave. CA`,
-`state of maine`→`state of ME`) and ZIP (`zip code 90210`→`90210`,
+`state of maine`→`state of ME`), city title-case after street abbrev
+(`… Ave. boston MA`→`… Ave. Boston MA`; multi-word `san francisco`→`San Francisco`)
+and ZIP (`zip code 90210`→`90210`,
 `90210 1234`→`90210-1234`).
 Bare `one`/`two` stay words. Digit runs (≥3 single digits) concatenate for
 phones (`five five five one two one two`→`555-1212`; 10-digit `XXX-XXX-XXXX`;
@@ -326,11 +330,12 @@ Formal model: `specs/TranscriberBuffer.tla` (TLC-checked).
 
 ### Peek Safeguards
 
-The recognizer hallucinates from silence (e.g. "Yeah"). Three guards:
+The recognizer hallucinates from silence (e.g. "Yeah"). Guards:
 - **VAD.Detected gate** — skip peek when no speech active
 - **Min 4800 samples** (~0.3s) — too short = unreliable
 - **Cap 5s** — bounds inference time on long utterances
 - **Count cache** — skip ASR when `pendingAudio.count` is unchanged since the last peek (`DecodePolicy.shouldReusePeek` / `PeekCache.tla`); cleared on commit, flush, reset
+- **Commit hyp reuse** — when speech-window fingerprint matches the last peek and pending fits the peek window, skip re-decode on VAD commit/flush (`DecodePolicy.shouldReuseCommitHyp` / `PeekCommitHyp.tla`)
 
 
 ## Concurrency Safety

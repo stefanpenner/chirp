@@ -686,6 +686,9 @@ enum TextPostProcessor {
         // and "zip code 90210" → "90210". Multi-word states always rewrite; single-word
         // only with address cue left of match (street abbrev, ZIP, or "state of").
         result = applyAddressITN(result)
+        // City title-case after street abbrev (once state is abbreviated).
+        // "… Ave. boston MA" → "… Ave. Boston MA".
+        result = applyCityTitleCaseAfterStreet(result)
         return result
     }
 
@@ -1144,9 +1147,10 @@ enum TextPostProcessor {
 
     /// USPS-style street suffixes only after a street number + name
     /// ("35 Lexington avenue" → "35 Lexington Ave."; not "hit the road").
+    /// Name is 1–4 word tokens (Martin Luther King, North Main, …).
     private static let streetSuffixPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(\d{1,6})\s+(\w+)\s+(street|avenue|road|drive|boulevard|lane|court|place|circle|highway)s?\b"#,
+            pattern: #"\b(\d{1,6})\s+((?:\w+\s+){0,3}\w+)\s+(street|avenue|road|drive|boulevard|lane|court|place|circle|highway)s?\b"#,
             options: .caseInsensitive
         )
     }()
@@ -1214,10 +1218,45 @@ enum TextPostProcessor {
                   let suffixRange = Range(match.range(at: 3), in: result),
                   let fullRange = Range(match.range, in: result) else { continue }
             let num = String(result[numRange])
-            let name = String(result[nameRange])
+            let name = titleCaseAddressWords(String(result[nameRange]))
             let rawSuffix = String(result[suffixRange]).lowercased()
             guard let abbr = streetSuffixAbbreviations[rawSuffix] else { continue }
             result.replaceSubrange(fullRange, with: "\(num) \(name) \(abbr)")
+        }
+        return result
+    }
+
+    /// Title-case address name tokens ("martin luther king" → "Martin Luther King").
+    private static func titleCaseAddressWords(_ name: String) -> String {
+        name.split(separator: " ", omittingEmptySubsequences: false).map { part in
+            guard let first = part.first else { return String(part) }
+            return String(first).uppercased() + part.dropFirst().lowercased()
+        }.joined(separator: " ")
+    }
+
+    /// After street abbrev, title-case 1–2 lowercase city tokens before state/ZIP/EOS.
+    /// "… Ave. boston MA" → "… Ave. Boston MA". Not a full city gazetteer.
+    private static let cityAfterStreetPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern:
+                #"\b((?:St|Ave|Rd|Dr|Blvd|Ln|Ct|Pl|Cir|Hwy)\.)\s+([a-z]+(?:\s+[a-z]+)?)\b(?=\s+(?:[A-Z]{2}\b|\d{5})|\s*$)"#,
+            options: []
+        )
+    }()
+
+    private static func applyCityTitleCaseAfterStreet(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = cityAfterStreetPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let abbrRange = Range(match.range(at: 1), in: result),
+                  let cityRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let abbr = String(result[abbrRange])
+            let city = titleCaseAddressWords(String(result[cityRange]))
+            result.replaceSubrange(fullRange, with: "\(abbr) \(city)")
         }
         return result
     }

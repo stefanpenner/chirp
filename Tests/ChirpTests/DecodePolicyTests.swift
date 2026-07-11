@@ -69,6 +69,81 @@ struct DecodePolicyTests {
         #expect(!DecodePolicy.shouldReusePeek(lastCount: 100, currentCount: 0))
     }
 
+    // MARK: - Peek → commit hyp reuse (PeekCommitHyp.tla)
+
+    @Test("speechWindowSignature is stable for identical samples")
+    func speechWindowSignatureStable() {
+        let samples: [Float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.0, 0.0]
+        let a = DecodePolicy.speechWindowSignature(samples)
+        let b = DecodePolicy.speechWindowSignature(samples)
+        #expect(a == b)
+        #expect(a.sampleCount == samples.count)
+    }
+
+    @Test("speechWindowSignature changes when content changes")
+    func speechWindowSignatureSensitive() {
+        let a = DecodePolicy.speechWindowSignature([0.1, 0.2, 0.3])
+        let b = DecodePolicy.speechWindowSignature([0.1, 0.2, 0.4])
+        let c = DecodePolicy.speechWindowSignature([0.1, 0.2, 0.3, 0.0])
+        #expect(a != b)
+        #expect(a != c)
+    }
+
+    @Test("shouldReuseCommitHyp: matching window and hyp within peek max")
+    func shouldReuseCommitHypHappyPath() {
+        let window: [Float] = [0.1, 0.2, 0.3, 0.4]
+        let sig = DecodePolicy.speechWindowSignature(window)
+        #expect(DecodePolicy.shouldReuseCommitHyp(
+            cachedSignature: sig,
+            cachedText: "hello",
+            windowSamples: window,
+            pendingSampleCount: window.count
+        ))
+        // Trailing silence grows pending but speech window is the same
+        #expect(DecodePolicy.shouldReuseCommitHyp(
+            cachedSignature: sig,
+            cachedText: "hello",
+            windowSamples: window,
+            pendingSampleCount: window.count + 8_000
+        ))
+    }
+
+    @Test("shouldReuseCommitHyp: rejects empty hyp, sig miss, over peek max")
+    func shouldReuseCommitHypRejects() {
+        let window: [Float] = [0.1, 0.2, 0.3]
+        let sig = DecodePolicy.speechWindowSignature(window)
+        #expect(!DecodePolicy.shouldReuseCommitHyp(
+            cachedSignature: nil,
+            cachedText: "hello",
+            windowSamples: window,
+            pendingSampleCount: 100
+        ))
+        #expect(!DecodePolicy.shouldReuseCommitHyp(
+            cachedSignature: sig,
+            cachedText: nil,
+            windowSamples: window,
+            pendingSampleCount: 100
+        ))
+        #expect(!DecodePolicy.shouldReuseCommitHyp(
+            cachedSignature: sig,
+            cachedText: "",
+            windowSamples: window,
+            pendingSampleCount: 100
+        ))
+        #expect(!DecodePolicy.shouldReuseCommitHyp(
+            cachedSignature: sig,
+            cachedText: "hello",
+            windowSamples: [0.9, 0.8, 0.7],
+            pendingSampleCount: 100
+        ))
+        #expect(!DecodePolicy.shouldReuseCommitHyp(
+            cachedSignature: sig,
+            cachedText: "hello",
+            windowSamples: window,
+            pendingSampleCount: DecodePolicy.peekMaxSamples + 1
+        ))
+    }
+
     // MARK: - Adaptive energy noise floor
 
     @Test("noiseFloor tracks low RMS values (≈20th percentile)")

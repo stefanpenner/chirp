@@ -18,6 +18,10 @@ actor Transcriber: TranscriberProtocol {
     /// Cleared when pending is cleared (commit / flush / resetVAD).
     private var lastPeekPendingCount: Int?
     private var lastPeekText: String?
+    /// Speech-window fingerprint from the last successful peek decode.
+    /// Used to skip commit/flush re-decode when trailing silence grows pending
+    /// but the energy-trimmed window is unchanged (`PeekCommitHyp.tla`).
+    private var lastPeekSpeechSignature: DecodePolicy.SpeechWindowSignature?
 
     private func toCString(_ s: String) -> UnsafeMutablePointer<CChar> {
         return strdup(s)!
@@ -200,7 +204,20 @@ actor Transcriber: TranscriberProtocol {
         }
 
         let window = Self.withSpeechWindow(pendingAudio)
-        let text = transcribeSamples(window.samples, speechFrameCount: window.speechFrameCount)
+        let text: String
+        if DecodePolicy.shouldReuseCommitHyp(
+            cachedSignature: lastPeekSpeechSignature,
+            cachedText: lastPeekText,
+            windowSamples: window.samples,
+            pendingSampleCount: pendingAudio.count
+        ), let cached = lastPeekText {
+            Log.transcription.debug(
+                "feedAudio: reuse peek hyp pendingAudio=\(self.pendingAudio.count) text=\(cached)"
+            )
+            text = cached
+        } else {
+            text = transcribeSamples(window.samples, speechFrameCount: window.speechFrameCount)
+        }
         // Empty ASR on a VAD endpoint is usually a false end (noise / mid-pause).
         // Keep pendingAudio so the next commit/flush still sees the full utterance.
         guard !text.isEmpty else {
@@ -246,6 +263,10 @@ actor Transcriber: TranscriberProtocol {
         let result = text.isEmpty ? nil : text
         lastPeekPendingCount = count
         lastPeekText = result
+        // Only cache speech-window signature for non-empty hyps (commit reuse).
+        lastPeekSpeechSignature = result == nil
+            ? nil
+            : DecodePolicy.speechWindowSignature(window.samples)
         Log.transcription.debug("peek: pendingAudio=\(count) speechDetected=true text=\(text)")
         return result
     }
@@ -276,7 +297,20 @@ actor Transcriber: TranscriberProtocol {
         }
 
         let window = Self.withSpeechWindow(pendingAudio)
-        let text = transcribeSamples(window.samples, speechFrameCount: window.speechFrameCount)
+        let text: String
+        if DecodePolicy.shouldReuseCommitHyp(
+            cachedSignature: lastPeekSpeechSignature,
+            cachedText: lastPeekText,
+            windowSamples: window.samples,
+            pendingSampleCount: pendingAudio.count
+        ), let cached = lastPeekText {
+            Log.transcription.debug(
+                "flush: reuse peek hyp pendingAudio=\(self.pendingAudio.count) text=\(cached)"
+            )
+            text = cached
+        } else {
+            text = transcribeSamples(window.samples, speechFrameCount: window.speechFrameCount)
+        }
         Log.transcription.debug("flush: pendingAudio=\(self.pendingAudio.count) hasPendingSpeech=true text=\(text)")
         pendingAudio.removeAll()
         clearPeekCache()
@@ -294,6 +328,7 @@ actor Transcriber: TranscriberProtocol {
     private func clearPeekCache() {
         lastPeekPendingCount = nil
         lastPeekText = nil
+        lastPeekSpeechSignature = nil
     }
 
     // MARK: - Decode window

@@ -112,4 +112,53 @@ enum DecodePolicy {
     static func shouldReusePeek(lastCount: Int?, currentCount: Int) -> Bool {
         lastCount != nil && lastCount == currentCount
     }
+
+    // MARK: - Peek → commit hyp reuse (speech-window match)
+
+    /// Cheap fingerprint of a speech-window sample buffer.
+    /// Count + first/last edge samples so trailing silence on pendingAudio
+    /// (same speech content) still matches while new speech does not.
+    struct SpeechWindowSignature: Equatable, Sendable {
+        let sampleCount: Int
+        let edgeHash: UInt64
+    }
+
+    /// Fingerprint `samples` for commit-hyp reuse comparison.
+    static func speechWindowSignature(_ samples: [Float]) -> SpeechWindowSignature {
+        var h: UInt64 = 1_469_598_103_934_665_603_7 // FNV offset basis
+        let n = samples.count
+        guard n > 0 else { return SpeechWindowSignature(sampleCount: 0, edgeHash: 0) }
+        let edge = min(8, n)
+        for i in 0..<edge {
+            h ^= UInt64(samples[i].bitPattern)
+            h &*= 1_099_511_628_211
+        }
+        for i in (n - edge)..<n {
+            h ^= UInt64(samples[i].bitPattern)
+            h &*= 1_099_511_628_211
+        }
+        h ^= UInt64(n)
+        return SpeechWindowSignature(sampleCount: n, edgeHash: h)
+    }
+
+    /// Whether a prior peek hyp can satisfy commit/flush without re-decode.
+    ///
+    /// Safe when:
+    /// 1. Cached hyp is non-empty
+    /// 2. Pending buffer fits entirely in the peek window (≤ peekMaxSamples)
+    ///    so peek did not drop a leading prefix of the utterance
+    /// 3. Speech-window signature matches (trailing silence may grow pending
+    ///    count but energy trim yields the same speech content)
+    ///
+    /// Dual: `specs/PeekCommitHyp.tla`.
+    static func shouldReuseCommitHyp(
+        cachedSignature: SpeechWindowSignature?,
+        cachedText: String?,
+        windowSamples: [Float],
+        pendingSampleCount: Int
+    ) -> Bool {
+        guard let cachedSignature, let text = cachedText, !text.isEmpty else { return false }
+        guard pendingSampleCount <= peekMaxSamples else { return false }
+        return speechWindowSignature(windowSamples) == cachedSignature
+    }
 }

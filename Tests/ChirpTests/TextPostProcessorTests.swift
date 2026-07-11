@@ -524,9 +524,34 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("101 State highway") == "101 State Hwy.")
         // Plural spoken forms
         #expect(TextPostProcessor.process("2 Side streets") == "2 Side St.")
+        // Multi-word street names + title-case
+        #expect(TextPostProcessor.process("35 North Main avenue") == "35 North Main Ave.")
+        #expect(
+            TextPostProcessor.process("100 martin luther king boulevard")
+                == "100 Martin Luther King Blvd."
+        )
+        #expect(TextPostProcessor.process("10 oak tree lane") == "10 Oak Tree Ln.")
         // No street number → leave alone ("hit the road")
         #expect(TextPostProcessor.process("hit the road") == "hit the road")
         #expect(TextPostProcessor.process("go down the street") == "go down the street")
+    }
+
+    @Test("Light ITN city title-case after street abbrev")
+    func lightITNCityTitleCaseAfterStreet() {
+        #expect(
+            TextPostProcessor.process("35 Lexington avenue boston massachusetts")
+                == "35 Lexington Ave. Boston MA"
+        )
+        #expect(
+            TextPostProcessor.process("141 Dorchester street san francisco california")
+                == "141 Dorchester St. San Francisco CA"
+        )
+        #expect(
+            TextPostProcessor.process("10 Main road chicago illinois zip code 60601")
+                == "10 Main Rd. Chicago IL 60601"
+        )
+        // No street cue → bare city not force-title-cased mid-prose
+        #expect(TextPostProcessor.process("went to boston for coffee") == "went to boston for coffee")
     }
 
     @Test("Light ITN US state names to USPS abbreviations")

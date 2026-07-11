@@ -44,6 +44,7 @@ tlc specs/PipelineRebuild.tla
 | `ParagraphCursor` | progressive paragraph nav index (`-1`/nil = end; next/prev/delete) | `AppState.paragraphNavIndex` (nil = end); dual of select/move/delete next paragraph |
 | `AdaptivePeek` | peek interval active vs idle | `DecodePolicy.peekSleepNs` |
 | `PeekCache` | skip peek ASR when pending count unchanged | `DecodePolicy.shouldReusePeek` |
+| `PeekCommitHyp` | reuse peek hyp on commit when speech-window sig matches | `DecodePolicy.shouldReuseCommitHyp` + `Transcriber` feed/flush |
 
 Bait configs (`*_bait.cfg`) must **fail** — they prove the real invariants are checked.
 
