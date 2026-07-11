@@ -176,6 +176,14 @@ enum DictationCommand: Equatable, Sendable {
     case moveLeftWord
     /// Move cursor one word right (⌥→). Buffer unchanged.
     case moveRightWord
+    /// Move cursor N words left (⌥← × N). Buffer unchanged.
+    case movePreviousWords(count: Int)
+    /// Move cursor N words right (⌥→ × N). Buffer unchanged.
+    case moveNextWords(count: Int)
+    /// Move cursor N characters left (← × N). Buffer unchanged.
+    case movePreviousCharacters(count: Int)
+    /// Move cursor N characters right (→ × N). Buffer unchanged.
+    case moveNextCharacters(count: Int)
     /// Move cursor one line up (↑). Buffer unchanged.
     case moveUpLine
     /// Move cursor one line down (↓). Buffer unchanged.
@@ -309,6 +317,24 @@ enum DictationCommand: Equatable, Sendable {
             (
                 #"^delete (?:the )?(?:next|forward) "# + num + #" characters?$"#,
                 { c in (1...100).contains(c) ? .deleteNextCharacters(count: c) : nil }
+            ),
+            // Cursor move N words (Voice Control style; do not steal bare "move left")
+            (
+                #"^(?:move )?(?:left|previous|prior|back) "# + num + #" words?$"#,
+                { c in (1...20).contains(c) ? .movePreviousWords(count: c) : nil }
+            ),
+            (
+                #"^(?:move )?(?:right|next|forward) "# + num + #" words?$"#,
+                { c in (1...20).contains(c) ? .moveNextWords(count: c) : nil }
+            ),
+            // Cursor move N characters
+            (
+                #"^(?:move )?(?:left|previous|prior|back) "# + num + #" characters?$"#,
+                { c in (1...100).contains(c) ? .movePreviousCharacters(count: c) : nil }
+            ),
+            (
+                #"^(?:move )?(?:right|next|forward) "# + num + #" characters?$"#,
+                { c in (1...100).contains(c) ? .moveNextCharacters(count: c) : nil }
             ),
         ]
 

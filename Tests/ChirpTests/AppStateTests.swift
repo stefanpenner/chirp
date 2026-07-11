@@ -2574,6 +2574,134 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("next word"))
     }
 
+    @Test("move left two words moves cursor N times without changing buffer")
+    func movePreviousWordsCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world again"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world again" { break }
+        }
+
+        await mock.setFeedAudioResult(["move left two words"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveWordDirections.count >= 2 { break }
+        }
+
+        #expect(state.transcribedText == "Hello world again")
+        #expect(inserter.moveWordDirections == [.left, .left])
+        #expect(!inserter.typedTexts.contains("move left two words"))
+    }
+
+    @Test("move right 3 words moves cursor N times without changing buffer")
+    func moveNextWordsCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["move right 3 words"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveWordDirections.count >= 3 { break }
+        }
+
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveWordDirections == [.right, .right, .right])
+        #expect(!inserter.typedTexts.contains("move right 3 words"))
+    }
+
+    @Test("move left 5 characters moves without changing buffer")
+    func movePreviousCharactersCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["move left 5 characters"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveBackwardCounts == [5])
+        #expect(!inserter.typedTexts.contains("move left 5 characters"))
+    }
+
+    @Test("forward one character moves without changing buffer")
+    func moveNextCharactersCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["forward one character"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveForwardCounts.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello world")
+        #expect(inserter.moveForwardCounts == [1])
+        #expect(!inserter.typedTexts.contains("forward one character"))
+    }
+
     @Test("go to start / end moves line cursor without changing buffer")
     func moveToLineEdgeCommands() async throws {
         let mock = MockTranscriber()

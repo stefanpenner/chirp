@@ -888,6 +888,14 @@ public final class AppState {
                         self.performMoveWord(direction: .left)
                     case .moveRightWord:
                         self.performMoveWord(direction: .right)
+                    case .movePreviousWords(let count):
+                        self.performMoveWords(direction: .left, count: count)
+                    case .moveNextWords(let count):
+                        self.performMoveWords(direction: .right, count: count)
+                    case .movePreviousCharacters(let count):
+                        self.performMoveCharacters(direction: .left, count: count)
+                    case .moveNextCharacters(let count):
+                        self.performMoveCharacters(direction: .right, count: count)
                     case .moveUpLine:
                         self.performMoveLine(direction: .up)
                     case .moveDownLine:
@@ -1150,6 +1158,14 @@ public final class AppState {
             performMoveWord(direction: .left)
         case .moveRightWord:
             performMoveWord(direction: .right)
+        case .movePreviousWords(let count):
+            performMoveWords(direction: .left, count: count)
+        case .moveNextWords(let count):
+            performMoveWords(direction: .right, count: count)
+        case .movePreviousCharacters(let count):
+            performMoveCharacters(direction: .left, count: count)
+        case .moveNextCharacters(let count):
+            performMoveCharacters(direction: .right, count: count)
         case .moveUpLine:
             performMoveLine(direction: .up)
         case .moveDownLine:
@@ -2379,6 +2395,24 @@ public final class AppState {
     /// Move cursor one word (⌥← / ⌥→). Buffer unchanged — cursor only.
     private func performMoveWord(direction: MoveDirection) {
         textInserter.moveWord(direction: direction)
+    }
+
+    /// Move cursor N words (⌥← / ⌥→ × N). Buffer unchanged — cursor only.
+    private func performMoveWords(direction: MoveDirection, count: Int) {
+        guard count > 0 else { return }
+        for _ in 0..<count {
+            textInserter.moveWord(direction: direction)
+        }
+    }
+
+    /// Move cursor N characters (← / → × N). Buffer unchanged — cursor only.
+    private func performMoveCharacters(direction: MoveDirection, count: Int) {
+        guard count > 0 else { return }
+        if direction == .left {
+            textInserter.moveBackward(count: count)
+        } else {
+            textInserter.moveForward(count: count)
+        }
     }
 
     /// Move cursor one line (↑ / ↓). Buffer unchanged — cursor only.
