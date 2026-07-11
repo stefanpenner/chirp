@@ -156,6 +156,10 @@ public final class AppState {
     /// Observable for overlay badge. Dual of specs/ReplaceThat.tla.
     private(set) var awaitingReplace = false
 
+    /// Trailing buffer suffix currently selected in the host (select that / last N words / …).
+    /// Next content peels this suffix so session buffer matches type-over. Dual of SelectionCommit.tla.
+    private var sessionSelectionSuffix: String? = nil
+
     /// Normalized form of the last committed non-command segment (dedup echoes).
     private var lastCommittedNormalized = ""
 
@@ -581,6 +585,7 @@ public final class AppState {
         spellMode = .off
         noSpaceMode = .off
         awaitingReplace = false
+        sessionSelectionSuffix = nil
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
         sentenceSelectionActive = false
@@ -1198,6 +1203,7 @@ public final class AppState {
             // Multi-step replace: undo last phrase, then insert replacement.
             if ReplaceDecision.shouldUndoBeforeCommit(awaitingReplace: awaitingReplace) {
                 awaitingReplace = false
+                sessionSelectionSuffix = nil
                 performScratchThat(typesIncrementally: typesIncrementally)
             }
             // Skip consecutive identical segments (VAD/ASR echo under noise)
@@ -1207,6 +1213,38 @@ public final class AppState {
                 Log.transcription.debug("Skipping duplicate segment: \"\(shaped.text)\"")
                 return
             }
+            // Trailing selection type-over: peel suffix so buffer matches host overwrite.
+            if SelectionCommitDecision.shouldReplaceSuffix(
+                selection: sessionSelectionSuffix,
+                buffer: transcribedText
+            ), let selection = sessionSelectionSuffix {
+                let replaced = SelectionCommitDecision.bufferAfterReplace(
+                    buffer: transcribedText,
+                    selection: selection,
+                    replacement: shaped.text
+                )
+                if !editStack.dropTrailingSuffix(selection) {
+                    editStack.clear()
+                }
+                transcribedText = replaced
+                if typesIncrementally {
+                    // Host already has the selection; key events replace it in place.
+                    textInserter.typeText(shaped.text)
+                }
+                if !shaped.text.isEmpty {
+                    editStack.push(shaped.text)
+                }
+                lastCommittedNormalized = norm
+                sessionSelectionSuffix = nil
+                sentenceNavIndex = nil
+                sentenceSelectionActive = false
+                paragraphNavIndex = nil
+                paragraphSelectionActive = false
+                lineNavIndex = nil
+                lineSelectionActive = false
+                return
+            }
+            sessionSelectionSuffix = nil
             // One-shot pack preserves case ("abc"/"John"); sticky also glues segments.
             // Spell mode and no-space mode both use empty separators (no letter packing
             // for no-space — that is spell mode only).
@@ -1226,8 +1264,8 @@ public final class AppState {
             sentenceSelectionActive = false
             paragraphNavIndex = nil
             paragraphSelectionActive = false
-        lineNavIndex = nil
-        lineSelectionActive = false
+            lineNavIndex = nil
+            lineSelectionActive = false
         }
     }
 
@@ -1629,6 +1667,7 @@ public final class AppState {
     private func performSelectThat(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         guard let delta = editStack.lastDelta, !delta.isEmpty else { return }
+        sessionSelectionSuffix = delta
         textInserter.selectBackward(count: delta.count)
     }
 
@@ -1641,11 +1680,13 @@ public final class AppState {
         }
         textInserter.applyFormat(style)
         textInserter.clearSelection()
+        sessionSelectionSuffix = nil
     }
 
     /// Collapse the current selection (spoken "unselect that"). Buffer unchanged.
     private func performUnselectThat() {
         textInserter.clearSelection()
+        sessionSelectionSuffix = nil
     }
 
     /// Select last phrase, cut (⌘X), drop buffer delta without re-deleting.
@@ -1775,6 +1816,7 @@ public final class AppState {
         guard typesIncrementally, count > 0 else { return }
         let selected = TranscriptSelection.lastWords(transcribedText, count: count)
         guard !selected.isEmpty else { return }
+        sessionSelectionSuffix = selected
         textInserter.selectBackward(count: selected.count)
     }
 
@@ -1789,8 +1831,10 @@ public final class AppState {
         guard !selected.isEmpty else { return }
         // Prefer trailing selectBackward when caret model is end (index nil).
         if sentenceNavIndex == nil && !sentenceSelectionActive {
+            sessionSelectionSuffix = selected
             textInserter.selectBackward(count: selected.count)
         } else {
+            sessionSelectionSuffix = nil
             moveToSessionOffset(ranges[last].start)
             textInserter.selectForward(count: ranges[last].end - ranges[last].start)
         }
@@ -1921,6 +1965,7 @@ public final class AppState {
         let start = ranges[startIdx].start
         let fromEnd = text.count - start
         guard fromEnd > 0 else { return }
+        sessionSelectionSuffix = String(text.suffix(fromEnd))
         textInserter.selectBackward(count: fromEnd)
         setUnitNav(kind: kind, index: startIdx, selectionActive: true)
     }
@@ -2134,8 +2179,10 @@ public final class AppState {
         let selected = TranscriptSelection.lastParagraph(text)
         guard !selected.isEmpty else { return }
         if paragraphNavIndex == nil && !paragraphSelectionActive {
+            sessionSelectionSuffix = selected
             textInserter.selectBackward(count: selected.count)
         } else {
+            sessionSelectionSuffix = nil
             moveToParagraphOffset(ranges[last].start)
             textInserter.selectForward(count: ranges[last].end - ranges[last].start)
         }
@@ -2245,8 +2292,10 @@ public final class AppState {
         let selected = TranscriptSelection.lastLine(text)
         guard !selected.isEmpty else { return }
         if lineNavIndex == nil && !lineSelectionActive {
+            sessionSelectionSuffix = selected
             textInserter.selectBackward(count: selected.count)
         } else {
+            sessionSelectionSuffix = nil
             let last = ranges.count - 1
             moveToLineOffset(ranges[last].start)
             textInserter.selectForward(count: ranges[last].end - ranges[last].start)
@@ -2654,6 +2703,7 @@ public final class AppState {
         spellMode = .off
         noSpaceMode = .off
         awaitingReplace = false
+        sessionSelectionSuffix = nil
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
         sentenceSelectionActive = false

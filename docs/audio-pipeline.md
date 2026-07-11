@@ -159,7 +159,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **caps off** — back to normal casing
 - **spell mode** / **start spelling** / **spell on** — sticky spell mode (`SpellMode`); packs letters / NATO / digits
 - **spell off** / **end spelling** / **dictation mode** — exit spell mode
-- **spell that** / **spell it** / **spell last** — select last phrase + enter spell mode (does not delete)
+- **spell that** / **spell it** / **spell last** — select last phrase + enter spell mode (does not delete). Next content type-overwrites the selection and peels the session suffix (`SelectionCommit.tla`)
 - **spell as a b c** — one-shot pack (`SpellTransform.oneShot`); does not enable sticky spell mode
   (e.g. `spell as capital j o h n` → `John`)
 - Spoken single-letter runs pack to uppercase acronyms without sticky spell (`a p i` → `API` via `SpellTransform.packAcronyms`; min run 3, plus common 2-letter allowlist `i d`→`ID` / `u i`→`UI` / `a i`→`AI`; unlisted pairs like `a b` stay; `I a` stays)
@@ -170,8 +170,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **title case that** — title-case last phrase (stack delta)
 - **sentence case that** — sentence-case last phrase
 - **no space that** — join last word without leading space
-- **select that** / **highlight that** — select last phrase (shift+left)
-- **select last word** — select trailing word only
+- **select that** / **highlight that** — select last phrase (shift+left). Next content **replaces** the trailing selection in both host and session buffer (`SelectionCommit.tla`); **unselect that** / format that clears the arm so next speech appends again
+- **select last word** — select trailing word only (same replace-on-next-content contract when selection is trailing)
 - **select next word** / **select forward word** — select next word (⇧⌥→; keyboard only; buffer unchanged)
 - **select previous word** / **select prior word** — select previous word (⇧⌥←; keyboard only; buffer unchanged). Does **not** steal **select last word** or bare **previous word** (move left)
 - **delete next word** / **delete forward word** — delete next word (⇧⌥→ then ⌫; keyboard only; buffer unchanged). Does **not** steal **delete last word**

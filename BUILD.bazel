@@ -156,6 +156,7 @@ swift_test(
         "Tests/ChirpTests/FormatSettingsTests.swift",
         "Tests/ChirpTests/VadSettingsTests.swift",
         "Tests/ChirpTests/ReplaceDecisionTests.swift",
+        "Tests/ChirpTests/SelectionCommitDecisionTests.swift",
         "Tests/ChirpTests/CancelDecisionTests.swift",
         "Tests/ChirpTests/ConfidenceGateTests.swift",
         "Tests/ChirpTests/DecodeRejectTests.swift",

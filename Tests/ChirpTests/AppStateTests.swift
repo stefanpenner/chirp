@@ -1848,6 +1848,154 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select that"))
     }
 
+    @Test("select that then re-dictate replaces suffix in buffer (not append)")
+    func selectThatThenContentReplaces() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["wrong words"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("wrong") { break }
+        }
+
+        await mock.setFeedAudioResult(["select that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["right words"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("right")
+                && !state.transcribedText.lowercased().contains("wrong") {
+                break
+            }
+        }
+
+        #expect(
+            state.transcribedText.lowercased().contains("right"),
+            "expected replacement, got \"\(state.transcribedText)\""
+        )
+        #expect(
+            !state.transcribedText.lowercased().contains("wrong"),
+            "old phrase must not remain, got \"\(state.transcribedText)\""
+        )
+        #expect(!inserter.typedTexts.contains("select that"))
+    }
+
+    @Test("select last two words then content peels those words only")
+    func selectLastTwoWordsThenContentReplaces() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world now"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world now" { break }
+        }
+
+        await mock.setFeedAudioResult(["select last two words"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["planet"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("planet") || state.transcribedText.contains("Planet") {
+                break
+            }
+        }
+
+        // Selection was " world now" (leading space); type-over peels exact suffix.
+        let text = state.transcribedText
+        #expect(text.hasPrefix("Hello"), "prefix preserved, got \"\(text)\"")
+        #expect(
+            text.lowercased().contains("planet"),
+            "replacement present, got \"\(text)\""
+        )
+        #expect(
+            !text.lowercased().contains("world"),
+            "selected words gone, got \"\(text)\""
+        )
+        #expect(
+            !text.lowercased().contains("now"),
+            "selected words gone, got \"\(text)\""
+        )
+    }
+
+    @Test("unselect that then content still appends")
+    func unselectThatThenContentAppends() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello" { break }
+        }
+
+        await mock.setFeedAudioResult(["select that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["unselect that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.clearSelectionCallCount > 0 { break }
+        }
+
+        await mock.setFeedAudioResult(["world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("world") { break }
+        }
+
+        #expect(
+            state.transcribedText == "Hello world" || state.transcribedText == "Hello World",
+            "unselect must restore append join, got \"\(state.transcribedText)\""
+        )
+    }
+
     @Test("select last word selects trailing word only")
     func selectLastWordCommand() async throws {
         let mock = MockTranscriber()
