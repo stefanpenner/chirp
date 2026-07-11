@@ -259,11 +259,28 @@ struct DictationCommandTests {
 
     @Test("recognizes press enter and tab")
     func pressKeys() {
-        #expect(DictationCommand.parse("press enter") == .pressEnter)
-        #expect(DictationCommand.parse("hit return") == .pressEnter)
+        #expect(DictationCommand.parse("press enter") == .pressEnter(count: 1))
+        #expect(DictationCommand.parse("hit return") == .pressEnter(count: 1))
+        #expect(DictationCommand.parse("enter key") == .pressEnter(count: 1))
         #expect(DictationCommand.parse("press tab") == .pressTab(count: 1))
         #expect(DictationCommand.parse("hit tab") == .pressTab(count: 1))
         #expect(DictationCommand.parse("tab key") == .pressTab(count: 1))
+    }
+
+    @Test("Dragon press enter N times")
+    func enterNTimes() {
+        #expect(DictationCommand.parse("press enter 3 times") == .pressEnter(count: 3))
+        #expect(DictationCommand.parse("press return 2 times") == .pressEnter(count: 2))
+        #expect(DictationCommand.parse("press enter 4") == .pressEnter(count: 4))
+        #expect(DictationCommand.parse("enter two times") == .pressEnter(count: 2))
+        #expect(DictationCommand.parse("hit return 5 times") == .pressEnter(count: 5))
+        #expect(DictationCommand.parse("return key 3 times") == .pressEnter(count: 3))
+        #expect(DictationCommand.parse("press enter twice") == .pressEnter(count: 2))
+        #expect(DictationCommand.parse("enter twice") == .pressEnter(count: 2))
+        #expect(DictationCommand.parse("please press enter 2 times") == .pressEnter(count: 2))
+        #expect(DictationCommand.parse("press enter") == .pressEnter(count: 1))
+        #expect(DictationCommand.parse("enter") == .none)
+        #expect(DictationCommand.parse("hello new line") == .none)
     }
 
     @Test("Dragon tab N times / press tab N")
@@ -604,7 +621,7 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("scratch last") == .deleteLastWord)
         #expect(DictationCommand.parse("scratch hat") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("go back") == .scratchThat(count: 1))
-        #expect(DictationCommand.parse("press the enter key") == .pressEnter)
+        #expect(DictationCommand.parse("press the enter key") == .pressEnter(count: 1))
     }
 
     @Test("recognizes select that / select last word / select all")

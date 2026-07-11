@@ -944,8 +944,8 @@ public final class AppState {
                     case .clearAll:
                         self.awaitingReplace = false
                         self.performClearAll(typesIncrementally: false)
-                    case .pressEnter:
-                        self.performKeyInsert("\n", typesIncrementally: false)
+                    case .pressEnter(let count):
+                        self.performPressEnter(count: count, typesIncrementally: false)
                     case .pressTab(let count):
                         self.performPressTab(count: count, typesIncrementally: false)
                     case .pressSpace:
@@ -1265,8 +1265,8 @@ public final class AppState {
         case .clearAll:
             awaitingReplace = false
             performClearAll(typesIncrementally: typesIncrementally)
-        case .pressEnter:
-            performKeyInsert("\n", typesIncrementally: typesIncrementally)
+        case .pressEnter(let count):
+            performPressEnter(count: count, typesIncrementally: typesIncrementally)
         case .pressTab(let count):
             performPressTab(count: count, typesIncrementally: typesIncrementally)
         case .pressSpace:
@@ -1879,6 +1879,14 @@ public final class AppState {
     private func performPressTab(count: Int = 1, typesIncrementally: Bool) {
         let n = TabDecision.clampCount(count)
         let s = String(repeating: "\t", count: n)
+        performKeyInsert(s, typesIncrementally: typesIncrementally)
+    }
+
+    /// Dragon "press enter N times": insert N newlines (one stack delta).
+    /// Dual of specs/EnterN.tla. Host types via TextInserter steps (Return keys).
+    private func performPressEnter(count: Int = 1, typesIncrementally: Bool) {
+        let n = EnterDecision.clampCount(count)
+        let s = String(repeating: "\n", count: n)
         performKeyInsert(s, typesIncrementally: typesIncrementally)
     }
 

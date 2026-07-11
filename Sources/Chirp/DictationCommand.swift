@@ -47,8 +47,9 @@ enum DictationCommand: Equatable, Sendable {
     case deleteNextLine
     /// Clear the entire session transcript and typed text.
     case clearAll
-    /// Insert a newline (Return key).
-    case pressEnter
+    /// Insert Return N times (Dragon "press enter" / "press enter N times").
+    /// Session buffer + edit stack grow by N newlines. Count ≥ 1.
+    case pressEnter(count: Int)
     /// Insert Tab N times (Dragon "Tab <n> times"). Count ≥ 1.
     /// Session buffer + edit stack grow by N tab characters.
     case pressTab(count: Int)
@@ -592,6 +593,16 @@ enum DictationCommand: Equatable, Sendable {
                 #"^tab "# + num + #" times?$"#,
                 { c in (1...20).contains(c) ? .pressTab(count: c) : nil }
             ),
+            // Dragon "press enter N times" / "press return 3" (N ≥ 1).
+            // Do not steal mid-utterance "new line" (TextPostProcessor content rewrite).
+            (
+                #"^(?:press |hit )?(?:enter|return)(?: key)? "# + num + #"(?: times?)?$"#,
+                { c in (1...20).contains(c) ? .pressEnter(count: c) : nil }
+            ),
+            (
+                #"^(?:enter|return) "# + num + #" times?$"#,
+                { c in (1...20).contains(c) ? .pressEnter(count: c) : nil }
+            ),
             // Buffer peel: delete last/previous N words|sentences|paragraphs|lines
             (
                 #"^delete (?:the )?(?:last|previous|prior) "# + num + #" words?$"#,
@@ -856,8 +867,12 @@ enum DictationCommand: Equatable, Sendable {
              "wipe all", "wipe everything":
             return .clearAll
         case "press enter", "press return", "hit enter", "hit return",
-             "press return key", "press the enter key", "hit the enter key":
-            return .pressEnter
+             "press return key", "press the enter key", "hit the enter key",
+             "enter key", "return key":
+            return .pressEnter(count: 1)
+        case "press enter twice", "press return twice", "hit enter twice",
+             "hit return twice", "enter twice", "return twice":
+            return .pressEnter(count: 2)
         case "press tab", "hit tab", "press tab key", "press the tab key",
              "tab key":
             return .pressTab(count: 1)
@@ -1161,7 +1176,8 @@ enum DictationCommand: Equatable, Sendable {
         ("delete first line", "Remove first line"),
         ("delete next line / delete forward line", "Remove next line (progressive)"),
         ("clear all", "Wipe session text"),
-        ("press enter", "Insert Return"),
+        ("press enter / press return", "Insert Return once"),
+        ("press enter N times / enter twice", "Insert Return N times"),
         ("press tab / tab key", "Insert Tab once"),
         ("tab N times / press tab 3 times", "Insert Tab N times"),
         ("press space / hit space", "Insert Space"),
