@@ -3306,6 +3306,54 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("move left two words"))
     }
 
+    @Test("move left two words then content inserts mid-buffer")
+    func moveLeftTwoWordsThenContentInsertsMid() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world again"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world again" { break }
+        }
+
+        await mock.setFeedAudioResult(["move left two words"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveWordDirections.count >= 2 { break }
+        }
+
+        await mock.setFeedAudioResult(["extra"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("extra") { break }
+        }
+
+        let after = state.transcribedText
+        #expect(after.hasPrefix("Hello"), "prefix kept, got \"\(after)\"")
+        #expect(after.lowercased().contains("extra"), "inserted, got \"\(after)\"")
+        #expect(after.lowercased().contains("world"), "mid words kept, got \"\(after)\"")
+        #expect(after.lowercased().contains("again"), "tail kept, got \"\(after)\"")
+        // Not pure trailing append of extra after the whole phrase only
+        #expect(
+            after.lowercased().contains("extra world")
+                || after.lowercased().contains("extra  world")
+                || (after.lowercased().contains("hello extra") && after.lowercased().contains("world")),
+            "extra should land before world/again, got \"\(after)\""
+        )
+    }
+
     @Test("move right 3 words moves cursor N times without changing buffer")
     func moveNextWordsCommand() async throws {
         let mock = MockTranscriber()

@@ -1090,6 +1090,50 @@ enum TranscriptSelection {
         return String(text.suffix(remove))
     }
 
+    /// Session caret after moving N whitespace-delimited words left or right.
+    /// `caret == nil` means end of buffer. Result clamped to `0...text.count`.
+    /// Dual of AppState.performMoveWord(s) + sessionCaret (WordCaret.tla).
+    static func offsetAfterWordMove(
+        _ text: String,
+        caret: Int?,
+        left: Bool,
+        count: Int
+    ) -> Int {
+        guard count > 0 else {
+            return min(max(caret ?? text.count, 0), text.count)
+        }
+        var pos = min(max(caret ?? text.count, 0), text.count)
+        for _ in 0..<count {
+            if left {
+                // Skip whitespace immediately before caret
+                while pos > 0 {
+                    let i = text.index(text.startIndex, offsetBy: pos - 1)
+                    if text[i].isWhitespace { pos -= 1 } else { break }
+                }
+                // Skip word characters
+                while pos > 0 {
+                    let i = text.index(text.startIndex, offsetBy: pos - 1)
+                    if text[i].isWhitespace { break }
+                    pos -= 1
+                }
+            } else {
+                // Skip word characters at/after caret
+                while pos < text.count {
+                    let i = text.index(text.startIndex, offsetBy: pos)
+                    if text[i].isWhitespace { break }
+                    pos += 1
+                }
+                // Skip following whitespace → land at next word start or end
+                while pos < text.count {
+                    let i = text.index(text.startIndex, offsetBy: pos)
+                    if !text[i].isWhitespace { break }
+                    pos += 1
+                }
+            }
+        }
+        return pos
+    }
+
     /// All sentence ranges in `text`, split on `[.?!]\s+` (punct stays with prior sentence).
     /// Single sentence / no separator → one range `0..<count`. Empty → `[]`.
     static func sentenceRanges(_ text: String) -> [SentenceRange] {

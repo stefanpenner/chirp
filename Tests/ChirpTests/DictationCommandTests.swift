@@ -508,6 +508,40 @@ struct DictationCommandTests {
         #expect(TranscriptSelection.lastWords("a b", count: 0) == "")
     }
 
+    @Test("offsetAfterWordMove steps whitespace words left and right")
+    func offsetAfterWordMove() {
+        let t = "one two three four"
+        // From end, left 1 → start of "four"
+        #expect(
+            TranscriptSelection.offsetAfterWordMove(t, caret: nil, left: true, count: 1)
+                == "one two three ".count
+        )
+        // From end, left 2 → start of "three"
+        #expect(
+            TranscriptSelection.offsetAfterWordMove(t, caret: nil, left: true, count: 2)
+                == "one two ".count
+        )
+        // From start of "three", right 1 → start of "four"
+        let threeStart = "one two ".count
+        #expect(
+            TranscriptSelection.offsetAfterWordMove(t, caret: threeStart, left: false, count: 1)
+                == "one two three ".count
+        )
+        // Clamp at 0
+        #expect(
+            TranscriptSelection.offsetAfterWordMove(t, caret: 0, left: true, count: 5) == 0
+        )
+        // Clamp at end
+        #expect(
+            TranscriptSelection.offsetAfterWordMove(t, caret: 0, left: false, count: 10)
+                == t.count
+        )
+        // count 0 preserves caret
+        #expect(
+            TranscriptSelection.offsetAfterWordMove(t, caret: 3, left: true, count: 0) == 3
+        )
+    }
+
     @Test("first sentence selection boundaries")
     func firstSentenceSelection() {
         #expect(TranscriptSelection.firstSentence("") == "")

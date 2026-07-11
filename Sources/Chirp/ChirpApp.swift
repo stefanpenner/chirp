@@ -2687,17 +2687,32 @@ public final class AppState {
         textInserter.selectAll()
     }
 
-    /// Move cursor one word (⌥← / ⌥→). Buffer unchanged — cursor only.
+    /// Move cursor one word (⌥← / ⌥→). Buffer unchanged; sets sessionCaret for mid-insert.
     private func performMoveWord(direction: MoveDirection) {
-        textInserter.moveWord(direction: direction)
+        performMoveWords(direction: direction, count: 1)
     }
 
-    /// Move cursor N words (⌥← / ⌥→ × N). Buffer unchanged — cursor only.
+    /// Move cursor N words (⌥← / ⌥→ × N). Buffer unchanged; sets sessionCaret.
+    /// Dual of TranscriptSelection.offsetAfterWordMove + SessionCaretDecision.
     private func performMoveWords(direction: MoveDirection, count: Int) {
         guard count > 0 else { return }
         for _ in 0..<count {
             textInserter.moveWord(direction: direction)
         }
+        let to = TranscriptSelection.offsetAfterWordMove(
+            transcribedText,
+            caret: sessionCaret,
+            left: direction == .left,
+            count: count
+        )
+        setSessionCaret(to)
+        // Word nav is independent of sentence/paragraph/line progressive indices.
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Move cursor N characters (← / → × N). Buffer unchanged — cursor only.
