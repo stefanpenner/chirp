@@ -114,6 +114,30 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("beginning of document") == .moveToDocumentStart)
     }
 
+    @Test("recognizes resume with X (Dragon-style)")
+    func resumeWithCommands() {
+        #expect(
+            DictationCommand.parse("resume with world")
+                == .resumeWith(target: "world")
+        )
+        #expect(
+            DictationCommand.parse("continue with hello")
+                == .resumeWith(target: "hello")
+        )
+        #expect(
+            DictationCommand.parse("please resume with foo bar")
+                == .resumeWith(target: "foo bar")
+        )
+        #expect(
+            DictationCommand.parse("start over from planet")
+                == .resumeWith(target: "planet")
+        )
+        // Bare that/it not a target
+        #expect(DictationCommand.parse("resume with that") == .none
+                || DictationCommand.parse("resume with that") != .scratchThat)
+        #expect(DictationCommand.parse("correct that") == .scratchThat)
+    }
+
     @Test("recognizes insert before/after as go-to duals (Dragon-style)")
     func insertBeforeAfterPhraseCommands() {
         #expect(

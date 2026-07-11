@@ -20,6 +20,8 @@ enum DictationCommand: Equatable, Sendable {
     case goToPhrase(target: String)
     /// Move caret to end of last occurrence of `target` (no selection arm).
     case goAfterPhrase(target: String)
+    /// Dragon "resume with X": keep through last X, delete the rest, append next.
+    case resumeWith(target: String)
     /// Delete the last whitespace-delimited word.
     case deleteLastWord
     /// Delete the last N whitespace-delimited words (N ≥ 2).
@@ -260,7 +262,50 @@ enum DictationCommand: Equatable, Sendable {
         if let cmd = matchPhraseGo(text) {
             return cmd
         }
+        if let cmd = matchResumeWith(text) {
+            return cmd
+        }
         return .none
+    }
+
+    /// "resume with X" / "continue with X" — Dragon truncate-after-match.
+    private static func matchResumeWith(_ text: String) -> DictationCommand? {
+        var n = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let last = n.last, ".!?,".contains(last) {
+            n.removeLast()
+        }
+        n = n.trimmingCharacters(in: .whitespaces)
+        var tokens = n.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        let fillers: Set<String> = ["please", "now", "thanks", "thank", "you"]
+        while let first = tokens.first, fillers.contains(first.lowercased()) {
+            tokens.removeFirst()
+        }
+        while let last = tokens.last, fillers.contains(last.lowercased()) {
+            tokens.removeLast()
+        }
+        n = tokens.joined(separator: " ")
+
+        let patterns = [
+            #"(?i)^resume with (.+)$"#,
+            #"(?i)^continue with (.+)$"#,
+            #"(?i)^start again from (.+)$"#,
+            #"(?i)^start over from (.+)$"#,
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern),
+                  let match = regex.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)),
+                  match.numberOfRanges >= 2,
+                  let tRange = Range(match.range(at: 1), in: n) else {
+                continue
+            }
+            let target = String(n[tRange]).trimmingCharacters(in: .whitespaces)
+            guard !target.isEmpty else { continue }
+            let low = target.lowercased()
+            // Bare pronouns → not a resume target
+            if low == "that" || low == "it" || low == "this" { continue }
+            return .resumeWith(target: target)
+        }
+        return nil
     }
 
     /// "replace X with Y" / "change X to Y" / "swap X for Y".
@@ -1003,6 +1048,7 @@ enum DictationCommand: Equatable, Sendable {
         ("select X / highlight X", "Select last occurrence of phrase X (type-over next)"),
         ("go to X / move to X / insert before X", "Move caret to start of last occurrence of X"),
         ("go after X / move after X / insert after X", "Move caret to end of last occurrence of X"),
+        ("resume with X / continue with X", "Keep through X, delete after, continue dictating"),
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
         ("delete last two words / delete previous 3 words", "Remove last N words"),

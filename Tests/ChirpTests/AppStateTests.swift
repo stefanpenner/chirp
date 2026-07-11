@@ -2328,6 +2328,57 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("go after world"))
     }
 
+    @Test("resume with X truncates after match then next content appends")
+    func resumeWithThenContentAppends() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello world foo bar"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("bar") { break }
+        }
+
+        await mock.setFeedAudioResult(["resume with world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.deletedCounts.isEmpty
+                || state.transcribedText.lowercased() == "hello world" {
+                break
+            }
+        }
+        #expect(
+            state.transcribedText.lowercased() == "hello world",
+            "kept through world, got \"\(state.transcribedText)\""
+        )
+        #expect(!inserter.typedTexts.contains("resume with world"))
+        #expect(inserter.deletedCounts.contains { $0 > 0 })
+
+        await mock.setFeedAudioResult(["planet"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("planet") { break }
+        }
+        let after = state.transcribedText.lowercased()
+        #expect(
+            after == "hello world planet" || after.hasPrefix("hello world"),
+            "append after resume, got \"\(state.transcribedText)\""
+        )
+        #expect(after.contains("planet"))
+        #expect(!after.contains("foo"))
+    }
+
     @Test("insert after X then content inserts mid-buffer (Dragon dual)")
     func insertAfterPhraseThenContentInsertsMid() async throws {
         let mock = MockTranscriber()

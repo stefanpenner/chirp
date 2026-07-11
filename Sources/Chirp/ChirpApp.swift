@@ -1020,6 +1020,9 @@ public final class AppState {
                         self.performGoToPhrase(target: target, after: false, typesIncrementally: false)
                     case .goAfterPhrase(let target):
                         self.performGoToPhrase(target: target, after: true, typesIncrementally: false)
+                    case .resumeWith(let target):
+                        self.awaitingReplace = false
+                        self.performResumeWith(target: target, typesIncrementally: false)
                     case .selectLastWord:
                         self.performSelectLastWord(typesIncrementally: false)
                     case .selectLastWords(let count):
@@ -1323,6 +1326,9 @@ public final class AppState {
             performGoToPhrase(target: target, after: false, typesIncrementally: typesIncrementally)
         case .goAfterPhrase(let target):
             performGoToPhrase(target: target, after: true, typesIncrementally: typesIncrementally)
+        case .resumeWith(let target):
+            awaitingReplace = false
+            performResumeWith(target: target, typesIncrementally: typesIncrementally)
         case .selectLastWord:
             performSelectLastWord(typesIncrementally: typesIncrementally)
         case .selectLastWords(let count):
@@ -2118,6 +2124,40 @@ public final class AppState {
         armSessionSelection(start: match.start, length: match.length)
         moveToSessionOffset(match.start)
         textInserter.selectForward(count: match.length)
+    }
+
+    /// Dragon "resume with X": keep through last X, delete everything after, append next.
+    /// Dual of ResumeWithDecision / specs/ResumeWith.tla.
+    private func performResumeWith(target: String, typesIncrementally: Bool) {
+        guard let result = ResumeWithDecision.truncateAfterLastMatch(
+            target: target,
+            buffer: transcribedText
+        ) else { return }
+        if result.deletedCount > 0 {
+            if typesIncrementally {
+                // Host caret is typically at end after dictation.
+                textInserter.deleteBackward(count: result.deletedCount)
+            }
+            // Peel stack when deleted suffix is trailing (it always is).
+            let removed = String(transcribedText.suffix(result.deletedCount))
+            if !editStack.dropTrailingSuffix(removed) {
+                editStack.clear()
+            }
+        }
+        transcribedText = result.buffer
+        sessionSelection = nil
+        // Caret at end of kept text → append mode for next content.
+        sessionCaret = nil
+        lastCommittedNormalized = ""
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
+        wordNavIndex = nil
+        wordSelectionActive = false
+        awaitingReplace = false
     }
 
     /// Move caret to start (or end if `after`) of last occurrence of `target`.
