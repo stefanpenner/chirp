@@ -1980,26 +1980,35 @@ public final class AppState {
         textInserter.pressForwardDelete()
     }
 
-    /// Select one word. Previous: session trailing word + arm type-over (dual of select last word).
-    /// Next: keyboard ⇧⌥→ (caret-relative; no session caret model yet).
+    /// Select one word. Previous: session trailing + arm type-over.
+    /// Next: first word at/after sessionCaret + arm type-over (keyboard fallback at end).
     private func performSelectWord(direction: MoveDirection, typesIncrementally: Bool) {
-        if direction == .left,
-           typesIncrementally,
-           !TranscriptSelection.lastWords(transcribedText, count: 1).isEmpty {
-            performSelectLastWords(count: 1, typesIncrementally: true)
-            return
-        }
-        textInserter.selectWord(direction: direction)
+        performSelectWords(direction: direction, count: 1, typesIncrementally: typesIncrementally)
     }
 
-    /// Select N words. Previous: session trailing N words + arm type-over.
-    /// Next: keyboard ⇧⌥→ × N (caret-relative).
+    /// Select N words. Previous: trailing session words + arm.
+    /// Next: N words from sessionCaret + arm (WordSelect.tla / wordRanges).
     private func performSelectWords(direction: MoveDirection, count: Int, typesIncrementally: Bool) {
         guard count > 0 else { return }
         if direction == .left,
            typesIncrementally,
            !TranscriptSelection.lastWords(transcribedText, count: count).isEmpty {
             performSelectLastWords(count: count, typesIncrementally: true)
+            return
+        }
+        if direction == .right,
+           typesIncrementally,
+           let range = TranscriptSelection.nextWordsRange(
+            transcribedText,
+            caret: sessionCaret,
+            count: count
+           ) {
+            let length = range.end - range.start
+            guard length > 0 else { return }
+            // armSessionSelection clears sessionCaret; type-over uses the range.
+            armSessionSelection(start: range.start, length: length)
+            moveToSessionOffset(range.start)
+            textInserter.selectForward(count: length)
             return
         }
         for _ in 0..<count {

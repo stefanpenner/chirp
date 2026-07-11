@@ -100,7 +100,7 @@ enum DictationCommand: Equatable, Sendable {
     case selectLastWord
     /// Select last N whitespace-delimited words (session trailing). Buffer unchanged.
     case selectLastWords(count: Int)
-    /// Select next word via ⇧⌥→. Keyboard-only; buffer unchanged.
+    /// Select next word: at/after sessionCaret + arm type-over (keyboard fallback at end).
     case selectNextWord
     /// Select previous word: session trailing word + arm type-over (buffer unchanged until content).
     case selectPreviousWord
@@ -110,7 +110,7 @@ enum DictationCommand: Equatable, Sendable {
     case deletePreviousWord
     /// Select previous N words: session trailing N words + arm type-over (N ≥ 2).
     case selectPreviousWords(count: Int)
-    /// Select next N words via ⇧⌥→ × N. Keyboard-only; buffer unchanged.
+    /// Select next N words from sessionCaret + arm type-over (N ≥ 2; keyboard fallback at end).
     case selectNextWords(count: Int)
     /// Delete previous N words via ⇧⌥← × N then backspace. Keyboard-only.
     case deletePreviousWords(count: Int)
@@ -993,7 +993,7 @@ enum DictationCommand: Equatable, Sendable {
         ("select that", "Select last phrase"),
         ("select last word", "Select last word"),
         ("select last two words / select last 3 words", "Select last N words"),
-        ("select next word / select forward word", "Select next word (⇧⌥→; keyboard only)"),
+        ("select next word / select forward word", "Select word at/after caret + arm type-over"),
         ("select previous word / select prior word", "Select trailing word + arm type-over"),
         ("select previous N words", "Select trailing N words + arm type-over"),
         ("delete next word / delete forward word", "Delete next word (⇧⌥→ then ⌫; keyboard only)"),
@@ -1088,6 +1088,46 @@ enum TranscriptSelection {
         let remove = text.count - remaining.count
         guard remove > 0 else { return "" }
         return String(text.suffix(remove))
+    }
+
+    /// Whitespace-delimited word ranges (content only; no leading space).
+    /// Empty text → `[]`. Dual of select-next-word progressive arm.
+    static func wordRanges(_ text: String) -> [SentenceRange] {
+        guard !text.isEmpty else { return [] }
+        var ranges: [SentenceRange] = []
+        var i = text.startIndex
+        while i < text.endIndex {
+            while i < text.endIndex && text[i].isWhitespace {
+                i = text.index(after: i)
+            }
+            guard i < text.endIndex else { break }
+            let start = text.distance(from: text.startIndex, to: i)
+            while i < text.endIndex && !text[i].isWhitespace {
+                i = text.index(after: i)
+            }
+            let end = text.distance(from: text.startIndex, to: i)
+            ranges.append(SentenceRange(start: start, end: end))
+        }
+        return ranges
+    }
+
+    /// Word span for "select next N words" from `caret` (nil = end → no next).
+    /// Picks the first word whose end is after caret (covers start-of-word and mid-word),
+    /// then extends through N words. Content-only (no leading space).
+    static func nextWordsRange(
+        _ text: String,
+        caret: Int?,
+        count: Int
+    ) -> SentenceRange? {
+        guard count > 0 else { return nil }
+        let pos = min(max(caret ?? text.count, 0), text.count)
+        guard pos < text.count else { return nil }
+        let words = wordRanges(text)
+        guard let startIdx = words.firstIndex(where: { $0.end > pos }) else {
+            return nil
+        }
+        let endIdx = min(startIdx + count - 1, words.count - 1)
+        return SentenceRange(start: words[startIdx].start, end: words[endIdx].end)
     }
 
     /// Session caret after moving N whitespace-delimited words left or right.

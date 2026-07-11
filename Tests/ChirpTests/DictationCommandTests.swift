@@ -542,6 +542,36 @@ struct DictationCommandTests {
         )
     }
 
+    @Test("wordRanges and nextWordsRange for select-next arm")
+    func wordRangesAndNext() {
+        let t = "one two three four"
+        let words = TranscriptSelection.wordRanges(t)
+        #expect(words.count == 4)
+        #expect(words[0] == TranscriptSelection.SentenceRange(start: 0, end: 3))
+        #expect(words[1].start == 4)
+        #expect(words[1].end == 7)
+
+        // From end: no next
+        #expect(TranscriptSelection.nextWordsRange(t, caret: nil, count: 1) == nil)
+        #expect(TranscriptSelection.nextWordsRange(t, caret: t.count, count: 1) == nil)
+
+        // From start of "two" → select "two"
+        let twoStart = "one ".count
+        #expect(
+            TranscriptSelection.nextWordsRange(t, caret: twoStart, count: 1)
+                == TranscriptSelection.SentenceRange(start: twoStart, end: twoStart + 3)
+        )
+        // From start of "two", count 2 → "two three"
+        #expect(
+            TranscriptSelection.nextWordsRange(t, caret: twoStart, count: 2)
+                == TranscriptSelection.SentenceRange(start: twoStart, end: "one two three".count)
+        )
+        // Mid-word "two" → still that word
+        #expect(
+            TranscriptSelection.nextWordsRange(t, caret: twoStart + 1, count: 1)?.start == twoStart
+        )
+    }
+
     @Test("first sentence selection boundaries")
     func firstSentenceSelection() {
         #expect(TranscriptSelection.firstSentence("") == "")

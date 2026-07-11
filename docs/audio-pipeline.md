@@ -178,9 +178,10 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select that** / **highlight that** — select last phrase (shift+left). Next content **replaces** the selection in both host and session buffer (`SelectionCommit.tla`); **unselect that** / format that clears the arm so next speech appends again
 - **select first / next / previous sentence** (and paragraph / line) — same replace-on-next-content contract for middle ranges (splice, not append)
 - **select last word** — select trailing word only (same replace-on-next-content contract)
-- **select next word** / **select forward word** — select next word (⇧⌥→; keyboard only; buffer unchanged)
+- **select next word** / **select forward word** — select first word at/after `sessionCaret` and arm type-over (after move left/go-to). At session end → keyboard ⇧⌥→ fallback. `WordSelect.tla`
 - **select previous word** / **select prior word** — select trailing session word and arm type-over (same span as **select last word**; `SelectionCommit.tla`). Does **not** steal bare **previous word** (move left)
 - **select previous N words** — select trailing N session words and arm type-over (same as **select last N words** when at session end)
+- **select next N words** — N words from `sessionCaret` + arm type-over (keyboard fallback at end)
 - **delete next word** / **delete forward word** — delete next word (⇧⌥→ then ⌫; keyboard only; buffer unchanged). Does **not** steal **delete last word**
 - **delete previous N characters** / **delete last N characters** — peel N trailing session characters (+ keyboard ⌫ when incremental). Single: **delete previous character**
 - **delete next N characters** — select forward N then ⌫ (keyboard only)
@@ -200,7 +201,6 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select previous line** / **select prior line** — progressive: from end select last; further step back (`LineCursor.tla`)
 - **select first line** / **select the first line** / **highlight first line** / **select 1st line** — select first line (← session then ⇧→ × n; content before first `\n`). Buffer unchanged. Does **not** steal **select last line**
 - **select next line** / **select forward line** / **highlight next line** — progressive: from end select second line; further calls advance (`LineCursor.tla`). Buffer unchanged. Does **not** steal bare **next line** (move down) or **select last line**
-- **select next N words** — keyboard ⇧⌥→ × N (N ≥ 2; caret-relative)
 - **select last N words** / **highlight last N words** / **select previous N words** — select trailing N words from session buffer and arm type-over (N ≥ 2). Dual: `SelectLastWords.tla`
 - **delete last N sentences** / **paragraphs** / **lines** — peel last N trailing units (N ≥ 2; Voice Control style)
 - **delete next N sentences** / **paragraphs** / **lines** — remove next N units from session cursor (from end = starting at second; `MultiUnitEdit.tla`)

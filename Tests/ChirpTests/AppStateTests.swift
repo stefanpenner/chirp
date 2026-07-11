@@ -821,8 +821,8 @@ struct AppStateTests {
         #expect(inserter.deletedCounts.isEmpty, "forward delete must not use backspace path")
     }
 
-    @Test("select next word uses keyboard select without changing buffer")
-    func selectNextWordCommand() async throws {
+    @Test("select next word at end falls back to keyboard select")
+    func selectNextWordAtEndKeyboardFallback() async throws {
         let mock = MockTranscriber()
         await mock.setFeedAudioResult(["Hello world"])
         let recorder = MockAudioRecorder()
@@ -841,6 +841,7 @@ struct AppStateTests {
             if state.transcribedText == "Hello world" { break }
         }
 
+        // At session end (no sessionCaret) → keyboard fallback
         await mock.setFeedAudioResult(["select next word"])
         recorder.lastOnSamples?([0.1])
         for _ in 0..<30 {
@@ -851,6 +852,59 @@ struct AppStateTests {
         #expect(state.transcribedText == "Hello world")
         #expect(inserter.selectWordDirections == [.right])
         #expect(!inserter.typedTexts.contains("select next word"))
+    }
+
+    @Test("move left then select next word arms type-over for that word")
+    func selectNextWordFromCaretThenContentReplaces() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world again"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world again" { break }
+        }
+
+        // Caret to start of "world"
+        await mock.setFeedAudioResult(["move left two words"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveWordDirections.count >= 2 { break }
+        }
+
+        await mock.setFeedAudioResult(["select next word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+
+        #expect(state.transcribedText == "Hello world again")
+        #expect(inserter.selectForwardCounts.last == "world".count)
+        #expect(inserter.selectWordDirections.isEmpty)
+
+        await mock.setFeedAudioResult(["planet"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("planet") { break }
+        }
+
+        let after = state.transcribedText
+        #expect(after.hasPrefix("Hello"), "prefix kept, got \"\(after)\"")
+        #expect(after.lowercased().contains("planet"), "replaced, got \"\(after)\"")
+        #expect(!after.lowercased().contains("world"), "world gone, got \"\(after)\"")
+        #expect(after.lowercased().contains("again"), "tail kept, got \"\(after)\"")
     }
 
     @Test("select previous word selects trailing session word and arms type-over")

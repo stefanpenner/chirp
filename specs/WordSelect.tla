@@ -6,7 +6,7 @@
     DictationCommand.selectNextWord / selectPreviousWord
     AppState.performSelectWord
     Previous (session end): trailing lastWords + arm sessionSelection
-    Next: TextInserter.selectWord keyboard only
+    Next: wordRanges at sessionCaret + arm (keyboard fallback at end)
     Both leave transcribedText / bufferLen unchanged until content type-over.
 
   Grain: bufferLen only (0..4). Select-word actions leave bufferLen unchanged.
@@ -44,7 +44,7 @@ Commit(n) ==
   /\ lastOp' = "commit"
   /\ UNCHANGED prevBufferLen
 
-\* Select next word (⇧⌥→) — keyboard only; session buffer unchanged
+\* Select next word — may arm type-over; session buffer unchanged
 SelectNextWord ==
   /\ prevBufferLen' = bufferLen
   /\ lastOp' = "select"
