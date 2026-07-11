@@ -8,18 +8,36 @@ struct DictationCommandTests {
 
     @Test("recognizes scratch/delete/undo variants")
     func scratchVariants() {
-        #expect(DictationCommand.parse("scratch that") == .scratchThat)
-        #expect(DictationCommand.parse("Scratch that.") == .scratchThat)
-        #expect(DictationCommand.parse("delete that") == .scratchThat)
-        #expect(DictationCommand.parse("UNDO THAT!") == .scratchThat)
-        #expect(DictationCommand.parse("scrap that") == .scratchThat)
-        #expect(DictationCommand.parse("delete it") == .scratchThat)
-        #expect(DictationCommand.parse("correct that") == .scratchThat)
-        #expect(DictationCommand.parse("fix that") == .scratchThat)
-        #expect(DictationCommand.parse("please correct that") == .scratchThat)
+        #expect(DictationCommand.parse("scratch that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("Scratch that.") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("delete that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("UNDO THAT!") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("scrap that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("delete it") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("correct that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("fix that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("please correct that") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("replace that") == .replaceThat)
         #expect(DictationCommand.parse("swap that") == .replaceThat)
         #expect(DictationCommand.parse("please replace that") == .replaceThat)
+    }
+
+    @Test("Dragon scratch that N times / undo that N times")
+    func scratchThatNTimes() {
+        #expect(DictationCommand.parse("scratch that two times") == .scratchThat(count: 2))
+        #expect(DictationCommand.parse("scratch that 3 times") == .scratchThat(count: 3))
+        #expect(DictationCommand.parse("Scratch that three times.") == .scratchThat(count: 3))
+        #expect(DictationCommand.parse("undo that 2 times") == .scratchThat(count: 2))
+        #expect(DictationCommand.parse("scratch that twice") == .scratchThat(count: 2))
+        #expect(DictationCommand.parse("undo that twice") == .scratchThat(count: 2))
+        #expect(DictationCommand.parse("correct that four times") == .scratchThat(count: 4))
+        #expect(DictationCommand.parse("fix that 5 times") == .scratchThat(count: 5))
+        #expect(DictationCommand.parse("scratch 2 times") == .scratchThat(count: 2))
+        #expect(DictationCommand.parse("please scratch that two times") == .scratchThat(count: 2))
+        // Bare single remains count 1
+        #expect(DictationCommand.parse("scratch that") == .scratchThat(count: 1))
+        // "one times" is not a multi-scratch form (inRange requires N ≥ 2)
+        #expect(DictationCommand.parse("scratch that one times") == .none)
     }
 
     @Test("recognizes AI cleanup without stealing fix that")
@@ -33,8 +51,8 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("cleanup that") == .aiCleanup)
         #expect(DictationCommand.parse("clean this up") == .aiCleanup)
         // "fix that" remains undo/scratch
-        #expect(DictationCommand.parse("fix that") == .scratchThat)
-        #expect(DictationCommand.parse("correct that") == .scratchThat)
+        #expect(DictationCommand.parse("fix that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("correct that") == .scratchThat(count: 1))
     }
 
     @Test("recognizes replace X with Y without stealing replace that")
@@ -74,8 +92,8 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("remove hello world") == .deletePhrase(target: "hello world"))
         #expect(DictationCommand.parse("please delete planet") == .deletePhrase(target: "planet"))
         // Structural / multi-step commands stay exact
-        #expect(DictationCommand.parse("delete that") == .scratchThat)
-        #expect(DictationCommand.parse("delete it") == .scratchThat)
+        #expect(DictationCommand.parse("delete that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("delete it") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("delete last word") == .deleteLastWord)
         #expect(DictationCommand.parse("delete last sentence") == .deleteLastSentence)
         #expect(DictationCommand.parse("delete previous two words") == .deleteLastWords(count: 2))
@@ -134,8 +152,8 @@ struct DictationCommandTests {
         )
         // Bare that/it not a target
         #expect(DictationCommand.parse("resume with that") == .none
-                || DictationCommand.parse("resume with that") != .scratchThat)
-        #expect(DictationCommand.parse("correct that") == .scratchThat)
+                || DictationCommand.parse("resume with that") != .scratchThat(count: 1))
+        #expect(DictationCommand.parse("correct that") == .scratchThat(count: 1))
     }
 
     @Test("recognizes insert before/after as go-to duals (Dragon-style)")
@@ -187,7 +205,7 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("please delete previous sentence") == .deleteLastSentence)
         // Must not steal word delete or scratch
         #expect(DictationCommand.parse("delete last word") == .deleteLastWord)
-        #expect(DictationCommand.parse("delete that") == .scratchThat)
+        #expect(DictationCommand.parse("delete that") == .scratchThat(count: 1))
     }
 
     @Test("recognizes delete last paragraph / previous paragraph")
@@ -267,8 +285,8 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("backspace") == .pressBackspace)
         #expect(DictationCommand.parse("press delete") == .pressBackspace)
         #expect(DictationCommand.parse("delete key") == .pressBackspace)
-        #expect(DictationCommand.parse("delete that") == .scratchThat)
-        #expect(DictationCommand.parse("delete it") == .scratchThat)
+        #expect(DictationCommand.parse("delete that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("delete it") == .scratchThat(count: 1))
     }
 
     @Test("recognizes press escape without bare escape")
@@ -294,10 +312,10 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("System Undo.") == .pressUndo)
         #expect(DictationCommand.parse("please press undo") == .pressUndo)
         // Must not steal session-buffer undo / scratch
-        #expect(DictationCommand.parse("undo that") == .scratchThat)
-        #expect(DictationCommand.parse("scratch that") == .scratchThat)
-        #expect(DictationCommand.parse("correct that") == .scratchThat)
-        #expect(DictationCommand.parse("undo it") == .scratchThat)
+        #expect(DictationCommand.parse("undo that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("scratch that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("correct that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("undo it") == .scratchThat(count: 1))
     }
 
     @Test("recognizes system redo without stealing redo that")
@@ -329,8 +347,8 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("delete key") == .pressBackspace)
         #expect(DictationCommand.parse("hit delete") == .pressBackspace)
         // Session scratch / delete-last paths unchanged
-        #expect(DictationCommand.parse("delete that") == .scratchThat)
-        #expect(DictationCommand.parse("delete it") == .scratchThat)
+        #expect(DictationCommand.parse("delete that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("delete it") == .scratchThat(count: 1))
     }
 
     @Test("recognizes select next / previous word (keyboard)")
@@ -505,9 +523,9 @@ struct DictationCommandTests {
 
     @Test("tolerates please / now around commands")
     func politenessTolerance() {
-        #expect(DictationCommand.parse("scratch that please") == .scratchThat)
-        #expect(DictationCommand.parse("please scratch that") == .scratchThat)
-        #expect(DictationCommand.parse("please undo that now") == .scratchThat)
+        #expect(DictationCommand.parse("scratch that please") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("please scratch that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("please undo that now") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("clear all please") == .clearAll)
         #expect(DictationCommand.parse("please copy that") == .copyThat)
         #expect(DictationCommand.parse("redo that please") == .redoThat)
@@ -518,8 +536,8 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("delete the last word") == .deleteLastWord)
         #expect(DictationCommand.parse("remove the last word") == .deleteLastWord)
         #expect(DictationCommand.parse("scratch last") == .deleteLastWord)
-        #expect(DictationCommand.parse("scratch hat") == .scratchThat)
-        #expect(DictationCommand.parse("go back") == .scratchThat)
+        #expect(DictationCommand.parse("scratch hat") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("go back") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("press the enter key") == .pressEnter)
     }
 

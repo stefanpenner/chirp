@@ -884,9 +884,9 @@ public final class AppState {
                     // Non-incremental: pipeline returns full processed text on flush.
                     // Commands still mutate buffer/stack; do not force incremental typing.
                     switch DictationCommand.parse(remaining) {
-                    case .scratchThat:
+                    case .scratchThat(let count):
                         self.awaitingReplace = false
-                        self.performScratchThat(typesIncrementally: false)
+                        self.performScratchThat(count: count, typesIncrementally: false)
                     case .replaceThat:
                         self.performArmReplace()
                     case .replacePhrase(let target, let replacement):
@@ -1205,9 +1205,9 @@ public final class AppState {
     /// Apply a committed ASR segment: either a spoken command or normal text.
     private func applyCommittedText(_ text: String, typesIncrementally: Bool) {
         switch DictationCommand.parse(text) {
-        case .scratchThat:
+        case .scratchThat(let count):
             awaitingReplace = false
-            performScratchThat(typesIncrementally: typesIncrementally)
+            performScratchThat(count: count, typesIncrementally: typesIncrementally)
         case .replaceThat:
             performArmReplace()
         case .replacePhrase(let target, let replacement):
@@ -1911,15 +1911,25 @@ public final class AppState {
         lastCommittedNormalized = ""
     }
 
-    /// Undo the last typed segment (multi-level; Dragon-style "scratch that").
-    private func performScratchThat(typesIncrementally: Bool) {
-        guard let delta = editStack.undo() else { return }
-        let remove = min(delta.count, transcribedText.count)
-        if remove > 0 {
-            transcribedText = String(transcribedText.dropLast(remove))
-            if typesIncrementally {
-                textInserter.deleteBackward(count: remove)
+    /// Undo the last N typed segments (Dragon "scratch that" / "scratch that N times").
+    /// Uses EditStack multi-level undo; pure plan dual of specs/ScratchThatN.tla.
+    private func performScratchThat(count: Int = 1, typesIncrementally: Bool) {
+        let n = ScratchThatDecision.clampCount(count)
+        let lengths = editStack.undoItems.map(\.count)
+        let plan = ScratchThatDecision.plan(undoLengthsOldestFirst: lengths, count: n)
+        guard plan.steps > 0 else { return }
+
+        var totalRemove = 0
+        for _ in 0..<plan.steps {
+            guard let delta = editStack.undo() else { break }
+            let remove = min(delta.count, transcribedText.count)
+            if remove > 0 {
+                transcribedText = String(transcribedText.dropLast(remove))
+                totalRemove += remove
             }
+        }
+        if typesIncrementally, totalRemove > 0 {
+            textInserter.deleteBackward(count: totalRemove)
         }
         lastCommittedNormalized = ""
     }

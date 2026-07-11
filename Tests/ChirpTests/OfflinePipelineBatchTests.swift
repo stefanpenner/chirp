@@ -76,7 +76,7 @@ struct OfflinePipelineBatchTests {
             postProcessor: FakeBatchProcessor()
         )
         let flushed = await pipeline.flush()
-        #expect(DictationCommand.parse(flushed) == .scratchThat)
+        #expect(DictationCommand.parse(flushed) == .scratchThat(count: 1))
     }
 
     @Test("regex mode still returns mid-session segments")

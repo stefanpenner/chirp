@@ -6,8 +6,9 @@ import Foundation
 
 enum DictationCommand: Equatable, Sendable {
     case none
-    /// Undo the most recently typed segment (and its join separator).
-    case scratchThat
+    /// Undo the last N typed segments (Dragon "scratch that" / "scratch that N times").
+    /// Bare "scratch that" is `count: 1`. Count is always ≥ 1 (clamped at parse).
+    case scratchThat(count: Int)
     /// Arm multi-step replace: next content undoes last phrase then inserts.
     case replaceThat
     /// Single-utterance find/replace last occurrence of `target` with `replacement`.
@@ -540,6 +541,16 @@ enum DictationCommand: Equatable, Sendable {
         let num = #"(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)"#
         let inRange: (Int) -> Bool = { (2...20).contains($0) }
         let specs: [(pattern: String, make: (Int) -> DictationCommand?)] = [
+            // Dragon "scratch that N times" / "undo that N times" (N ≥ 2).
+            // Bare "scratch that" stays matchExact (count 1).
+            (
+                #"^(?:scratch|scrap|undo|correct|fix)(?: that| it)? "# + num + #" times?$"#,
+                { c in inRange(c) ? .scratchThat(count: c) : nil }
+            ),
+            (
+                #"^(?:scratch|scrap|undo|correct|fix) "# + num + #" times?$"#,
+                { c in inRange(c) ? .scratchThat(count: c) : nil }
+            ),
             // Buffer peel: delete last/previous N words|sentences|paragraphs|lines
             (
                 #"^delete (?:the )?(?:last|previous|prior) "# + num + #" words?$"#,
@@ -724,7 +735,13 @@ enum DictationCommand: Equatable, Sendable {
              // Immediate undo synonyms
              "correct that", "fix that",
              "correct it", "fix it":
-            return .scratchThat
+            return .scratchThat(count: 1)
+        // Dragon "scratch that twice" (no numeric token; count fixed at 2)
+        case "scratch that twice", "scratch it twice", "scrap that twice",
+             "undo that twice", "undo it twice",
+             "correct that twice", "fix that twice",
+             "scratch twice", "undo twice":
+            return .scratchThat(count: 2)
         // On-demand AI cleanup — not undo ("fix that" above is scratch).
         case "clean that up", "clean that", "cleanup that", "clean up that",
              "ai cleanup", "ai clean up", "ai clean that",
@@ -1041,6 +1058,7 @@ enum DictationCommand: Equatable, Sendable {
     /// User-facing command catalog for Settings / help (say → effect).
     static let helpCatalog: [(say: String, effect: String)] = [
         ("scratch that / correct that", "Undo last phrase (multi-level)"),
+        ("scratch that two times / undo that 3 times", "Undo last N phrases in one go"),
         ("clean that up / ai cleanup / polish that", "AI cleanup selection or last phrase (also hold+C)"),
         ("replace that", "Next phrase replaces last (multi-step)"),
         ("replace X with Y / change X to Y / swap X for Y", "Replace last occurrence of X with Y"),
