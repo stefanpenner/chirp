@@ -157,7 +157,7 @@ public final class AppState {
     private(set) var awaitingReplace = false
 
     /// On-demand AI cleanup in flight (menu / hotkey / spoken "clean that up").
-    private(set) var isCleaningUp = false
+    public private(set) var isCleaningUp = false
     private var cleanupTask: Task<Void, Never>?
 
     /// Test hook: inject a post-processor for on-demand cleanup (avoids real T5/LLM).
