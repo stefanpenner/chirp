@@ -136,11 +136,11 @@ actor Transcriber: TranscriberProtocol {
 
         var sileroConfig = SherpaOnnxSileroVadModelConfig()
         sileroConfig.model = UnsafePointer(vadModelStr)
-        sileroConfig.threshold = 0.45
-        sileroConfig.min_silence_duration = 0.5
-        sileroConfig.min_speech_duration = 0.1
-        sileroConfig.window_size = 512
-        sileroConfig.max_speech_duration = 15.0
+        sileroConfig.threshold = DecodePolicy.vadThreshold
+        sileroConfig.min_silence_duration = DecodePolicy.vadMinSilenceDuration
+        sileroConfig.min_speech_duration = DecodePolicy.vadMinSpeechDuration
+        sileroConfig.window_size = Int32(DecodePolicy.vadWindowSize)
+        sileroConfig.max_speech_duration = DecodePolicy.vadMaxSpeechDuration
 
         var tenVadConfig = SherpaOnnxTenVadModelConfig()
         tenVadConfig.model = UnsafePointer(emptyStr)

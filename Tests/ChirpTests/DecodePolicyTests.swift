@@ -11,6 +11,17 @@ struct DecodePolicyTests {
         #expect(DecodePolicy.commitSourceIsPending)
     }
 
+    @Test("Silero VAD endpoint constants are dictation-tuned")
+    func vadEndpointConstants() {
+        #expect(DecodePolicy.vadThreshold > 0 && DecodePolicy.vadThreshold < 1)
+        // Prefer ≥0.5s silence so natural mid-clause pauses do not false-endpoint
+        #expect(DecodePolicy.vadMinSilenceDuration >= 0.5)
+        #expect(DecodePolicy.vadMinSilenceDuration <= 1.0)
+        #expect(DecodePolicy.vadMinSpeechDuration > 0)
+        #expect(DecodePolicy.vadMaxSpeechDuration >= 10)
+        #expect(DecodePolicy.vadWindowSize == 512)
+    }
+
     @Test("canCommit threshold")
     func canCommit() {
         #expect(!DecodePolicy.canCommit(pendingSampleCount: 0))

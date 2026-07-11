@@ -479,7 +479,8 @@ enum DictationCommand: Equatable, Sendable {
             return .copyThat
         case "paste that", "paste it", "paste this", "paste here":
             return .pasteThat
-        case "duplicate that", "duplicate it", "dupe that", "copy paste that":
+        case "duplicate that", "duplicate it", "dupe that", "copy paste that",
+             "repeat that", "repeat it", "say that again", "again that":
             return .duplicateThat
         case "redo that", "redo it", "restore that", "undo undo",
              "redo last", "put it back":
@@ -695,7 +696,7 @@ enum DictationCommand: Equatable, Sendable {
         ("insert time / current time", "Type current time (e.g. 3:45 p.m.)"),
         ("copy that", "Copy session to clipboard"),
         ("paste that", "Paste clipboard (⌘V)"),
-        ("duplicate that / dupe that", "Copy last phrase and paste again"),
+        ("duplicate that / repeat that / dupe that", "Copy last phrase and paste again"),
         ("caps on / all caps on / no caps on", "Sticky capitalization mode"),
         ("caps off", "Back to normal casing"),
         ("spell mode / start spelling", "Sticky spell mode (letter packing)"),

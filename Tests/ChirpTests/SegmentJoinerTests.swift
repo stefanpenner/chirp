@@ -65,11 +65,20 @@ struct SegmentJoinerTests {
         #expect(j.delta == " world")
     }
 
-    @Test("uppercase after bare text inserts sentence break")
+    @Test("uppercase mid-clause verb after bare text uses space and downcases")
+    func uppercaseMidClauseContinuation() {
+        // VAD pause mid-thought: Parakeet re-caps "Create" — prefer space not period.
+        let j = SegmentJoiner.append(existing: "I want to", next: "Create a branch")
+        #expect(j.full == "I want to create a branch")
+        #expect(j.delta == " create a branch")
+        #expect(!SegmentJoiner.needsSentenceBreak(existing: "I want to", next: "Create a branch"))
+    }
+
+    @Test("uppercase discourse opener after bare text still sentence-breaks")
     func uppercaseNewSentence() {
-        let j = SegmentJoiner.append(existing: "Hello world", next: "Create a new note.")
-        #expect(j.full == "Hello world. Create a new note.")
-        #expect(j.delta == ". Create a new note.")
+        let j = SegmentJoiner.append(existing: "Hello world", next: "Fortunately this works.")
+        #expect(j.full == "Hello world. Fortunately this works.")
+        #expect(j.delta == ". Fortunately this works.")
     }
 
     @Test("uppercase after terminal punct uses single space")
@@ -114,13 +123,20 @@ struct SegmentJoinerTests {
         #expect(SegmentJoiner.looksLikeProperContinuation("SwiftUI") == true)
     }
 
-    @Test("real multi-word sentence still breaks")
+    @Test("discourse openers still sentence-break; mid-clause verbs do not")
     func realSentenceStillBreaks() {
+        // Not a mid-clause continuation verb → sentence break
         #expect(SegmentJoiner.needsSentenceBreak(
+            existing: "Hello world",
+            next: "Fortunately this works"
+        ))
+        #expect(SegmentJoiner.separator(between: "Hello world", and: "Fortunately this works") == ". ")
+        // Mid-clause verb re-capped by ASR after VAD pause → space (not period)
+        #expect(!SegmentJoiner.needsSentenceBreak(
             existing: "Hello world",
             next: "Create a new note"
         ))
-        #expect(SegmentJoiner.separator(between: "Hello world", and: "Schedule a meeting") == ". ")
+        #expect(SegmentJoiner.separator(between: "I want to", and: "Create a branch") == " ")
     }
 
     @Test("empty next is a no-op")

@@ -893,6 +893,9 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("dupe that") == .duplicateThat)
         #expect(DictationCommand.parse("copy paste that") == .duplicateThat)
         #expect(DictationCommand.parse("please duplicate that") == .duplicateThat)
+        #expect(DictationCommand.parse("repeat that") == .duplicateThat)
+        #expect(DictationCommand.parse("say that again") == .duplicateThat)
+        #expect(DictationCommand.parse("please repeat it") == .duplicateThat)
     }
 
     @Test("recognizes go to previous / next sentence (not select)")

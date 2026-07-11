@@ -8,6 +8,25 @@ enum DecodePolicy {
     /// Sample rate used throughout the offline pipeline.
     static let sampleRate = 16_000
 
+    // MARK: - Silero VAD (sherpa-onnx) endpointing
+
+    /// Speech probability threshold (higher → fewer false speech starts).
+    static let vadThreshold: Float = 0.45
+
+    /// Silence (seconds) after speech before a VAD endpoint.
+    /// 0.55 matches LiveKit Silero defaults — slightly longer than 0.5s reduces
+    /// mid-clause false endpoints during natural pauses (dictation SOTA).
+    static let vadMinSilenceDuration: Float = 0.55
+
+    /// Minimum speech (seconds) to count as a segment (filters clicks/noise).
+    static let vadMinSpeechDuration: Float = 0.1
+
+    /// Hard cap on continuous speech before forced endpoint (~15s).
+    static let vadMaxSpeechDuration: Float = 15.0
+
+    /// Silero window size in samples.
+    static let vadWindowSize: Int = 512
+
     /// Minimum pending samples before a VAD commit/flush may decode (~0.1s).
     static let minCommitSamples = 1_600
 

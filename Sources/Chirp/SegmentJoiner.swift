@@ -32,12 +32,16 @@ enum SegmentJoiner {
         }
 
         let separator = emptySeparator ? "" : separator(between: existing, and: piece)
-        // After terminal punct, next clause should start capitalized (SOTA truecase).
+        // After terminal punct / sentence break, next clause should start capitalized.
+        // Mid-clause space joins: Parakeet often re-caps VAD segments — downcase
+        // continuation verbs/function words so "I want to" + "Create" → "create".
         if !preserveLeadingCase {
             if let last = existing.last, ".!?…".contains(last) {
                 piece = capitalizeFirstLetter(piece)
             } else if separator == ". " {
                 piece = capitalizeFirstLetter(piece)
+            } else if separator == " " || separator.isEmpty {
+                piece = downcaseMidClauseContinuation(piece)
             }
         }
         let delta = separator + piece
@@ -96,14 +100,64 @@ enum SegmentJoiner {
             return true
         }
 
-        // Single Capitalized / CamelCase token — "Alice", "GitHub", "Xcode"
-        // Multi-word clauses like "Create a new note" still get sentence breaks.
-        // Exclude common sentence starters ("There", "Please", …).
+        // Single Capitalized / CamelCase token — "Alice", "GitHub", "Xcode".
+        // Mid-clause verbs/function words re-capped by ASR after a VAD pause
+        // prefer space join (then downcased in append), not a false period.
         if tokens.count == 1 {
+            if midClauseContinuations.contains(first.lowercased()) {
+                return true
+            }
             return isProperNameToken(first)
         }
 
+        // Multi-word: continuation if first token is a mid-clause starter
+        // ("Create a branch" after "I want to" → space, not ". ").
+        // Discourse openers not in the set still get sentence breaks
+        // ("Fortunately this works" after bare text).
+        if midClauseContinuations.contains(first.lowercased()) {
+            return true
+        }
         return false
+    }
+
+    /// First words that usually continue a clause after a short VAD pause
+    /// (ASR often re-capitalizes them). Prefer space join + downcase.
+    private static let midClauseContinuations: Set<String> = [
+        // Function words / articles / pronouns / auxiliaries
+        "the", "a", "an", "my", "our", "your", "their", "his", "her", "its",
+        "this", "that", "these", "those", "and", "or", "but", "so", "if",
+        "when", "while", "because", "with", "without", "for", "to", "from",
+        "into", "about", "after", "before", "as", "than", "then",
+        "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "will", "would", "could", "should", "can", "may",
+        "might", "must", "i", "we", "you", "they", "he", "she", "it",
+        // Common imperative / coding verbs re-capped mid-dictation
+        "create", "make", "add", "set", "get", "use", "open", "run", "write",
+        "call", "put", "take", "send", "delete", "update", "build", "install",
+        "deploy", "check", "look", "go", "come", "try", "start", "stop",
+        "save", "load", "copy", "paste", "move", "fix", "change", "select",
+        "insert", "remove", "type", "press", "click", "read", "find", "search",
+        "review", "commit", "push", "pull", "merge", "test", "show", "hide",
+        "close", "clear", "give", "keep", "let", "lets", "need", "want",
+        "please", "just", "also", "only", "not", "no", "yes",
+        "schedule", "book", "plan", "finish", "continue", "return",
+    ]
+
+    /// Downcase leading capital when the segment is a mid-clause continuation
+    /// (not a proper name / dict product).
+    static func downcaseMidClauseContinuation(_ text: String) -> String {
+        guard let first = text.first, first.isLetter, first.isUppercase else { return text }
+        let firstWord = String(text.prefix(while: { $0.isLetter }))
+        guard midClauseContinuations.contains(firstWord.lowercased()) else { return text }
+        // Keep CamelCase products (GitHub) — handled as proper, not mid-clause
+        if firstWord.dropFirst().contains(where: \.isUppercase) { return text }
+        return lowercaseFirstLetter(text)
+    }
+
+    static func lowercaseFirstLetter(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        guard first.isLetter, first.isUppercase else { return text }
+        return first.lowercased() + text.dropFirst()
     }
 
     private static func isDictionaryValue(tokens: [String]) -> Bool {
