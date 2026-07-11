@@ -29,6 +29,20 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("twelve copies") == "12 copies")
         #expect(SpokenNumberITN.apply("five apples") == "5 apples")
         #expect(SpokenNumberITN.apply("two oranges") == "2 oranges")
+        // Dictation staples
+        #expect(SpokenNumberITN.apply("three notes") == "3 notes")
+        #expect(SpokenNumberITN.apply("five tasks") == "5 tasks")
+        #expect(SpokenNumberITN.apply("two meetings") == "2 meetings")
+        #expect(SpokenNumberITN.apply("four bugs") == "4 bugs")
+        #expect(SpokenNumberITN.apply("ten lines") == "10 lines")
+        #expect(SpokenNumberITN.apply("six words") == "6 words")
+        #expect(SpokenNumberITN.apply("three commits") == "3 commits")
+        #expect(SpokenNumberITN.apply("two documents") == "2 documents")
+        #expect(SpokenNumberITN.apply("eight hours") == "8 hours")
+        #expect(SpokenNumberITN.apply("fifteen minutes") == "15 minutes")
+        #expect(SpokenNumberITN.apply("five comments") == "5 comments")
+        #expect(SpokenNumberITN.apply("two issues") == "2 issues")
+        #expect(SpokenNumberITN.apply("three sentences") == "3 sentences")
         // Compounds already convert; quantity still fine
         #expect(SpokenNumberITN.apply("twenty five apples") == "25 apples")
         // "of them" / non-quantity do not force

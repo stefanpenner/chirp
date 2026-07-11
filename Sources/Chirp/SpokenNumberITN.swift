@@ -37,6 +37,28 @@ enum SpokenNumberITN {
         "user", "users",
         "apple", "apples",
         "orange", "oranges",
+        // Dictation staples (safe count nouns; not of/more/times)
+        "note", "notes",
+        "task", "tasks",
+        "meeting", "meetings",
+        "bug", "bugs",
+        "line", "lines",
+        "word", "words",
+        "commit", "commits",
+        "document", "documents",
+        "hour", "hours",
+        "minute", "minutes",
+        "second", "seconds",
+        "day", "days",
+        "week", "weeks",
+        "month", "months",
+        "year", "years",
+        "comment", "comments",
+        "issue", "issues",
+        "request", "requests",
+        "change", "changes",
+        "paragraph", "paragraphs",
+        "sentence", "sentences",
     ]
 
     /// Periods for "N times a/an <period>" frequency ITN.

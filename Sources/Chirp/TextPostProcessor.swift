@@ -110,19 +110,36 @@ enum TextPostProcessor {
             // Desktop dictation: spoken punctuation / structure (Mac Voice Control style)
             // Terminal punct (period / full stop / ? / !) is handled in
             // applySpokenTerminalPunct so mid-segment commands work too.
-            (#"\s+comma\b\s*"#, ", "),
-            (#"\s+colon\b\s*"#, ": "),
-            (#"\s+semicolon\b\s*"#, "; "),
-            (#"\s+ellipsis\b"#, "…"),
-            (#"\s+dot dot dot\b"#, "…"),
-            (#"\s+em dash\b"#, "—"),
-            (#"\s+en dash\b"#, "–"),
-            (#"\s+dash\b"#, "—"),
-            (#"\s+hyphen\b"#, "-"),
+            // Allow segment start (`^`) so lone VAD chunks like "comma wait" rewrite.
+            (#"(?:^|\s+)comma\b\s*"#, ", "),
+            (#"(?:^|\s+)colon\b\s*"#, ": "),
+            (#"(?:^|\s+)semicolon\b\s*"#, "; "),
+            (#"(?:^|\s+)ellipsis\b"#, "…"),
+            (#"(?:^|\s+)dot dot dot\b"#, "…"),
+            (#"(?:^|\s+)em dash\b"#, "—"),
+            (#"(?:^|\s+)en dash\b"#, "–"),
+            (#"(?:^|\s+)dash\b"#, "—"),
+            (#"(?:^|\s+)hyphen\b"#, "-"),
+            // Double curly quotes (default "open/close quote")
             (#"(?:^|\s+)open quote\s*"#, "\u{201C}"),
             (#"(?:^|\s+)close quote\s*"#, "\u{201D}"),
+            (#"(?:^|\s+)open double quote\s*"#, "\u{201C}"),
+            (#"(?:^|\s+)close double quote\s*"#, "\u{201D}"),
+            (#"(?:^|\s+)double quote\s*"#, "\u{201C}"),
+            // Single / smart quotes
+            (#"(?:^|\s+)open single quote\s*"#, "\u{2018}"),
+            (#"(?:^|\s+)close single quote\s*"#, "\u{2019}"),
+            (#"(?:^|\s+)single quote\s*"#, "\u{2018}"),
+            (#"(?:^|\s+)apostrophe\s*"#, "\u{2019}"),
             (#"(?:^|\s+)open paren(?:thesis)?\s*"#, "("),
             (#"(?:^|\s+)close paren(?:thesis)?\s*"#, ")"),
+            (#"(?:^|\s+)open bracket\s*"#, "["),
+            (#"(?:^|\s+)close bracket\s*"#, "]"),
+            (#"(?:^|\s+)open brace\s*"#, "{"),
+            (#"(?:^|\s+)close brace\s*"#, "}"),
+            (#"(?:^|\s+)open curly brace\s*"#, "{"),
+            (#"(?:^|\s+)close curly brace\s*"#, "}"),
+            (#"(?:^|\s+)dollar sign\b"#, "$"),
             // Social: glue tag/handle to the following word ("hashtag chirp" → "#chirp").
             // Capture form only — bare "hashtag" alone stays the word (low value as bare #).
             // Email uses bare "at" + host dots (applySpokenEmail first); never bare "at" here.
@@ -314,11 +331,13 @@ enum TextPostProcessor {
         "music", "[music]", "(music)",
         "applause", "[applause]", "laughter", "[laughter]",
         // Lone closings / greetings with punct (ASR silence dumps). Keep bare
-        // "okay"/"hello"/"hi" without punct — those can be real short speech.
+        // "okay"/"hello"/"hi"/"yeah"/"yes" without punct — those can be real short speech.
         "bye.", "bye",
         "okay.", "ok.",
         "hello.", "hello?",
         "hi.", "hi?",
+        "yeah.", "yeah?", "yes.", "yes?",
+        "you.", "you?",
         "you know.", "i mean.",
         // Pure vocalizations (also handled as fillers mid-sentence)
         "hmm", "hm", "mm", "mhm", "uh", "um", "ah", "er",

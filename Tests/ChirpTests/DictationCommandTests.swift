@@ -573,6 +573,44 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("select previous paragraph") == .selectLastParagraph)
     }
 
+    @Test("recognizes select next line (not select last / next line move)")
+    func selectNextLineCommands() {
+        #expect(DictationCommand.parse("select next line") == .selectNextLine)
+        #expect(DictationCommand.parse("select forward line") == .selectNextLine)
+        #expect(DictationCommand.parse("highlight next line") == .selectNextLine)
+        #expect(DictationCommand.parse("Select next line.") == .selectNextLine)
+        #expect(DictationCommand.parse("select last line") == .selectLastLine)
+        #expect(DictationCommand.parse("select line") == .selectLastLine)
+        #expect(DictationCommand.parse("next line") == .moveDownLine)
+    }
+
+    @Test("recognizes delete next line (not delete last)")
+    func deleteNextLineCommands() {
+        #expect(DictationCommand.parse("delete next line") == .deleteNextLine)
+        #expect(DictationCommand.parse("delete forward line") == .deleteNextLine)
+        #expect(DictationCommand.parse("remove next line") == .deleteNextLine)
+        #expect(DictationCommand.parse("delete last line") == .deleteLastLine)
+        #expect(DictationCommand.parse("delete previous line") == .deleteLastLine)
+        #expect(DictationCommand.parse("delete line") == .deleteLastLine)
+    }
+
+    @Test("line ranges cover all lines")
+    func lineRanges() {
+        #expect(TranscriptSelection.lineRanges("") == [])
+        let single = TranscriptSelection.lineRanges("Hello")
+        #expect(single.count == 1)
+        #expect(single[0] == TranscriptSelection.SentenceRange(start: 0, end: 5))
+        let two = TranscriptSelection.lineRanges("A\nB")
+        #expect(two.count == 2)
+        #expect(two[0] == TranscriptSelection.SentenceRange(start: 0, end: 1))
+        #expect(two[1] == TranscriptSelection.SentenceRange(start: 2, end: 3))
+        let three = TranscriptSelection.lineRanges("Line one\nLine two\nLine three")
+        #expect(three.count == 3)
+        #expect(three[0].end == "Line one".count)
+        #expect(three[1].start == "Line one\n".count)
+        #expect(three[2].start == "Line one\nLine two\n".count)
+    }
+
     @Test("last line selection boundaries (content after last \\n, no leading separator)")
     func lastLineSelection() {
         #expect(TranscriptSelection.lastLine("") == "")

@@ -149,6 +149,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **delete last paragraph** / **delete previous paragraph** / **delete paragraph** — drop trailing paragraph (stack-aware; redo restores)
 - **delete next paragraph** / **delete forward paragraph** — progressive: remove next paragraph from session cursor (from end = second). Trailing peel stack-aware; middle surgery clears stack. Resets paragraph nav index. Does **not** steal **delete last paragraph**
 - **delete last line** / **delete previous line** / **delete line** — drop trailing line content after last `\n` (stack-aware; redo restores). Trailing empty line (`…\n`) peels the newline (not a no-op)
+- **delete next line** / **delete forward line** — progressive: remove next line from session cursor (from end = second). Does **not** steal **delete last line**
 - **caps on / all caps on / no caps on** — sticky casing (`CapsMode`)
 - **caps off** — back to normal casing
 - **spell mode** / **start spelling** / **spell on** — sticky spell mode (`SpellMode`); packs letters / NATO / digits
@@ -180,6 +181,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **next paragraph** / **go to next paragraph** / **forward a paragraph** — progressive move to next paragraph start (from end = second). Buffer unchanged (`ParagraphCursor.tla`). Does **not** steal **select next paragraph**
 - **select last line** / **select previous line** / **select line** / **select this line** — select trailing line (content after last `\n`)
 - **select first line** / **select the first line** / **highlight first line** / **select 1st line** — select first line (← session then ⇧→ × n; content before first `\n`). Buffer unchanged. Does **not** steal **select last line**
+- **select next line** / **select forward line** / **highlight next line** — progressive: from end select second line; further calls advance (`LineCursor.tla`). Buffer unchanged. Does **not** steal bare **next line** (move down) or **select last line**
 - **select all** — select all (⌘A)
 - **unselect that** / **deselect** / **clear selection** — collapse selection to end (→)
 - **bold that** / **make that bold** — select last phrase + bold (⌘B), then unselect

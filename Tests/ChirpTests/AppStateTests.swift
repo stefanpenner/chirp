@@ -2399,6 +2399,83 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select last line"))
     }
 
+    @Test("select next line twice advances to third line")
+    func selectNextLineProgressive() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["A\nB\nC"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "A\nB\nC" { break }
+        }
+
+        let text = "A\nB\nC"
+        let ranges = TranscriptSelection.lineRanges(text)
+        #expect(ranges.count == 3)
+
+        await mock.setFeedAudioResult(["select next line"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+        #expect(inserter.selectForwardCounts.last == ranges[1].end - ranges[1].start)
+
+        let clearsBefore = inserter.clearSelectionCallCount
+        await mock.setFeedAudioResult(["select next line"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count >= 2 { break }
+        }
+        #expect(inserter.clearSelectionCallCount > clearsBefore)
+        #expect(inserter.selectForwardCounts.last == ranges[2].end - ranges[2].start)
+        #expect(state.transcribedText == text)
+        #expect(!inserter.typedTexts.contains("select next line"))
+    }
+
+    @Test("delete next line removes second when it is also last")
+    func deleteNextLineTwoLines() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Line one\nLine two"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.contains("Line two") { break }
+        }
+
+        await mock.setFeedAudioResult(["delete next line"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.contains("Line two") { break }
+        }
+
+        #expect(!state.transcribedText.contains("Line two"))
+        #expect(state.transcribedText.contains("Line one") || state.transcribedText.hasPrefix("Line one"))
+        #expect(!inserter.typedTexts.contains("delete next line"))
+    }
+
     @Test("select first line moves to session start then selects forward")
     func selectFirstLineCommand() async throws {
         let mock = MockTranscriber()

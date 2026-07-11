@@ -22,6 +22,8 @@ enum DictationCommand: Equatable, Sendable {
     case deleteNextParagraph
     /// Delete the last line (after final \n).
     case deleteLastLine
+    /// Delete the next line (progressive). Does not steal delete last/previous.
+    case deleteNextLine
     /// Clear the entire session transcript and typed text.
     case clearAll
     /// Insert a newline (Return key).
@@ -100,6 +102,8 @@ enum DictationCommand: Equatable, Sendable {
     case selectLastLine
     /// Select the first line (before first \n).
     case selectFirstLine
+    /// Select the next line (progressive). Buffer unchanged.
+    case selectNextLine
     /// Select all in the focused app (⌘A).
     case selectAll
     /// Collapse the current selection (right-arrow without shift).
@@ -228,6 +232,10 @@ enum DictationCommand: Equatable, Sendable {
         case "delete last line", "delete previous line", "delete line",
              "remove last line", "remove previous line", "remove line":
             return .deleteLastLine
+        // Do not steal "delete last line" / "delete previous line".
+        case "delete next line", "delete forward line",
+             "remove next line", "remove forward line":
+            return .deleteNextLine
         case "clear all", "delete all", "scratch all", "clear everything",
              "start over", "delete everything", "clear it all",
              "wipe all", "wipe everything":
@@ -379,6 +387,10 @@ enum DictationCommand: Equatable, Sendable {
              "highlight first line", "highlight the first line",
              "highlight 1st line", "highlight the 1st line":
             return .selectFirstLine
+        // Session-relative next line — do not steal "select last line" / "select line".
+        case "select next line", "select forward line",
+             "highlight next line", "highlight forward line":
+            return .selectNextLine
         case "select all", "highlight all", "select everything":
             return .selectAll
         case "unselect that", "unselect", "deselect that", "clear selection",
@@ -453,6 +465,7 @@ enum DictationCommand: Equatable, Sendable {
         ("delete last paragraph / previous paragraph", "Remove last paragraph"),
         ("delete next paragraph / delete forward paragraph", "Remove next paragraph (progressive)"),
         ("delete last line / delete line", "Remove last line"),
+        ("delete next line / delete forward line", "Remove next line (progressive)"),
         ("clear all", "Wipe session text"),
         ("press enter", "Insert Return"),
         ("press tab", "Insert Tab"),
@@ -495,6 +508,7 @@ enum DictationCommand: Equatable, Sendable {
         ("previous paragraph / go to previous paragraph", "Move to previous paragraph start (progressive)"),
         ("select last line / select line", "Select last line"),
         ("select first line / the first line", "Select first line"),
+        ("select next line / select forward line", "Select next line (progressive)"),
         ("select all", "Select all (⌘A)"),
         ("unselect that / deselect", "Collapse selection (caret to end)"),
         ("bold that", "Select last phrase + bold (⌘B), then unselect"),
@@ -719,5 +733,31 @@ enum TranscriptSelection {
             return String(text[..<r.lowerBound])
         }
         return text
+    }
+
+    /// All line ranges in `text` (end exclusive), split on `\n`.
+    /// Content only (separator not included). Empty → `[]`.
+    static func lineRanges(_ text: String) -> [SentenceRange] {
+        guard !text.isEmpty else { return [] }
+        var ranges: [SentenceRange] = []
+        var searchStart = text.startIndex
+        while searchStart < text.endIndex {
+            if let nl = text.range(of: "\n", range: searchStart..<text.endIndex) {
+                let start = text.distance(from: text.startIndex, to: searchStart)
+                let end = text.distance(from: text.startIndex, to: nl.lowerBound)
+                ranges.append(SentenceRange(start: start, end: end))
+                searchStart = nl.upperBound
+                if searchStart >= text.endIndex {
+                    // Trailing newline: empty last line (content length 0)
+                    // Not added — delete last peels via lastLine special case.
+                    break
+                }
+            } else {
+                let start = text.distance(from: text.startIndex, to: searchStart)
+                ranges.append(SentenceRange(start: start, end: text.count))
+                break
+            }
+        }
+        return ranges
     }
 }

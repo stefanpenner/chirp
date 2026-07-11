@@ -170,6 +170,13 @@ public final class AppState {
     /// After `clearSelection`, caret is at end of that paragraph; after move, at start.
     private var paragraphSelectionActive = false
 
+    /// Progressive line navigation index (select/delete next line).
+    /// `nil` = caret at end; non-nil = line under cursor.
+    private var lineNavIndex: Int? = nil
+
+    /// True when a line selection is active (select first/last/next).
+    private var lineSelectionActive = false
+
     public convenience init() {
         let transcriber = Transcriber()
         self.init(audioRecorder: AudioRecorder(), transcriber: transcriber, textInserter: TextInserter(), startListening: false)
@@ -573,6 +580,8 @@ public final class AppState {
         sentenceSelectionActive = false
         paragraphNavIndex = nil
         paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
         recordingSession &+= 1
         let session = recordingSession
         status = .recording
@@ -691,6 +700,9 @@ public final class AppState {
                             selected: TranscriptSelection.lastLine(self.transcribedText),
                             typesIncrementally: false
                         )
+                    case .deleteNextLine:
+                        self.awaitingReplace = false
+                        self.performDeleteNextLine(typesIncrementally: false)
                     case .clearAll:
                         self.awaitingReplace = false
                         self.performClearAll(typesIncrementally: false)
@@ -785,6 +797,8 @@ public final class AppState {
                         self.performSelectLastLine(typesIncrementally: false)
                     case .selectFirstLine:
                         self.performSelectFirstLine(typesIncrementally: false)
+                    case .selectNextLine:
+                        self.performSelectNextLine(typesIncrementally: false)
                     case .selectAll:
                         self.performSelectAll(typesIncrementally: false)
                     case .unselectThat:
@@ -841,6 +855,8 @@ public final class AppState {
                         self.sentenceSelectionActive = false
                         self.paragraphNavIndex = nil
                         self.paragraphSelectionActive = false
+                        self.lineNavIndex = nil
+                        self.lineSelectionActive = false
                     }
                 }
             }
@@ -894,6 +910,9 @@ public final class AppState {
                 selected: TranscriptSelection.lastLine(transcribedText),
                 typesIncrementally: typesIncrementally
             )
+        case .deleteNextLine:
+            awaitingReplace = false
+            performDeleteNextLine(typesIncrementally: typesIncrementally)
         case .clearAll:
             awaitingReplace = false
             performClearAll(typesIncrementally: typesIncrementally)
@@ -973,6 +992,8 @@ public final class AppState {
             performSelectLastLine(typesIncrementally: typesIncrementally)
         case .selectFirstLine:
             performSelectFirstLine(typesIncrementally: typesIncrementally)
+        case .selectNextLine:
+            performSelectNextLine(typesIncrementally: typesIncrementally)
         case .selectAll:
             performSelectAll(typesIncrementally: typesIncrementally)
         case .unselectThat:
@@ -1045,6 +1066,8 @@ public final class AppState {
             sentenceSelectionActive = false
             paragraphNavIndex = nil
             paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
         }
     }
 
@@ -1375,6 +1398,8 @@ public final class AppState {
         sentenceSelectionActive = false
         paragraphNavIndex = nil
         paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Select the last typed phrase (EditStack top delta). Buffer unchanged.
@@ -1584,6 +1609,8 @@ public final class AppState {
             sentenceSelectionActive = false
             paragraphNavIndex = nil
             paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
             return
         }
 
@@ -1608,6 +1635,8 @@ public final class AppState {
         sentenceSelectionActive = false
         paragraphNavIndex = nil
         paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Select the last paragraph. Buffer unchanged.
@@ -1692,6 +1721,8 @@ public final class AppState {
             sentenceSelectionActive = false
             paragraphNavIndex = nil
             paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
             return
         }
 
@@ -1716,27 +1747,142 @@ public final class AppState {
         sentenceSelectionActive = false
         paragraphNavIndex = nil
         paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Select the last line. Buffer unchanged.
     private func performSelectLastLine(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
-        let selected = TranscriptSelection.lastLine(transcribedText)
-        if !selected.isEmpty {
+        let text = transcribedText
+        let ranges = TranscriptSelection.lineRanges(text)
+        guard !ranges.isEmpty else { return }
+        let selected = TranscriptSelection.lastLine(text)
+        guard !selected.isEmpty else { return }
+        if lineNavIndex == nil && !lineSelectionActive {
             textInserter.selectBackward(count: selected.count)
+        } else {
+            let last = ranges.count - 1
+            moveToLineOffset(ranges[last].start)
+            textInserter.selectForward(count: ranges[last].end - ranges[last].start)
         }
+        lineNavIndex = ranges.count - 1
+        lineSelectionActive = true
     }
 
-    /// Select the first line. Assumes caret at end of session text.
-    /// Moves to session start, then selects forward over the first line.
+    /// Select the first line. Sets `lineNavIndex` for progressive next.
     private func performSelectFirstLine(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         let text = transcribedText
-        guard !text.isEmpty else { return }
-        let first = TranscriptSelection.firstLine(text)
-        guard !first.isEmpty else { return }
-        textInserter.moveBackward(count: text.count)
-        textInserter.selectForward(count: first.count)
+        let ranges = TranscriptSelection.lineRanges(text)
+        guard !ranges.isEmpty else { return }
+        let range = ranges[0]
+        moveToLineOffset(range.start)
+        textInserter.selectForward(count: range.end - range.start)
+        lineNavIndex = 0
+        lineSelectionActive = true
+    }
+
+    /// Select the next line (progressive). From end: second line; further calls advance.
+    private func performSelectNextLine(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        let text = transcribedText
+        let ranges = TranscriptSelection.lineRanges(text)
+        let next: Int
+        if lineNavIndex == nil {
+            guard ranges.count >= 2 else { return }
+            next = 1
+        } else {
+            guard let idx = lineNavIndex, idx + 1 < ranges.count else { return }
+            next = idx + 1
+        }
+        let range = ranges[next]
+        moveToLineOffset(range.start)
+        textInserter.selectForward(count: range.end - range.start)
+        lineNavIndex = next
+        lineSelectionActive = true
+    }
+
+    /// Delete the next line (progressive). From end: second line.
+    /// Trailing → stack-aware peel; middle → string surgery.
+    private func performDeleteNextLine(typesIncrementally: Bool) {
+        let text = transcribedText
+        let ranges = TranscriptSelection.lineRanges(text)
+        let target: Int
+        if lineNavIndex == nil {
+            guard ranges.count >= 2 else { return }
+            target = 1
+        } else {
+            guard let idx = lineNavIndex, idx + 1 < ranges.count else { return }
+            target = idx + 1
+        }
+
+        let range = ranges[target]
+        let remainderAfter = String(text.dropFirst(range.end))
+        let isTrailing = remainderAfter.allSatisfy(\.isWhitespace)
+
+        if isTrailing {
+            performDeleteTrailingSelection(
+                selected: TranscriptSelection.lastLine(text),
+                typesIncrementally: typesIncrementally
+            )
+            sentenceNavIndex = nil
+            sentenceSelectionActive = false
+            paragraphNavIndex = nil
+            paragraphSelectionActive = false
+            lineNavIndex = nil
+            lineSelectionActive = false
+            return
+        }
+
+        // Middle: keep through prior line end; drop separator+target.
+        let priorEnd = ranges[target - 1].end
+        let keepEndIdx = text.index(text.startIndex, offsetBy: priorEnd)
+        let afterIdx = text.index(text.startIndex, offsetBy: range.end)
+        // Include the newline between prior and target in the deleted span.
+        let newText = String(text[..<keepEndIdx]) + String(text[afterIdx...])
+        let gapAndTargetCount = range.end - priorEnd
+
+        if typesIncrementally, gapAndTargetCount > 0 {
+            moveToLineOffset(priorEnd)
+            textInserter.selectForward(count: gapAndTargetCount)
+            textInserter.deleteBackward(count: 1)
+        }
+
+        transcribedText = newText
+        editStack.clear()
+        lastCommittedNormalized = ""
+        sentenceNavIndex = nil
+        sentenceSelectionActive = false
+        paragraphNavIndex = nil
+        paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
+    }
+
+    /// Move caret to a Character offset within the session buffer (line nav).
+    private func moveToLineOffset(_ offset: Int) {
+        let text = transcribedText
+        let from: Int
+        if let idx = lineNavIndex {
+            let ranges = TranscriptSelection.lineRanges(text)
+            if ranges.indices.contains(idx) {
+                if lineSelectionActive {
+                    textInserter.clearSelection()
+                    from = ranges[idx].end
+                    lineSelectionActive = false
+                } else {
+                    from = ranges[idx].start
+                }
+            } else {
+                from = text.count
+            }
+        } else {
+            from = text.count
+        }
+        let delta = offset - from
+        if delta > 0 { textInserter.moveForward(count: delta) }
+        if delta < 0 { textInserter.moveBackward(count: -delta) }
     }
 
     /// Select all in the focused app (⌘A). Buffer unchanged.
@@ -1866,6 +2012,8 @@ public final class AppState {
         moveToParagraphOffset(ranges[next].start)
         paragraphNavIndex = next
         paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Session-relative progressive "next paragraph" move.
@@ -1884,6 +2032,8 @@ public final class AppState {
         moveToParagraphOffset(ranges[next].start)
         paragraphNavIndex = next
         paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
     }
 
     /// Move caret to a Character offset within the session buffer (paragraph nav).
@@ -1897,6 +2047,8 @@ public final class AppState {
                     textInserter.clearSelection()
                     from = ranges[idx].end
                     paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
                 } else {
                     from = ranges[idx].start
                 }
@@ -2004,6 +2156,8 @@ public final class AppState {
         sentenceSelectionActive = false
         paragraphNavIndex = nil
         paragraphSelectionActive = false
+        lineNavIndex = nil
+        lineSelectionActive = false
         audioLevel = 0
         processingPhase = .none
         hotkeyManager?.sessionActive = false

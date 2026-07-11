@@ -126,6 +126,13 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("thank you so much for joining us.") == "")
         #expect(TextPostProcessor.process("see you next time.") == "")
         #expect(TextPostProcessor.process("see you next time") == "")
+        // Punctuated short fillers (VAD false endpoint dumps)
+        #expect(TextPostProcessor.process("yeah.") == "")
+        #expect(TextPostProcessor.process("yes.") == "")
+        #expect(TextPostProcessor.process("yeah?") == "")
+        #expect(TextPostProcessor.process("yes?") == "")
+        #expect(TextPostProcessor.process("you.") == "")
+        #expect(TextPostProcessor.process("you?") == "")
         // Legitimate single-word dictation must pass through (no trailing punct)
         #expect(TextPostProcessor.process("Yeah") == "Yeah")
         #expect(TextPostProcessor.process("Okay") == "Okay")
@@ -134,6 +141,7 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("hi") == "hi")
         #expect(TextPostProcessor.process("goodbye") == "goodbye")
         #expect(TextPostProcessor.process("yes") == "yes")
+        #expect(TextPostProcessor.process("yeah") == "yeah")
         // Multi-word speech must pass through
         #expect(TextPostProcessor.process("yeah I agree") == "yeah I agree")
         #expect(TextPostProcessor.process("thank you so much") == "thank you so much")
@@ -261,6 +269,16 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("word em dash word").contains("—"))
         let fullStop = TextPostProcessor.process("done full stop")
         #expect(fullStop == "done." || fullStop == "Done.")
+        // Segment-start comma/colon (lone VAD chunk)
+        #expect(TextPostProcessor.process("comma wait") == ", wait" || TextPostProcessor.process("comma wait") == ", Wait")
+        #expect(TextPostProcessor.process("colon list") == ": list" || TextPostProcessor.process("colon list") == ": List")
+        // Single quotes, brackets, braces, dollar sign
+        #expect(TextPostProcessor.process("open single quote hi close single quote")
+                == "\u{2018}hi\u{2019}")
+        #expect(TextPostProcessor.process("open bracket x close bracket") == "[x]")
+        #expect(TextPostProcessor.process("open brace y close brace") == "{y}")
+        #expect(TextPostProcessor.process("dollar sign 5") == "$5" || TextPostProcessor.process("dollar sign 5").contains("$"))
+        #expect(TextPostProcessor.process("apostrophe s") == "\u{2019}s" || TextPostProcessor.process("apostrophe s").hasPrefix("\u{2019}"))
     }
 
     @Test("Spoken hashtag and @-mention glue")
