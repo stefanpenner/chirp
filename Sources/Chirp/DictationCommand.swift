@@ -53,8 +53,9 @@ enum DictationCommand: Equatable, Sendable {
     case pressTab
     /// Insert a space character.
     case pressSpace
-    /// Press Backspace / Delete once. Keyboard-only; buffer unchanged.
-    case pressBackspace
+    /// Press Backspace / Delete N times (Dragon "Backspace <n>").
+    /// Keyboard-only; session buffer / edit stack unchanged. Count ≥ 1.
+    case pressBackspace(count: Int)
     /// Press Escape once. Keyboard-only; buffer unchanged; does not cancel session.
     case pressEscape
     /// System undo (⌘Z). Keyboard-only; buffer / edit stack unchanged.
@@ -73,8 +74,9 @@ enum DictationCommand: Equatable, Sendable {
     case pasteThat
     /// Duplicate last phrase (or whole buffer): copy + append again.
     case duplicateThat
-    /// Redo the last scratched segment.
-    case redoThat
+    /// Redo the last N scratched segments (Dragon multi-redo).
+    /// Bare "redo that" is `count: 1`. Count ≥ 1.
+    case redoThat(count: Int)
     /// Set sticky capitalization mode for following commits.
     case setCapsMode(CapsMode)
     /// Set sticky spell mode for following commits (letter packing).
@@ -551,6 +553,24 @@ enum DictationCommand: Equatable, Sendable {
                 #"^(?:scratch|scrap|undo|correct|fix) "# + num + #" times?$"#,
                 { c in inRange(c) ? .scratchThat(count: c) : nil }
             ),
+            // Dragon "redo that N times" (N ≥ 2). Bare "redo that" is matchExact.
+            (
+                #"^redo(?: that| it)? "# + num + #" times?$"#,
+                { c in inRange(c) ? .redoThat(count: c) : nil }
+            ),
+            (
+                #"^redo "# + num + #" times?$"#,
+                { c in inRange(c) ? .redoThat(count: c) : nil }
+            ),
+            // Dragon "Backspace <n>" / "press backspace N times" (N ≥ 1 including single).
+            (
+                #"^(?:press |hit )?(?:backspace|delete key) "# + num + #"(?: times?)?$"#,
+                { c in (1...100).contains(c) ? .pressBackspace(count: c) : nil }
+            ),
+            (
+                #"^backspace "# + num + #"(?: times?)?$"#,
+                { c in (1...100).contains(c) ? .pressBackspace(count: c) : nil }
+            ),
             // Buffer peel: delete last/previous N words|sentences|paragraphs|lines
             (
                 #"^delete (?:the )?(?:last|previous|prior) "# + num + #" words?$"#,
@@ -811,7 +831,9 @@ enum DictationCommand: Equatable, Sendable {
         // Forward delete phrases are matched separately below.
         case "press backspace", "hit backspace", "backspace",
              "press delete", "hit delete", "delete key":
-            return .pressBackspace
+            return .pressBackspace(count: 1)
+        case "backspace twice", "press backspace twice", "hit backspace twice":
+            return .pressBackspace(count: 2)
         // Single character (also covered by counted forms with "one")
         case "delete previous character", "delete last character",
              "delete prior character", "remove previous character",
@@ -848,7 +870,9 @@ enum DictationCommand: Equatable, Sendable {
             return .duplicateThat
         case "redo that", "redo it", "restore that", "undo undo",
              "redo last", "put it back":
-            return .redoThat
+            return .redoThat(count: 1)
+        case "redo that twice", "redo it twice", "redo twice", "restore that twice":
+            return .redoThat(count: 2)
         // Sticky caps modes (Dragon-style)
         case "no caps on", "no caps mode":
             return .setCapsMode(.noCaps)
@@ -1059,6 +1083,8 @@ enum DictationCommand: Equatable, Sendable {
     static let helpCatalog: [(say: String, effect: String)] = [
         ("scratch that / correct that", "Undo last phrase (multi-level)"),
         ("scratch that two times / undo that 3 times", "Undo last N phrases in one go"),
+        ("redo that two times / redo that twice", "Redo last N scratched phrases"),
+        ("backspace 5 / press backspace three times", "Press Backspace N times (keyboard only)"),
         ("clean that up / ai cleanup / polish that", "AI cleanup selection or last phrase (also hold+C)"),
         ("replace that", "Next phrase replaces last (multi-step)"),
         ("replace X with Y / change X to Y / swap X for Y", "Replace last occurrence of X with Y"),
@@ -1085,6 +1111,7 @@ enum DictationCommand: Equatable, Sendable {
         ("press tab", "Insert Tab"),
         ("press space / hit space", "Insert Space"),
         ("press backspace / delete key", "Press Backspace once (keyboard only)"),
+        ("backspace N / press backspace N times", "Press Backspace N times (keyboard only)"),
         ("forward delete / delete forward", "Press Forward Delete once (keyboard only; not Backspace)"),
         ("press escape / escape key", "Press Escape once (keyboard only; does not cancel)"),
         ("system undo / press undo / undo key", "System undo (⌘Z; keyboard only; not scratch that)"),

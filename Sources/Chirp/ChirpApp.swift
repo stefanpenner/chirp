@@ -950,8 +950,8 @@ public final class AppState {
                         self.performKeyInsert("\t", typesIncrementally: false)
                     case .pressSpace:
                         self.performKeyInsert(" ", typesIncrementally: false)
-                    case .pressBackspace:
-                        self.performPressBackspace()
+                    case .pressBackspace(let count):
+                        self.performPressBackspace(count: count)
                     case .pressEscape:
                         self.performPressEscape()
                     case .pressUndo:
@@ -970,8 +970,8 @@ public final class AppState {
                         self.performPasteThat(typesIncrementally: false)
                     case .duplicateThat:
                         self.performDuplicateThat(typesIncrementally: false)
-                    case .redoThat:
-                        self.performRedoThat(typesIncrementally: false)
+                    case .redoThat(let count):
+                        self.performRedoThat(count: count, typesIncrementally: false)
                     case .setCapsMode(let mode):
                         self.capsMode = mode
                     case .setSpellMode(let mode):
@@ -1271,8 +1271,8 @@ public final class AppState {
             performKeyInsert("\t", typesIncrementally: typesIncrementally)
         case .pressSpace:
             performKeyInsert(" ", typesIncrementally: typesIncrementally)
-        case .pressBackspace:
-            performPressBackspace()
+        case .pressBackspace(let count):
+            performPressBackspace(count: count)
         case .pressEscape:
             performPressEscape()
         case .pressUndo:
@@ -1291,8 +1291,8 @@ public final class AppState {
             performPasteThat(typesIncrementally: typesIncrementally)
         case .duplicateThat:
             performDuplicateThat(typesIncrementally: typesIncrementally)
-        case .redoThat:
-            performRedoThat(typesIncrementally: typesIncrementally)
+        case .redoThat(let count):
+            performRedoThat(count: count, typesIncrementally: typesIncrementally)
         case .setCapsMode(let mode):
             capsMode = mode
         case .setSpellMode(let mode):
@@ -1934,12 +1934,22 @@ public final class AppState {
         lastCommittedNormalized = ""
     }
 
-    /// Redo the last scratched segment ("redo that").
-    private func performRedoThat(typesIncrementally: Bool) {
-        guard let delta = editStack.redo() else { return }
-        transcribedText += delta
-        if typesIncrementally {
-            textInserter.typeText(delta)
+    /// Redo the last N scratched segments ("redo that" / "redo that N times").
+    /// Dual of specs/RedoThatN.tla — reuses ScratchThatDecision peel plan.
+    private func performRedoThat(count: Int = 1, typesIncrementally: Bool) {
+        let n = ScratchThatDecision.clampCount(count)
+        let lengths = editStack.redoItems.map(\.count)
+        let plan = ScratchThatDecision.plan(undoLengthsOldestFirst: lengths, count: n)
+        guard plan.steps > 0 else { return }
+
+        var typed = ""
+        for _ in 0..<plan.steps {
+            guard let delta = editStack.redo() else { break }
+            transcribedText += delta
+            typed += delta
+        }
+        if typesIncrementally, !typed.isEmpty {
+            textInserter.typeText(typed)
         }
         lastCommittedNormalized = ""
     }
@@ -2246,8 +2256,11 @@ public final class AppState {
     }
 
     /// Press Backspace once. Keyboard-only; session buffer / edit stack unchanged.
-    private func performPressBackspace() {
-        textInserter.deleteBackward(count: 1)
+    /// Dragon "Backspace <n>": press host Backspace N times. Keyboard-only.
+    /// Dual of specs/BackspaceN.tla (host peel; session buffer unchanged).
+    private func performPressBackspace(count: Int = 1) {
+        let n = BackspaceDecision.clampCount(count)
+        textInserter.deleteBackward(count: n)
     }
 
     /// Press Escape once. Keyboard-only; buffer / stack unchanged.

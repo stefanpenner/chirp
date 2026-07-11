@@ -280,13 +280,27 @@ struct DictationCommandTests {
 
     @Test("recognizes press backspace without stealing delete that")
     func pressBackspace() {
-        #expect(DictationCommand.parse("press backspace") == .pressBackspace)
-        #expect(DictationCommand.parse("hit backspace") == .pressBackspace)
-        #expect(DictationCommand.parse("backspace") == .pressBackspace)
-        #expect(DictationCommand.parse("press delete") == .pressBackspace)
-        #expect(DictationCommand.parse("delete key") == .pressBackspace)
+        #expect(DictationCommand.parse("press backspace") == .pressBackspace(count: 1))
+        #expect(DictationCommand.parse("hit backspace") == .pressBackspace(count: 1))
+        #expect(DictationCommand.parse("backspace") == .pressBackspace(count: 1))
+        #expect(DictationCommand.parse("press delete") == .pressBackspace(count: 1))
+        #expect(DictationCommand.parse("delete key") == .pressBackspace(count: 1))
         #expect(DictationCommand.parse("delete that") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("delete it") == .scratchThat(count: 1))
+    }
+
+    @Test("Dragon Backspace N / press backspace N times")
+    func backspaceN() {
+        #expect(DictationCommand.parse("backspace 5") == .pressBackspace(count: 5))
+        #expect(DictationCommand.parse("backspace three") == .pressBackspace(count: 3))
+        #expect(DictationCommand.parse("press backspace 2") == .pressBackspace(count: 2))
+        #expect(DictationCommand.parse("press backspace 4 times") == .pressBackspace(count: 4))
+        #expect(DictationCommand.parse("hit backspace two times") == .pressBackspace(count: 2))
+        #expect(DictationCommand.parse("backspace twice") == .pressBackspace(count: 2))
+        #expect(DictationCommand.parse("please backspace 3") == .pressBackspace(count: 3))
+        #expect(DictationCommand.parse("backspace") == .pressBackspace(count: 1))
+        #expect(DictationCommand.parse("delete that") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("delete last word") == .deleteLastWord)
     }
 
     @Test("recognizes press escape without bare escape")
@@ -328,10 +342,10 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("System Redo.") == .pressRedo)
         #expect(DictationCommand.parse("please press redo") == .pressRedo)
         // Must not steal EditStack redo
-        #expect(DictationCommand.parse("redo that") == .redoThat)
-        #expect(DictationCommand.parse("redo it") == .redoThat)
-        #expect(DictationCommand.parse("restore that") == .redoThat)
-        #expect(DictationCommand.parse("put it back") == .redoThat)
+        #expect(DictationCommand.parse("redo that") == .redoThat(count: 1))
+        #expect(DictationCommand.parse("redo it") == .redoThat(count: 1))
+        #expect(DictationCommand.parse("restore that") == .redoThat(count: 1))
+        #expect(DictationCommand.parse("put it back") == .redoThat(count: 1))
     }
 
     @Test("recognizes forward delete without stealing press delete / delete that")
@@ -343,9 +357,9 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("Forward Delete.") == .pressForwardDelete)
         #expect(DictationCommand.parse("please forward delete") == .pressForwardDelete)
         // Laptop Delete stays backspace
-        #expect(DictationCommand.parse("press delete") == .pressBackspace)
-        #expect(DictationCommand.parse("delete key") == .pressBackspace)
-        #expect(DictationCommand.parse("hit delete") == .pressBackspace)
+        #expect(DictationCommand.parse("press delete") == .pressBackspace(count: 1))
+        #expect(DictationCommand.parse("delete key") == .pressBackspace(count: 1))
+        #expect(DictationCommand.parse("hit delete") == .pressBackspace(count: 1))
         // Session scratch / delete-last paths unchanged
         #expect(DictationCommand.parse("delete that") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("delete it") == .scratchThat(count: 1))
@@ -456,11 +470,24 @@ struct DictationCommandTests {
 
     @Test("recognizes redo that")
     func redoThat() {
-        #expect(DictationCommand.parse("redo that") == .redoThat)
-        #expect(DictationCommand.parse("Redo it.") == .redoThat)
-        #expect(DictationCommand.parse("restore that") == .redoThat)
-        #expect(DictationCommand.parse("undo undo") == .redoThat)
-        #expect(DictationCommand.parse("put it back") == .redoThat)
+        #expect(DictationCommand.parse("redo that") == .redoThat(count: 1))
+        #expect(DictationCommand.parse("Redo it.") == .redoThat(count: 1))
+        #expect(DictationCommand.parse("restore that") == .redoThat(count: 1))
+        #expect(DictationCommand.parse("undo undo") == .redoThat(count: 1))
+        #expect(DictationCommand.parse("put it back") == .redoThat(count: 1))
+    }
+
+    @Test("Dragon redo that N times")
+    func redoThatNTimes() {
+        #expect(DictationCommand.parse("redo that two times") == .redoThat(count: 2))
+        #expect(DictationCommand.parse("redo that 3 times") == .redoThat(count: 3))
+        #expect(DictationCommand.parse("redo it four times") == .redoThat(count: 4))
+        #expect(DictationCommand.parse("redo 2 times") == .redoThat(count: 2))
+        #expect(DictationCommand.parse("redo that twice") == .redoThat(count: 2))
+        #expect(DictationCommand.parse("please redo that two times") == .redoThat(count: 2))
+        #expect(DictationCommand.parse("redo that") == .redoThat(count: 1))
+        #expect(DictationCommand.parse("system redo") == .pressRedo)
+        #expect(DictationCommand.parse("press redo") == .pressRedo)
     }
 
     @Test("recognizes caps mode and one-shot transforms")
@@ -528,7 +555,7 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("please undo that now") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("clear all please") == .clearAll)
         #expect(DictationCommand.parse("please copy that") == .copyThat)
-        #expect(DictationCommand.parse("redo that please") == .redoThat)
+        #expect(DictationCommand.parse("redo that please") == .redoThat(count: 1))
     }
 
     @Test("extra aliases and ASR near-misses")

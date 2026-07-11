@@ -62,4 +62,24 @@ struct ScratchThatDecisionTests {
         #expect(s.canUndo)
         #expect(s.lastDelta == "Hi")
     }
+
+    @Test("plan on redo stack matches successive EditStack.redo (RedoThatN dual)")
+    func dualRedoStack() {
+        var s = EditStack()
+        s.push("A")
+        s.push("B")
+        s.push("C")
+        _ = s.undo()
+        _ = s.undo()
+        // redoItems oldest→newest: B then C (last undone is top)
+        let lengths = s.redoItems.map(\.count)
+        let plan = ScratchThatDecision.plan(undoLengthsOldestFirst: lengths, count: 2)
+        var redone: [Int] = []
+        for _ in 0..<plan.steps {
+            if let d = s.redo() { redone.append(d.count) }
+        }
+        #expect(redone == plan.removedLengths)
+        #expect(!s.canRedo)
+        #expect(s.lastDelta == "C" || s.lastDelta == "B" || s.canUndo)
+    }
 }
