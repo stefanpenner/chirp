@@ -854,6 +854,121 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select next word"))
     }
 
+    @Test("select previous word twice steps back progressive word index")
+    func selectPreviousWordProgressive() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["alpha beta gamma"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("alpha") { break }
+        }
+
+        // First previous: trailing last word ("gamma")
+        await mock.setFeedAudioResult(["select previous word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty || !inserter.selectForwardCounts.isEmpty {
+                break
+            }
+        }
+        // Trailing path uses selectBackward (with leading space style)
+        let firstSpan = inserter.selectBackwardCounts.last
+        #expect(firstSpan == " gamma".count || firstSpan == "gamma".count
+            || firstSpan == " Gamma".count || firstSpan == "Gamma".count)
+
+        let forwardBefore = inserter.selectForwardCounts.count
+        let backBefore = inserter.selectBackwardCounts.count
+        await mock.setFeedAudioResult(["select previous word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count > forwardBefore
+                || inserter.selectBackwardCounts.count > backBefore {
+                break
+            }
+        }
+
+        // Second previous: step to "beta" via progressive path (selectForward content span)
+        #expect(
+            inserter.selectForwardCounts.last == "beta".count
+                || inserter.selectForwardCounts.last == "Beta".count,
+            "2nd previous should select beta, got \(String(describing: inserter.selectForwardCounts.last))"
+        )
+        #expect(state.transcribedText.lowercased().contains("gamma"))
+    }
+
+    @Test("select next then previous word steps back")
+    func selectNextThenPreviousWord() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["alpha beta gamma"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("alpha") { break }
+        }
+
+        await mock.setFeedAudioResult(["go to alpha"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["select next word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+        #expect(inserter.selectForwardCounts.last == "alpha".count
+            || inserter.selectForwardCounts.last == "Alpha".count)
+
+        let countBefore = inserter.selectForwardCounts.count
+        await mock.setFeedAudioResult(["select next word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count > countBefore { break }
+        }
+        #expect(inserter.selectForwardCounts.last == "beta".count
+            || inserter.selectForwardCounts.last == "Beta".count)
+
+        let count2 = inserter.selectForwardCounts.count
+        await mock.setFeedAudioResult(["select previous word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count > count2 { break }
+        }
+        #expect(
+            inserter.selectForwardCounts.last == "alpha".count
+                || inserter.selectForwardCounts.last == "Alpha".count,
+            "previous after next should return to alpha"
+        )
+    }
+
     @Test("select next word twice advances progressive word index")
     func selectNextWordProgressive() async throws {
         let mock = MockTranscriber()
@@ -1190,17 +1305,18 @@ struct AppStateTests {
         // Re-pin after awaits — other parallel suites may reset static clock.
         InsertStamp.nowProvider = { pinned }
         InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
+        let expectedTime = InsertStamp.formatTime(pinned)
         await mock.setFeedAudioResult(["insert time"])
         recorder.lastOnSamples?([0.1])
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 100_000_000)
-            if state.transcribedText.contains("3:45 p.m.") { break }
+            if state.transcribedText.contains(expectedTime) { break }
             InsertStamp.nowProvider = { pinned }
             InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
         }
 
-        #expect(state.transcribedText == "Hello3:45 p.m.")
-        #expect(inserter.typedTexts.contains("3:45 p.m."))
+        #expect(state.transcribedText == "Hello" + expectedTime)
+        #expect(inserter.typedTexts.contains(expectedTime))
         #expect(!inserter.typedTexts.contains("insert time"))
     }
 

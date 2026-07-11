@@ -2000,21 +2000,45 @@ public final class AppState {
         textInserter.pressForwardDelete()
     }
 
-    /// Select one word. Previous: session trailing + arm type-over.
-    /// Next: first word at/after sessionCaret + arm type-over (keyboard fallback at end).
+    /// Select one word. Previous: trailing then progressive step-back via wordNavIndex.
+    /// Next: progressive wordNavIndex (or at/after sessionCaret). Dual: WordCursor.tla.
     private func performSelectWord(direction: MoveDirection, typesIncrementally: Bool) {
         performSelectWords(direction: direction, count: 1, typesIncrementally: typesIncrementally)
     }
 
-    /// Select N words. Previous: trailing session words + arm.
+    /// Select N words. Previous: trailing from end, then progressive step-back via wordNavIndex.
     /// Next: progressive wordNavIndex (or first word at/after sessionCaret). Dual: WordCursor.tla.
     private func performSelectWords(direction: MoveDirection, count: Int, typesIncrementally: Bool) {
         guard count > 0 else { return }
-        if direction == .left,
-           typesIncrementally,
-           !TranscriptSelection.lastWords(transcribedText, count: count).isEmpty {
-            performSelectLastWords(count: count, typesIncrementally: true)
-            return
+        if direction == .left, typesIncrementally {
+            let words = TranscriptSelection.wordRanges(transcribedText)
+            if !words.isEmpty {
+                // Further previous: step back from progressive index (content-only span).
+                if let idx = wordNavIndex, idx > 0 {
+                    let endIdx = idx - 1
+                    let startIdx = max(0, endIdx - count + 1)
+                    let start = words[startIdx].start
+                    let end = words[endIdx].end
+                    let length = end - start
+                    guard length > 0 else { return }
+                    armSessionSelection(start: start, length: length)
+                    moveToSessionOffset(start)
+                    textInserter.selectForward(count: length)
+                    wordNavIndex = startIdx
+                    wordSelectionActive = true
+                    return
+                }
+                // First previous (or no walk yet): trailing last N words.
+                if wordNavIndex == nil,
+                   !TranscriptSelection.lastWords(transcribedText, count: count).isEmpty {
+                    performSelectLastWords(count: count, typesIncrementally: true)
+                    return
+                }
+                // At first word (index 0): no-op (mirror sentence previous).
+                if wordNavIndex == 0 {
+                    return
+                }
+            }
         }
         if direction == .right, typesIncrementally {
             let words = TranscriptSelection.wordRanges(transcribedText)

@@ -179,8 +179,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **select first / next / previous sentence** (and paragraph / line) — same replace-on-next-content contract for middle ranges (splice, not append)
 - **select last word** — select trailing word only (same replace-on-next-content contract)
 - **select next word** / **select forward word** — select first word at/after `sessionCaret` and arm type-over; further **select next word** advances `wordNavIndex` (`WordCursor.tla`). At session end with no index → keyboard ⇧⌥→ fallback.
-- **select previous word** / **select prior word** — select trailing session word and arm type-over (same span as **select last word**; `SelectionCommit.tla`). Does **not** steal bare **previous word** (move left)
-- **select previous N words** — select trailing N session words and arm type-over (same as **select last N words** when at session end)
+- **select previous word** / **select prior word** — first call selects trailing word; further calls step back via `wordNavIndex` (`WordCursor.tla`). Does **not** steal bare **previous word** (move left)
+- **select previous N words** — first call trailing N words; further previous steps the walk back
 - **select next N words** — N words from `sessionCaret` + arm type-over (keyboard fallback at end)
 - **delete next word** / **delete forward word** — delete next word (⇧⌥→ then ⌫; keyboard only; buffer unchanged). Does **not** steal **delete last word**
 - **delete previous N characters** / **delete last N characters** — peel N trailing session characters (+ keyboard ⌫ when incremental). Single: **delete previous character**
