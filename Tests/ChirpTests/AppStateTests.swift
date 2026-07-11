@@ -4227,6 +4227,102 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("next sentence"))
     }
 
+    @Test("next sentence then content inserts at second sentence start")
+    func moveToNextSentenceThenContentInsertsMid() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello. World now"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World now" { break }
+        }
+
+        await mock.setFeedAudioResult(["next sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["extra words"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("extra") { break }
+        }
+
+        let after = state.transcribedText
+        #expect(
+            after.hasPrefix("Hello."),
+            "first sentence kept, got \"\(after)\""
+        )
+        #expect(
+            after.lowercased().contains("extra"),
+            "inserted mid, got \"\(after)\""
+        )
+        #expect(
+            after.lowercased().contains("world"),
+            "second sentence kept after insert, got \"\(after)\""
+        )
+        // Not a pure trailing append after the whole buffer
+        #expect(
+            !after.lowercased().hasSuffix("extra words")
+                || after.lowercased().contains("extra words world")
+                || after.lowercased().contains("extra world"),
+            "insert should land before World, got \"\(after)\""
+        )
+    }
+
+    @Test("previous sentence then content inserts at last sentence start")
+    func moveToPreviousSentenceThenContentInsertsMid() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello. World now"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World now" { break }
+        }
+
+        await mock.setFeedAudioResult(["previous sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+
+        await mock.setFeedAudioResult(["extra words"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("extra") { break }
+        }
+
+        let after = state.transcribedText
+        #expect(after.hasPrefix("Hello."), "first kept, got \"\(after)\"")
+        #expect(after.lowercased().contains("extra"))
+        #expect(after.lowercased().contains("world"))
+    }
+
     @Test("next sentence twice advances to third sentence start")
     func moveToNextSentenceProgressive() async throws {
         let mock = MockTranscriber()

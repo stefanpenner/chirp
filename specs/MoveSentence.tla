@@ -7,13 +7,14 @@
     AppState.performMoveToPreviousSentence / performMoveToNextSentence
     (TextInserter moveBackward/moveForward only; transcribedText unchanged)
 
-  Product behavior (session-relative, no caret tracking):
-    - previous: ← × lastSentence length (assumes caret at end)
-    - next: from end, jump to start of second sentence
-      (← full buffer, → past first sentence); single-sentence no-op
+  Product behavior (session-relative):
+    - previous: jump to last sentence content start; sets sessionCaret
+    - next: from end, jump to start of second sentence; sets sessionCaret
+      so next content inserts mid-buffer (SessionCaretDecision / GoToPhrase.tla)
     - progressive 3rd+ sentence: see SentenceCursor.tla (sentenceNavIndex dual)
 
-  Grain: bufferLen only (0..4). Move-sentence actions leave bufferLen unchanged.
+  Grain: bufferLen only (0..4). Move-sentence actions leave bufferLen unchanged
+  (caret arm is modeled in GoToPhrase.tla InsertAtCaret).
 *)
 
 EXTENDS Integers, TLC

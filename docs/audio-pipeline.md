@@ -226,8 +226,8 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **end of document** / **bottom of document** / **go to end of document** / **go to bottom of document** — cursor to document end (⌘↓)
 - **page up** / **scroll up** / **scroll page up** — Page Up key. Does **not** steal **move up**
 - **page down** / **scroll down** / **scroll page down** — Page Down key. Does **not** steal **move down**
-- **previous sentence** / **go to previous sentence** / **back a sentence** — progressive: from end → last sentence content start; further calls step back. Resets on content commit / clear / new session. Buffer unchanged (`MoveSentence.tla`, `SentenceCursor.tla`)
-- **next sentence** / **go to next sentence** / **forward a sentence** / **move to next sentence** — progressive session cursor (`sentenceNavIndex`; nil = end): from end → second sentence content start (skip whitespace); further calls advance to 3rd, 4th, …. Single-sentence buffer is a no-op. Same content offset as **select next sentence**. Does **not** steal **select previous sentence**. Buffer unchanged (`MoveSentence.tla`, `SentenceCursor.tla`)
+- **previous sentence** / **go to previous sentence** / **back a sentence** — progressive: from end → last sentence content start; further calls step back. Sets `sessionCaret` so next content inserts there (not always append). Buffer unchanged (`MoveSentence.tla`, `SentenceCursor.tla`, `GoToPhrase.tla`)
+- **next sentence** / **go to next sentence** / **forward a sentence** / **move to next sentence** — progressive session cursor (`sentenceNavIndex`; nil = end): from end → second sentence content start; further calls advance. Sets `sessionCaret` for mid-buffer insert. Single-sentence buffer is a no-op. Does **not** steal **select previous sentence**. Buffer unchanged (`MoveSentence.tla`, `SentenceCursor.tla`)
 - Overlay badge shows sticky caps / spell mode when active
 - When spell mode is on, caps transform is skipped and multi-segment joins glue without spaces
 - **clear all** — wipe session transcript

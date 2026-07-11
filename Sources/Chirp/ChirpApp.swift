@@ -160,7 +160,7 @@ public final class AppState {
     /// Next content splices this range so session buffer matches type-over. Dual of SelectionCommit.tla.
     private var sessionSelection: (start: Int, length: Int)? = nil
 
-    /// Session caret offset after go-to / go-after (nil = end of buffer).
+    /// Session caret offset after go-to / unit move (nil = end of buffer).
     /// Mid-buffer content inserts here so host and session stay dual. Dual of GoToPhrase.tla.
     private var sessionCaret: Int? = nil
 
@@ -1360,6 +1360,15 @@ public final class AppState {
             return
         }
         sessionSelection = (start, length)
+        // Selection type-over wins over insert-at-caret.
+        sessionCaret = nil
+    }
+
+    /// Record session caret for mid-buffer insert (clears selection arm).
+    /// `nil` / end-of-buffer → append mode (`sessionCaret = nil`).
+    private func setSessionCaret(_ offset: Int) {
+        sessionSelection = nil
+        sessionCaret = offset < transcribedText.count ? offset : nil
     }
 
     /// Shape a content segment: one-shot "spell as …", sticky spell mode, or caps.
@@ -2745,7 +2754,9 @@ public final class AppState {
         } else {
             return
         }
-        moveToSessionOffset(ranges[next].start)
+        let offset = ranges[next].start
+        moveToSessionOffset(offset)
+        setSessionCaret(offset)
         sentenceNavIndex = next
         sentenceSelectionActive = false
     }
@@ -2764,7 +2775,9 @@ public final class AppState {
             guard let idx = sentenceNavIndex, idx + 1 < ranges.count else { return }
             next = idx + 1
         }
-        moveToSessionOffset(ranges[next].start)
+        let offset = ranges[next].start
+        moveToSessionOffset(offset)
+        setSessionCaret(offset)
         sentenceNavIndex = next
         sentenceSelectionActive = false
     }
@@ -2813,7 +2826,9 @@ public final class AppState {
         } else {
             return
         }
-        moveToParagraphOffset(ranges[next].start)
+        let offset = ranges[next].start
+        moveToParagraphOffset(offset)
+        setSessionCaret(offset)
         paragraphNavIndex = next
         paragraphSelectionActive = false
         lineNavIndex = nil
@@ -2833,7 +2848,9 @@ public final class AppState {
             guard let idx = paragraphNavIndex, idx + 1 < ranges.count else { return }
             next = idx + 1
         }
-        moveToParagraphOffset(ranges[next].start)
+        let offset = ranges[next].start
+        moveToParagraphOffset(offset)
+        setSessionCaret(offset)
         paragraphNavIndex = next
         paragraphSelectionActive = false
         lineNavIndex = nil
