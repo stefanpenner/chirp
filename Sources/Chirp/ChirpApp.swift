@@ -2904,26 +2904,28 @@ public final class AppState {
     }
 
     /// Move caret to a Character offset within the session buffer (line nav).
+    /// Host "from" dual of SessionCaretDecision.hostFrom / specs/HostCaret.tla.
     private func moveToLineOffset(_ offset: Int) {
         let text = transcribedText
-        let from: Int
+        var unitAnchor: Int? = nil
         if let idx = lineNavIndex {
             let ranges = TranscriptSelection.lineRanges(text)
             if ranges.indices.contains(idx) {
                 if lineSelectionActive {
                     textInserter.clearSelection()
-                    from = ranges[idx].end
+                    unitAnchor = ranges[idx].end
                     lineSelectionActive = false
                 } else {
-                    from = ranges[idx].start
+                    unitAnchor = ranges[idx].start
                 }
-            } else {
-                from = text.count
             }
-        } else {
-            from = text.count
         }
-        let delta = offset - from
+        let from = SessionCaretDecision.hostFrom(
+            bufferCount: text.count,
+            sessionCaret: sessionCaret,
+            unitAnchor: unitAnchor
+        )
+        let delta = SessionCaretDecision.moveDelta(from: from, to: offset)
         if delta > 0 { textInserter.moveForward(count: delta) }
         if delta < 0 { textInserter.moveBackward(count: -delta) }
     }
@@ -3060,31 +3062,30 @@ public final class AppState {
     }
 
     /// Move caret to a Character offset within the session buffer (sentence nav).
-    /// Current position:
-    /// - end when `sentenceNavIndex == nil`
-    /// - start of that sentence after a move
-    /// - end of that sentence when a sentence selection is active (collapsed first)
+    /// Host "from" dual of SessionCaretDecision.hostFrom / specs/HostCaret.tla:
+    /// unit nav anchor → sessionCaret → end.
     private func moveToSessionOffset(_ offset: Int) {
         let text = transcribedText
-        let from: Int
+        var unitAnchor: Int? = nil
         if let idx = sentenceNavIndex {
             let ranges = TranscriptSelection.sentenceRanges(text)
             if ranges.indices.contains(idx) {
                 if sentenceSelectionActive {
                     // Collapse selection to its trailing edge (end of sentence).
                     textInserter.clearSelection()
-                    from = ranges[idx].end
+                    unitAnchor = ranges[idx].end
                     sentenceSelectionActive = false
                 } else {
-                    from = ranges[idx].start
+                    unitAnchor = ranges[idx].start
                 }
-            } else {
-                from = text.count
             }
-        } else {
-            from = text.count
         }
-        let delta = offset - from
+        let from = SessionCaretDecision.hostFrom(
+            bufferCount: text.count,
+            sessionCaret: sessionCaret,
+            unitAnchor: unitAnchor
+        )
+        let delta = SessionCaretDecision.moveDelta(from: from, to: offset)
         if delta > 0 { textInserter.moveForward(count: delta) }
         if delta < 0 { textInserter.moveBackward(count: -delta) }
     }
@@ -3135,28 +3136,30 @@ public final class AppState {
     }
 
     /// Move caret to a Character offset within the session buffer (paragraph nav).
+    /// Host "from" dual of SessionCaretDecision.hostFrom / specs/HostCaret.tla.
     private func moveToParagraphOffset(_ offset: Int) {
         let text = transcribedText
-        let from: Int
+        var unitAnchor: Int? = nil
         if let idx = paragraphNavIndex {
             let ranges = TranscriptSelection.paragraphRanges(text)
             if ranges.indices.contains(idx) {
                 if paragraphSelectionActive {
                     textInserter.clearSelection()
-                    from = ranges[idx].end
+                    unitAnchor = ranges[idx].end
                     paragraphSelectionActive = false
-        lineNavIndex = nil
-        lineSelectionActive = false
+                    lineNavIndex = nil
+                    lineSelectionActive = false
                 } else {
-                    from = ranges[idx].start
+                    unitAnchor = ranges[idx].start
                 }
-            } else {
-                from = text.count
             }
-        } else {
-            from = text.count
         }
-        let delta = offset - from
+        let from = SessionCaretDecision.hostFrom(
+            bufferCount: text.count,
+            sessionCaret: sessionCaret,
+            unitAnchor: unitAnchor
+        )
+        let delta = SessionCaretDecision.moveDelta(from: from, to: offset)
         if delta > 0 { textInserter.moveForward(count: delta) }
         if delta < 0 { textInserter.moveBackward(count: -delta) }
     }

@@ -80,4 +80,89 @@ struct SessionCaretDecisionTests {
             ) == nil
         )
     }
+
+    // MARK: - Host from (HostCaret dual)
+
+    @Test("hostFrom prefers unit anchor over sessionCaret")
+    func hostFromUnitWins() {
+        #expect(
+            SessionCaretDecision.hostFrom(
+                bufferCount: 20,
+                sessionCaret: 5,
+                unitAnchor: 12
+            ) == 12
+        )
+    }
+
+    @Test("hostFrom uses sessionCaret when no unit nav")
+    func hostFromSessionCaret() {
+        #expect(
+            SessionCaretDecision.hostFrom(
+                bufferCount: 20,
+                sessionCaret: 7,
+                unitAnchor: nil
+            ) == 7
+        )
+    }
+
+    @Test("hostFrom defaults to end when caret and unit nil")
+    func hostFromEndDefault() {
+        #expect(
+            SessionCaretDecision.hostFrom(
+                bufferCount: 15,
+                sessionCaret: nil,
+                unitAnchor: nil
+            ) == 15
+        )
+    }
+
+    @Test("hostFrom clamps unit and caret into buffer")
+    func hostFromClamps() {
+        #expect(
+            SessionCaretDecision.hostFrom(
+                bufferCount: 10,
+                sessionCaret: 99,
+                unitAnchor: nil
+            ) == 10
+        )
+        #expect(
+            SessionCaretDecision.hostFrom(
+                bufferCount: 10,
+                sessionCaret: nil,
+                unitAnchor: -3
+            ) == 0
+        )
+    }
+
+    @Test("moveDelta is to minus from")
+    func moveDeltaSign() {
+        #expect(SessionCaretDecision.moveDelta(from: 10, to: 3) == -7)
+        #expect(SessionCaretDecision.moveDelta(from: 3, to: 10) == 7)
+        #expect(SessionCaretDecision.moveDelta(from: 5, to: 5) == 0)
+    }
+
+    @Test("two successive go-to deltas use prior caret not end")
+    func successiveGoToDeltas() {
+        // "alpha beta gamma" — go to beta (6) from end (16), then go to alpha (0) from 6.
+        let buf = "alpha beta gamma"
+        let end = buf.count
+        let beta = 6
+        let alpha = 0
+        let d1 = SessionCaretDecision.moveDelta(
+            from: SessionCaretDecision.hostFrom(
+                bufferCount: end, sessionCaret: nil, unitAnchor: nil
+            ),
+            to: beta
+        )
+        #expect(d1 == beta - end)
+        let d2 = SessionCaretDecision.moveDelta(
+            from: SessionCaretDecision.hostFrom(
+                bufferCount: end, sessionCaret: beta, unitAnchor: nil
+            ),
+            to: alpha
+        )
+        #expect(d2 == alpha - beta)
+        // Bug if second move assumed end: would be alpha - end, not alpha - beta.
+        #expect(d2 != alpha - end)
+    }
 }

@@ -2337,6 +2337,131 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("go after world"))
     }
 
+    @Test("second go to uses sessionCaret not end (host dual)")
+    func successiveGoToUsesSessionCaretNotEnd() async throws {
+        // "alpha beta gamma" — go to beta from end, then go to alpha from beta.
+        // Bug: second move assumed host still at end → overshoots left of alpha.
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["alpha beta gamma"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("gamma") { break }
+        }
+
+        let text = state.transcribedText
+        let lower = text.lowercased()
+        guard let betaRange = lower.range(of: "beta"),
+              let alphaRange = lower.range(of: "alpha") else {
+            Issue.record("expected alpha/beta in \"\(text)\"")
+            return
+        }
+        let betaStart = text.distance(from: text.startIndex, to: betaRange.lowerBound)
+        let alphaStart = text.distance(from: text.startIndex, to: alphaRange.lowerBound)
+        let end = text.count
+
+        await mock.setFeedAudioResult(["go to beta"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveBackwardCounts.isEmpty { break }
+        }
+        #expect(inserter.moveBackwardCounts.last == end - betaStart,
+                "first go-to from end to beta")
+
+        let backBefore = inserter.moveBackwardCounts
+        let forwardBefore = inserter.moveForwardCounts
+
+        await mock.setFeedAudioResult(["go to alpha"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveBackwardCounts.count > backBefore.count
+                || inserter.moveForwardCounts.count > forwardBefore.count {
+                break
+            }
+        }
+
+        // Correct: move left by (betaStart - alphaStart) from beta.
+        // Bug: would move left by (end - alphaStart) from end.
+        let expected = betaStart - alphaStart
+        let wrongFromEnd = end - alphaStart
+        #expect(inserter.moveBackwardCounts.last == expected,
+                "second go-to from beta to alpha; expected \(expected), wrong-from-end \(wrongFromEnd), got \(inserter.moveBackwardCounts.last ?? -1)")
+        #expect(inserter.moveBackwardCounts.last != wrongFromEnd
+                || expected == wrongFromEnd)
+    }
+
+    @Test("go to after word move uses sessionCaret not end")
+    func goToAfterWordMoveUsesSessionCaret() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["alpha beta gamma"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("gamma") { break }
+        }
+
+        let text = state.transcribedText
+        let lower = text.lowercased()
+        guard let alphaRange = lower.range(of: "alpha") else {
+            Issue.record("expected alpha in \"\(text)\"")
+            return
+        }
+        let alphaStart = text.distance(from: text.startIndex, to: alphaRange.lowerBound)
+        let end = text.count
+
+        // Move left one word → sessionCaret mid-buffer (before last word).
+        await mock.setFeedAudioResult(["move left"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.moveWordDirections.isEmpty { break }
+        }
+        #expect(inserter.moveWordDirections.last == .left)
+
+        let backBefore = inserter.moveBackwardCounts.count
+
+        await mock.setFeedAudioResult(["go to alpha"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.moveBackwardCounts.count > backBefore { break }
+        }
+
+        // After word-left from end, sessionCaret is mid-buffer.
+        // Go-to alpha must delta from that caret — not from end.
+        #expect(inserter.moveBackwardCounts.count > backBefore,
+                "go to alpha should issue a relative move")
+        guard let last = inserter.moveBackwardCounts.last else {
+            Issue.record("expected moveBackward after go to alpha")
+            return
+        }
+        let wrongFromEnd = end - alphaStart
+        #expect(last < wrongFromEnd,
+                "delta from mid caret must be shorter than from end; got \(last), from-end \(wrongFromEnd)")
+    }
+
     @Test("go to X then content inserts before phrase (does not replace)")
     func goToPhraseThenContentInsertsMid() async throws {
         let mock = MockTranscriber()

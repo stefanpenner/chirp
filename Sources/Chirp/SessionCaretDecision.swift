@@ -12,6 +12,32 @@ enum SessionCaretDecision {
         return caret >= 0 && caret < bufferCount
     }
 
+    /// Host caret position before a relative move to `target`.
+    /// Dual of specs/HostCaret.tla HostFrom.
+    ///
+    /// Priority:
+    /// 1. Unit nav anchor (sentence/paragraph/line start, or end after collapse)
+    /// 2. sessionCaret (after go-to / word·char move)
+    /// 3. End of buffer (default)
+    static func hostFrom(
+        bufferCount: Int,
+        sessionCaret: Int?,
+        unitAnchor: Int?
+    ) -> Int {
+        if let unit = unitAnchor {
+            return max(0, min(unit, bufferCount))
+        }
+        if let caret = sessionCaret, caret >= 0, caret <= bufferCount {
+            return caret
+        }
+        return max(0, bufferCount)
+    }
+
+    /// Relative host keystroke count: positive = forward, negative = backward.
+    static func moveDelta(from: Int, to: Int) -> Int {
+        to - from
+    }
+
     /// Insert `piece` at `caret` using SegmentJoiner rules vs the left prefix.
     /// Returns full buffer, new caret (after inserted text + any join space
     /// before the right remainder), and the host type-delta.
