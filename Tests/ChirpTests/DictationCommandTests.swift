@@ -1307,22 +1307,37 @@ struct DictationCommandTests {
 
     @Test("recognizes page up/down scroll (not move up/down line)")
     func pageScrollCommands() {
-        #expect(DictationCommand.parse("page up") == .pageUp)
-        #expect(DictationCommand.parse("scroll up") == .pageUp)
-        #expect(DictationCommand.parse("scroll page up") == .pageUp)
-        #expect(DictationCommand.parse("Page up.") == .pageUp)
-        #expect(DictationCommand.parse("please page up") == .pageUp)
+        #expect(DictationCommand.parse("page up") == .pageUp(count: 1))
+        #expect(DictationCommand.parse("scroll up") == .pageUp(count: 1))
+        #expect(DictationCommand.parse("scroll page up") == .pageUp(count: 1))
+        #expect(DictationCommand.parse("Page up.") == .pageUp(count: 1))
+        #expect(DictationCommand.parse("please page up") == .pageUp(count: 1))
 
-        #expect(DictationCommand.parse("page down") == .pageDown)
-        #expect(DictationCommand.parse("scroll down") == .pageDown)
-        #expect(DictationCommand.parse("scroll page down") == .pageDown)
-        #expect(DictationCommand.parse("please scroll down") == .pageDown)
+        #expect(DictationCommand.parse("page down") == .pageDown(count: 1))
+        #expect(DictationCommand.parse("scroll down") == .pageDown(count: 1))
+        #expect(DictationCommand.parse("scroll page down") == .pageDown(count: 1))
+        #expect(DictationCommand.parse("please scroll down") == .pageDown(count: 1))
 
         // Line moves stay separate
         #expect(DictationCommand.parse("move up") == .moveUpLines(count: 1))
         #expect(DictationCommand.parse("move down") == .moveDownLines(count: 1))
         #expect(DictationCommand.parse("go up") == .moveUpLines(count: 1))
         #expect(DictationCommand.parse("go down") == .moveDownLines(count: 1))
+    }
+
+    @Test("page up/down N times")
+    func pageScrollNTimes() {
+        #expect(DictationCommand.parse("page down 3 times") == .pageDown(count: 3))
+        #expect(DictationCommand.parse("page up 2 times") == .pageUp(count: 2))
+        #expect(DictationCommand.parse("page down 5") == .pageDown(count: 5))
+        #expect(DictationCommand.parse("scroll down two times") == .pageDown(count: 2))
+        #expect(DictationCommand.parse("scroll up 3 pages") == .pageUp(count: 3))
+        #expect(DictationCommand.parse("page down 4 pages") == .pageDown(count: 4))
+        #expect(DictationCommand.parse("page down twice") == .pageDown(count: 2))
+        #expect(DictationCommand.parse("scroll up twice") == .pageUp(count: 2))
+        #expect(DictationCommand.parse("please page down 2 times") == .pageDown(count: 2))
+        #expect(DictationCommand.parse("page up") == .pageUp(count: 1))
+        #expect(DictationCommand.parse("move down 3 lines") == .moveDownLines(count: 3))
     }
 
     @Test("recognizes move up/down line (not select previous line)")

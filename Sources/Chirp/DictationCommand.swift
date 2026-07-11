@@ -236,10 +236,10 @@ enum DictationCommand: Equatable, Sendable {
     case moveToParagraphStart
     /// Move caret to end of paragraph under session caret.
     case moveToParagraphEnd
-    /// Scroll one page up (Page Up). Buffer unchanged.
-    case pageUp
-    /// Scroll one page down (Page Down). Buffer unchanged.
-    case pageDown
+    /// Scroll N pages up (Page Up × N). Buffer unchanged. Count ≥ 1.
+    case pageUp(count: Int)
+    /// Scroll N pages down (Page Down × N). Buffer unchanged. Count ≥ 1.
+    case pageDown(count: Int)
     /// Move cursor to start of last sentence (plain ← × n). Buffer unchanged.
     case moveToPreviousSentence
     /// Move cursor to start of second sentence (← × full, then → past first). Buffer unchanged.
@@ -757,6 +757,31 @@ enum DictationCommand: Equatable, Sendable {
                 #"^select (?:the )?down "# + num + #" lines?$"#,
                 { c in (1...20).contains(c) ? .selectDownLines(count: c) : nil }
             ),
+            // Page scroll N times (Page Up/Down × N). Bare "page up" is exact.
+            (
+                #"^(?:scroll )?page up "# + num + #"(?: times?| pages?)?$"#,
+                { c in (1...20).contains(c) ? .pageUp(count: c) : nil }
+            ),
+            (
+                #"^(?:scroll )?page down "# + num + #"(?: times?| pages?)?$"#,
+                { c in (1...20).contains(c) ? .pageDown(count: c) : nil }
+            ),
+            (
+                #"^scroll up "# + num + #"(?: times?| pages?)?$"#,
+                { c in (1...20).contains(c) ? .pageUp(count: c) : nil }
+            ),
+            (
+                #"^scroll down "# + num + #"(?: times?| pages?)?$"#,
+                { c in (1...20).contains(c) ? .pageDown(count: c) : nil }
+            ),
+            (
+                #"^page up "# + num + #" pages?$"#,
+                { c in (1...20).contains(c) ? .pageUp(count: c) : nil }
+            ),
+            (
+                #"^page down "# + num + #" pages?$"#,
+                { c in (1...20).contains(c) ? .pageDown(count: c) : nil }
+            ),
         ]
 
         for spec in specs {
@@ -1148,10 +1173,15 @@ enum DictationCommand: Equatable, Sendable {
              "move to end of paragraph":
             return .moveToParagraphEnd
         // Page scroll — exact phrases; "move up" / "go up" remain moveUpLine.
+        // Counted "page down N times" is matchCounted.
         case "page up", "scroll up", "scroll page up":
-            return .pageUp
+            return .pageUp(count: 1)
         case "page down", "scroll down", "scroll page down":
-            return .pageDown
+            return .pageDown(count: 1)
+        case "page up twice", "scroll up twice", "scroll page up twice":
+            return .pageUp(count: 2)
+        case "page down twice", "scroll down twice", "scroll page down twice":
+            return .pageDown(count: 2)
         // Progressive line move — dual LineCursor.tla (like next/previous sentence).
         // Do not steal "select next line" / "delete next line" (exact match elsewhere).
         case "go to previous line", "previous line",
@@ -1286,8 +1316,9 @@ enum DictationCommand: Equatable, Sendable {
         ("start of paragraph / end of paragraph", "Caret to paragraph edge under cursor"),
         ("beginning of document / top of document", "Cursor to document start (⌘↑)"),
         ("end of document / bottom of document", "Cursor to document end (⌘↓)"),
-        ("page up / scroll up", "Page up (Page Up key)"),
-        ("page down / scroll down", "Page down (Page Down key)"),
+        ("page up / scroll up", "Page up once (Page Up key)"),
+        ("page down / scroll down", "Page down once (Page Down key)"),
+        ("page down N times / scroll up 3 pages", "Page Up/Down × N"),
         ("previous sentence / go to previous sentence", "Cursor to start of last sentence (← × n)"),
         ("next sentence / go to next sentence", "Cursor to start of second sentence (session-relative)"),
         ("period / comma / …", "Spoken punctuation"),

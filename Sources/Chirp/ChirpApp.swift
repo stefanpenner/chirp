@@ -1158,10 +1158,10 @@ public final class AppState {
                         self.performMoveToParagraphEdge(start: true)
                     case .moveToParagraphEnd:
                         self.performMoveToParagraphEdge(start: false)
-                    case .pageUp:
-                        self.performScrollPage(direction: .up)
-                    case .pageDown:
-                        self.performScrollPage(direction: .down)
+                    case .pageUp(let count):
+                        self.performScrollPage(direction: .up, count: count)
+                    case .pageDown(let count):
+                        self.performScrollPage(direction: .down, count: count)
                     case .moveToPreviousSentence:
                         self.performMoveToPreviousSentence()
                     case .moveToNextSentence:
@@ -1468,10 +1468,10 @@ public final class AppState {
             performMoveToParagraphEdge(start: true)
         case .moveToParagraphEnd:
             performMoveToParagraphEdge(start: false)
-        case .pageUp:
-            performScrollPage(direction: .up)
-        case .pageDown:
-            performScrollPage(direction: .down)
+        case .pageUp(let count):
+            performScrollPage(direction: .up, count: count)
+        case .pageDown(let count):
+            performScrollPage(direction: .down, count: count)
         case .moveToPreviousSentence:
             performMoveToPreviousSentence()
         case .moveToNextSentence:
@@ -3318,9 +3318,13 @@ public final class AppState {
         lineSelectionActive = false
     }
 
-    /// Scroll one page (Page Up / Page Down). Buffer unchanged.
-    private func performScrollPage(direction: MoveDirection) {
-        textInserter.scrollPage(direction: direction)
+    /// Scroll N pages (Page Up / Page Down × N). Buffer unchanged.
+    /// Dual of specs/PageScrollN.tla.
+    private func performScrollPage(direction: MoveDirection, count: Int = 1) {
+        let n = PageScrollDecision.clampCount(count)
+        for _ in 0..<n {
+            textInserter.scrollPage(direction: direction)
+        }
     }
 
     /// Move cursor to start of previous sentence (progressive).
