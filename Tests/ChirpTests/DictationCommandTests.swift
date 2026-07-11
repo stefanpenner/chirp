@@ -52,6 +52,21 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("replace the world") == .none)
     }
 
+    @Test("recognizes delete X phrase without stealing structural deletes")
+    func deletePhraseCommands() {
+        #expect(DictationCommand.parse("delete world") == .deletePhrase(target: "world"))
+        #expect(DictationCommand.parse("Delete World.") == .deletePhrase(target: "World"))
+        #expect(DictationCommand.parse("remove hello world") == .deletePhrase(target: "hello world"))
+        #expect(DictationCommand.parse("please delete planet") == .deletePhrase(target: "planet"))
+        // Structural / multi-step commands stay exact
+        #expect(DictationCommand.parse("delete that") == .scratchThat)
+        #expect(DictationCommand.parse("delete it") == .scratchThat)
+        #expect(DictationCommand.parse("delete last word") == .deleteLastWord)
+        #expect(DictationCommand.parse("delete last sentence") == .deleteLastSentence)
+        #expect(DictationCommand.parse("delete previous two words") == .deleteLastWords(count: 2))
+        #expect(DictationCommand.parse("delete next word") == .deleteNextWord)
+    }
+
     @Test("recognizes delete last word")
     func deleteLastWord() {
         #expect(DictationCommand.parse("delete last word") == .deleteLastWord)

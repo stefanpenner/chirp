@@ -230,6 +230,77 @@ struct AppStateTests {
         #expect(inserter.typedTexts == ["Hello", " world"])
     }
 
+    @Test("delete X removes last occurrence without leaving double spaces")
+    func deletePhraseCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello world foo"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("world") { break }
+        }
+
+        await mock.setFeedAudioResult(["delete world"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.lowercased().contains("world") { break }
+        }
+
+        let text = state.transcribedText.lowercased()
+        #expect(
+            text == "hello foo" || text.hasPrefix("hello") && text.contains("foo") && !text.contains("world"),
+            "expected world removed, got \"\(state.transcribedText)\""
+        )
+        #expect(!text.contains("  "), "no double spaces, got \"\(state.transcribedText)\"")
+        #expect(!inserter.typedTexts.contains("delete world"))
+        #expect(inserter.selectForwardCounts.last == " world".count)
+        #expect(inserter.deletedCounts.last == 1 || inserter.deletedCounts.contains(1))
+    }
+
+    @Test("delete X no-op when target missing")
+    func deletePhraseMissingTarget() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("hello") { break }
+        }
+        let before = state.transcribedText
+        let typedBefore = inserter.typedTexts.count
+        let deletedBefore = inserter.deletedCounts.count
+
+        await mock.setFeedAudioResult(["delete zzz"])
+        recorder.lastOnSamples?([0.1])
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        #expect(state.transcribedText == before)
+        #expect(inserter.typedTexts.count == typedBefore)
+        #expect(inserter.deletedCounts.count == deletedBefore)
+        #expect(!inserter.typedTexts.contains("delete zzz"))
+    }
+
     @Test("replace X with Y rewrites last occurrence in buffer")
     func replacePhraseCommand() async throws {
         let mock = MockTranscriber()

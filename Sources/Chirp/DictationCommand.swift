@@ -12,6 +12,8 @@ enum DictationCommand: Equatable, Sendable {
     case replaceThat
     /// Single-utterance find/replace last occurrence of `target` with `replacement`.
     case replacePhrase(target: String, replacement: String)
+    /// Single-utterance delete last occurrence of `target`.
+    case deletePhrase(target: String)
     /// Delete the last whitespace-delimited word.
     case deleteLastWord
     /// Delete the last N whitespace-delimited words (N ≥ 2).
@@ -224,8 +226,11 @@ enum DictationCommand: Equatable, Sendable {
                 return cmd
             }
         }
-        // Phrase replace uses lightly cleaned original text so casing is preserved.
+        // Phrase replace/delete use lightly cleaned original text so casing is preserved.
         if let cmd = matchPhraseReplace(text) {
+            return cmd
+        }
+        if let cmd = matchPhraseDelete(text) {
             return cmd
         }
         return .none
@@ -273,6 +278,59 @@ enum DictationCommand: Equatable, Sendable {
             // Do not treat "replace that with …" as multi-step arm — phrase form is fine.
             // Bare "replace that" has no "with" and never reaches here.
             return .replacePhrase(target: target, replacement: replacement)
+        }
+        return nil
+    }
+
+    /// "delete X" / "remove X". Runs after exact/counted so structural deletes win.
+    private static func matchPhraseDelete(_ text: String) -> DictationCommand? {
+        var n = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let last = n.last, ".!?,".contains(last) {
+            n.removeLast()
+        }
+        n = n.trimmingCharacters(in: .whitespaces)
+        // Strip leading/trailing politeness (preserve remaining case)
+        var tokens = n.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        let fillers: Set<String> = ["please", "now", "thanks", "thank", "you"]
+        while let first = tokens.first, fillers.contains(first.lowercased()) {
+            tokens.removeFirst()
+        }
+        while let last = tokens.last, fillers.contains(last.lowercased()) {
+            tokens.removeLast()
+        }
+        n = tokens.joined(separator: " ")
+
+        let specs = [
+            #"(?i)^delete (.+)$"#,
+            #"(?i)^remove (.+)$"#,
+        ]
+        for pattern in specs {
+            guard let regex = try? NSRegularExpression(pattern: pattern),
+                  let match = regex.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)),
+                  match.numberOfRanges >= 2,
+                  let tRange = Range(match.range(at: 1), in: n) else {
+                continue
+            }
+            let target = String(n[tRange]).trimmingCharacters(in: .whitespaces)
+            guard !target.isEmpty else { continue }
+            let low = target.lowercased()
+            // Refuse bare structural tokens already handled by matchExact
+            // (defense in depth if exact match order changes).
+            let blocked: Set<String> = [
+                "that", "it", "last", "word", "sentence", "paragraph", "line",
+                "all", "everything", "selection", "forward", "previous", "prior",
+                "next", "key",
+            ]
+            if blocked.contains(low) { continue }
+            // Refuse incomplete counted peels ("last 1 words", "previous sentence"…)
+            // so invalid N does not become a phrase delete of the words "last 1 words".
+            if low.hasPrefix("last ") || low.hasPrefix("previous ") || low.hasPrefix("prior ")
+                || low.hasPrefix("next ") || low.hasPrefix("forward ")
+                || low.hasPrefix("the last ") || low.hasPrefix("the previous ")
+                || low.hasPrefix("the next ") {
+                continue
+            }
+            return .deletePhrase(target: target)
         }
         return nil
     }
@@ -757,6 +815,7 @@ enum DictationCommand: Equatable, Sendable {
         ("scratch that / correct that", "Undo last phrase (multi-level)"),
         ("replace that", "Next phrase replaces last (multi-step)"),
         ("replace X with Y / change X to Y / swap X for Y", "Replace last occurrence of X with Y"),
+        ("delete X / remove X", "Delete last occurrence of phrase X"),
         ("redo that", "Restore last scratched phrase"),
         ("delete last word", "Remove last word"),
         ("delete last two words / delete previous 3 words", "Remove last N words"),

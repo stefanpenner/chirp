@@ -62,4 +62,56 @@ struct PhraseReplaceDecisionTests {
             ) == nil
         )
     }
+
+    @Test("findLastDeletableRange absorbs adjacent space")
+    func findLastDeletableRange() {
+        let mid = PhraseReplaceDecision.findLastDeletableRange(
+            target: "world",
+            in: "hello world foo"
+        )
+        #expect(mid?.start == "hello".count)
+        #expect(mid?.length == " world".count)
+
+        let trailing = PhraseReplaceDecision.findLastDeletableRange(
+            target: "world",
+            in: "hello world"
+        )
+        #expect(trailing?.start == "hello".count)
+        #expect(trailing?.length == " world".count)
+
+        let leading = PhraseReplaceDecision.findLastDeletableRange(
+            target: "hello",
+            in: "hello world"
+        )
+        #expect(leading?.start == 0)
+        #expect(leading?.length == "hello ".count)
+    }
+
+    @Test("bufferAfterDelete removes last match without double spaces")
+    func bufferAfterDelete() {
+        #expect(
+            PhraseReplaceDecision.bufferAfterDelete(
+                buffer: "hello world foo",
+                target: "world"
+            ) == "hello foo"
+        )
+        #expect(
+            PhraseReplaceDecision.bufferAfterDelete(
+                buffer: "a foo b foo c",
+                target: "foo"
+            ) == "a foo b c"
+        )
+        #expect(
+            PhraseReplaceDecision.bufferAfterDelete(
+                buffer: "Hello World",
+                target: "hello"
+            ) == "World"
+        )
+        #expect(
+            PhraseReplaceDecision.bufferAfterDelete(
+                buffer: "hello world",
+                target: "zzz"
+            ) == nil
+        )
+    }
 }

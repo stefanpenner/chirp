@@ -691,6 +691,9 @@ public final class AppState {
                             replacement: replacement,
                             typesIncrementally: false
                         )
+                    case .deletePhrase(let target):
+                        self.awaitingReplace = false
+                        self.performDeletePhrase(target: target, typesIncrementally: false)
                     case .deleteLastWord:
                         self.awaitingReplace = false
                         self.performDeleteLastWord(typesIncrementally: false)
@@ -985,6 +988,9 @@ public final class AppState {
                 replacement: replacement,
                 typesIncrementally: typesIncrementally
             )
+        case .deletePhrase(let target):
+            awaitingReplace = false
+            performDeletePhrase(target: target, typesIncrementally: typesIncrementally)
         case .deleteLastWord:
             awaitingReplace = false
             performDeleteLastWord(typesIncrementally: typesIncrementally)
@@ -1359,12 +1365,55 @@ public final class AppState {
             textInserter.selectForward(count: match.length)
             textInserter.typeText(replacement)
         }
+        applyPhraseEditResult(
+            newText: newText,
+            matchStart: match.start,
+            matchLength: match.length,
+            stackPush: replacement.isEmpty ? nil : replacement
+        )
+    }
+
+    /// Single-utterance "delete X": last occurrence (with adjacent space absorb).
+    /// Dual of PhraseReplaceDecision / specs/DeletePhrase.tla.
+    private func performDeletePhrase(target: String, typesIncrementally: Bool) {
+        guard let match = PhraseReplaceDecision.findLastDeletableRange(
+            target: target,
+            in: transcribedText
+        ),
+              let newText = SelectionCommitDecision.bufferAfterRangeReplace(
+                buffer: transcribedText,
+                start: match.start,
+                length: match.length,
+                replacement: ""
+              ) else {
+            return
+        }
+        if typesIncrementally {
+            moveToSessionOffset(match.start)
+            textInserter.selectForward(count: match.length)
+            textInserter.deleteBackward(count: 1)
+        }
+        applyPhraseEditResult(
+            newText: newText,
+            matchStart: match.start,
+            matchLength: match.length,
+            stackPush: nil
+        )
+    }
+
+    /// Shared stack/nav update after phrase replace or delete.
+    private func applyPhraseEditResult(
+        newText: String,
+        matchStart: Int,
+        matchLength: Int,
+        stackPush: String?
+    ) {
         if SelectionCommitDecision.isTrailing(
-            start: match.start,
-            length: match.length,
+            start: matchStart,
+            length: matchLength,
             bufferCount: transcribedText.count
         ) {
-            let suffix = String(transcribedText.suffix(match.length))
+            let suffix = String(transcribedText.suffix(matchLength))
             if !editStack.dropTrailingSuffix(suffix) {
                 editStack.clear()
             }
@@ -1372,8 +1421,8 @@ public final class AppState {
             editStack.clear()
         }
         transcribedText = newText
-        if !replacement.isEmpty {
-            editStack.push(replacement)
+        if let push = stackPush, !push.isEmpty {
+            editStack.push(push)
         }
         sessionSelection = nil
         lastCommittedNormalized = ""

@@ -1,6 +1,6 @@
-// PhraseReplaceDecision.swift — Pure gates for single-utterance "replace X with Y".
-// Dual of specs/ReplacePhrase.tla.
-// Locates the last case-insensitive occurrence of `target` and splices `replacement`.
+// PhraseReplaceDecision.swift — Pure gates for phrase replace / delete.
+// Dual of specs/ReplacePhrase.tla + specs/DeletePhrase.tla.
+// Locates the last case-insensitive occurrence of `target` and splices.
 
 import Foundation
 
@@ -27,6 +27,27 @@ enum PhraseReplaceDecision {
         return Match(start: start, length: length)
     }
 
+    /// Last match expanded to absorb one adjacent whitespace so delete does not
+    /// leave double spaces ("hello world foo" → "hello foo").
+    /// Prefers leading space; else trailing space.
+    static func findLastDeletableRange(target: String, in buffer: String) -> Match? {
+        guard let match = findLastRange(target: target, in: buffer) else { return nil }
+        if match.start > 0 {
+            let beforeIdx = buffer.index(buffer.startIndex, offsetBy: match.start - 1)
+            if buffer[beforeIdx].isWhitespace {
+                return Match(start: match.start - 1, length: match.length + 1)
+            }
+        }
+        let end = match.start + match.length
+        if end < buffer.count {
+            let afterIdx = buffer.index(buffer.startIndex, offsetBy: end)
+            if buffer[afterIdx].isWhitespace {
+                return Match(start: match.start, length: match.length + 1)
+            }
+        }
+        return match
+    }
+
     /// Buffer after replacing last occurrence of `target` with `replacement`.
     /// Nil when no match (caller must leave text unchanged).
     static func bufferAfterReplace(
@@ -40,6 +61,20 @@ enum PhraseReplaceDecision {
             start: match.start,
             length: match.length,
             replacement: replacement
+        )
+    }
+
+    /// Buffer after deleting last occurrence of `target` (with space absorb).
+    /// Nil when no match.
+    static func bufferAfterDelete(buffer: String, target: String) -> String? {
+        guard let match = findLastDeletableRange(target: target, in: buffer) else {
+            return nil
+        }
+        return SelectionCommitDecision.bufferAfterRangeReplace(
+            buffer: buffer,
+            start: match.start,
+            length: match.length,
+            replacement: ""
         )
     }
 }
