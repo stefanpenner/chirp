@@ -142,6 +142,8 @@ final class MockTextInserter: TextInserting {
     var selectAllCalled = false
     var moveWordDirections: [MoveDirection] = []
     var moveLineDirections: [MoveDirection] = []
+    /// (direction, count) for each selectLine call.
+    var selectLineCalls: [(MoveDirection, Int)] = []
     var moveToLineStartCalled = false
     var moveToLineEndCalled = false
     var moveToDocumentStartCalled = false
@@ -236,6 +238,11 @@ final class MockTextInserter: TextInserting {
 
     func moveLine(direction: MoveDirection) {
         moveLineDirections.append(direction)
+    }
+
+    func selectLine(direction: MoveDirection, count: Int) {
+        guard count > 0 else { return }
+        selectLineCalls.append((direction, count))
     }
 
     func moveToLineStart() {

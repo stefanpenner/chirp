@@ -72,6 +72,8 @@ enum TextFormatStyle: Equatable, Sendable {
     func moveWord(direction: MoveDirection)
     /// Move cursor one line (plain up/down arrow). Spoken "move up" / "move down".
     func moveLine(direction: MoveDirection)
+    /// Select `count` lines up/down (shift+↑/↓). Spoken "select up N lines".
+    func selectLine(direction: MoveDirection, count: Int)
     /// Move cursor to line start (⌘+left). Spoken "go to start".
     func moveToLineStart()
     /// Move cursor to line end (⌘+right). Spoken "go to end".
@@ -118,6 +120,7 @@ extension TextInserting {
     func selectAll() {}
     func moveWord(direction: MoveDirection) {}
     func moveLine(direction: MoveDirection) {}
+    func selectLine(direction: MoveDirection, count: Int) {}
     func moveToLineStart() {}
     func moveToLineEnd() {}
     func moveToDocumentStart() {}

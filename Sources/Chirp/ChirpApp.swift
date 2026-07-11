@@ -1134,6 +1134,10 @@ public final class AppState {
                         self.performMoveLine(direction: .up, count: count)
                     case .moveDownLines(let count):
                         self.performMoveLine(direction: .down, count: count)
+                    case .selectUpLines(let count):
+                        self.performSelectLines(direction: .up, count: count)
+                    case .selectDownLines(let count):
+                        self.performSelectLines(direction: .down, count: count)
                     case .moveToPreviousLine:
                         self.performMoveToPreviousLine()
                     case .moveToNextLine:
@@ -1440,6 +1444,10 @@ public final class AppState {
             performMoveLine(direction: .up, count: count)
         case .moveDownLines(let count):
             performMoveLine(direction: .down, count: count)
+        case .selectUpLines(let count):
+            performSelectLines(direction: .up, count: count)
+        case .selectDownLines(let count):
+            performSelectLines(direction: .down, count: count)
         case .moveToPreviousLine:
             performMoveToPreviousLine()
         case .moveToNextLine:
@@ -3163,6 +3171,18 @@ public final class AppState {
         sentenceSelectionActive = false
         paragraphNavIndex = nil
         paragraphSelectionActive = false
+    }
+
+    /// Select N lines up/down (⇧↑/↓). Keyboard-only; session buffer unchanged.
+    /// Dual of specs/SelectLinesN.tla.
+    private func performSelectLines(direction: MoveDirection, count: Int = 1) {
+        let n = LineMoveDecision.clampCount(count)
+        textInserter.selectLine(direction: direction, count: n)
+        // Host selection only — do not rewrite session buffer or stack.
+        lineSelectionActive = true
+        sentenceSelectionActive = false
+        paragraphSelectionActive = false
+        wordSelectionActive = false
     }
 
     /// Progressive "previous line" — dual of LineCursor.tla PrevLine + sessionCaret.

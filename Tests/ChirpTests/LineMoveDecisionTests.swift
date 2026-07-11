@@ -29,4 +29,11 @@ struct LineMoveDecisionTests {
         // buffer identity preserved (pure function)
         #expect(t == "aaa\nbbb\nccc\nddd")
     }
+
+    @Test("select lines clamp matches move lines (SelectLinesN dual)")
+    func selectLinesClamp() {
+        #expect(LineMoveDecision.clampCount(3) == 3)
+        #expect(LineMoveDecision.clampCount(0) == 1)
+        #expect(LineMoveDecision.clampCount(100) == LineMoveDecision.maxCount)
+    }
 }

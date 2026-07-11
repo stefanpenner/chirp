@@ -223,6 +223,23 @@ final class TextInserter: TextInserting {
         }
     }
 
+    /// Select `count` lines via ⇧↑ / ⇧↓. Spoken "select up N lines" / "select down N lines".
+    func selectLine(direction: MoveDirection, count: Int) {
+        guard count > 0 else { return }
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let arrow: CGKeyCode = direction == .up ? 0x7E : 0x7D // kVK_UpArrow / kVK_DownArrow
+        for _ in 0..<count {
+            if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: arrow, keyDown: true) {
+                keyDown.flags = .maskShift
+                keyDown.post(tap: .cgAnnotatedSessionEventTap)
+            }
+            if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: arrow, keyDown: false) {
+                keyUp.flags = .maskShift
+                keyUp.post(tap: .cgAnnotatedSessionEventTap)
+            }
+        }
+    }
+
     /// Move cursor to line start via ⌘←.
     func moveToLineStart() {
         let source = CGEventSource(stateID: .combinedSessionState)

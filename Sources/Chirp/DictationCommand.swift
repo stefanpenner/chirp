@@ -212,6 +212,10 @@ enum DictationCommand: Equatable, Sendable {
     case moveUpLines(count: Int)
     /// Move cursor N lines down (↓ × N). Dragon "move down N lines". Buffer unchanged.
     case moveDownLines(count: Int)
+    /// Select N lines up (⇧↑ × N). Keyboard-only; buffer unchanged. Count ≥ 1.
+    case selectUpLines(count: Int)
+    /// Select N lines down (⇧↓ × N). Keyboard-only; buffer unchanged. Count ≥ 1.
+    case selectDownLines(count: Int)
     /// Progressive session: move caret to previous line start (dual LineCursor.tla).
     case moveToPreviousLine
     /// Progressive session: move caret to next line start (dual LineCursor.tla).
@@ -743,6 +747,16 @@ enum DictationCommand: Equatable, Sendable {
                 #"^down "# + num + #" lines?$"#,
                 { c in (1...20).contains(c) ? .moveDownLines(count: c) : nil }
             ),
+            // Keyboard select up/down N lines (⇧↑/↓). Do not steal buffer peels:
+            // "select last/previous N lines" / "select next N lines".
+            (
+                #"^select (?:the )?up "# + num + #" lines?$"#,
+                { c in (1...20).contains(c) ? .selectUpLines(count: c) : nil }
+            ),
+            (
+                #"^select (?:the )?down "# + num + #" lines?$"#,
+                { c in (1...20).contains(c) ? .selectDownLines(count: c) : nil }
+            ),
         ]
 
         for spec in specs {
@@ -1100,6 +1114,11 @@ enum DictationCommand: Equatable, Sendable {
             return .moveUpLines(count: 1)
         case "move down", "down a line", "go down", "line down":
             return .moveDownLines(count: 1)
+        // Keyboard select one line up/down (⇧↑/↓). Not buffer "select previous line".
+        case "select up a line", "select up line", "select line up":
+            return .selectUpLines(count: 1)
+        case "select down a line", "select down line", "select line down":
+            return .selectDownLines(count: 1)
         // Document edges before line edges so "… of document" phrases win as full matches
         // (exact match; line phrases stay separate strings).
         case "beginning of document", "top of document", "go to top of document",
@@ -1259,6 +1278,7 @@ enum DictationCommand: Equatable, Sendable {
         ("move right / next word", "Cursor right one word (⌥→)"),
         ("move up / move down / line up / line down", "Cursor up/down one line (host ↑↓)"),
         ("move up N lines / move down 3 lines", "Cursor up/down N lines (host ↑↓ × N)"),
+        ("select up N lines / select down 3 lines", "Select N lines up/down (⇧↑/↓; keyboard only)"),
         ("next line / previous line", "Progressive line start (session dual)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),
         ("go to end / end of line", "Cursor to line end (⌘→)"),

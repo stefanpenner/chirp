@@ -1371,6 +1371,25 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("select previous line") == .selectPreviousLine)
     }
 
+    @Test("select up/down N lines keyboard (not buffer last/next peels)")
+    func selectUpDownNLines() {
+        #expect(DictationCommand.parse("select up 3 lines") == .selectUpLines(count: 3))
+        #expect(DictationCommand.parse("select down two lines") == .selectDownLines(count: 2))
+        #expect(DictationCommand.parse("select up 5 line") == .selectUpLines(count: 5))
+        #expect(DictationCommand.parse("select the down 4 lines") == .selectDownLines(count: 4))
+        #expect(DictationCommand.parse("please select up 2 lines") == .selectUpLines(count: 2))
+        #expect(DictationCommand.parse("select up a line") == .selectUpLines(count: 1))
+        #expect(DictationCommand.parse("select down a line") == .selectDownLines(count: 1))
+        #expect(DictationCommand.parse("select line up") == .selectUpLines(count: 1))
+        #expect(DictationCommand.parse("select line down") == .selectDownLines(count: 1))
+        // Buffer peels stay separate
+        #expect(DictationCommand.parse("select last 3 lines") == .selectLastLines(count: 3))
+        #expect(DictationCommand.parse("select previous 2 lines") == .selectLastLines(count: 2))
+        #expect(DictationCommand.parse("select next 2 lines") == .selectNextLines(count: 2))
+        #expect(DictationCommand.parse("select previous line") == .selectPreviousLine)
+        #expect(DictationCommand.parse("move up 2 lines") == .moveUpLines(count: 2))
+    }
+
     @Test("recognizes duplicate that")
     func duplicateThatCommands() {
         #expect(DictationCommand.parse("duplicate that") == .duplicateThat)
