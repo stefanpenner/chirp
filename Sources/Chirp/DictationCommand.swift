@@ -94,6 +94,9 @@ enum DictationCommand: Equatable, Sendable {
     case sentenceCaseThat
     /// Remove the space before the last word / phrase (one-shot).
     case noSpaceThat
+    /// On-demand AI cleanup of selection / last phrase / session buffer.
+    /// Distinct from "fix that" / "correct that" (those are undo / scratch).
+    case aiCleanup
     /// Select the last typed phrase (shift+left over last stack delta).
     case selectThat
     /// Select the last whitespace-delimited word.
@@ -659,6 +662,12 @@ enum DictationCommand: Equatable, Sendable {
              "correct that", "fix that",
              "correct it", "fix it":
             return .scratchThat
+        // On-demand AI cleanup — not undo ("fix that" above is scratch).
+        case "clean that up", "clean that", "cleanup that", "clean up that",
+             "ai cleanup", "ai clean up", "ai clean that",
+             "polish that", "polish it", "polish that up",
+             "clean this up", "cleanup this":
+            return .aiCleanup
         case "replace that", "replace it", "replace last",
              "swap that", "change that":
             return .replaceThat
@@ -944,6 +953,7 @@ enum DictationCommand: Equatable, Sendable {
     /// User-facing command catalog for Settings / help (say → effect).
     static let helpCatalog: [(say: String, effect: String)] = [
         ("scratch that / correct that", "Undo last phrase (multi-level)"),
+        ("clean that up / ai cleanup / polish that", "AI cleanup selection or last phrase"),
         ("replace that", "Next phrase replaces last (multi-step)"),
         ("replace X with Y / change X to Y / swap X for Y", "Replace last occurrence of X with Y"),
         ("delete X / remove X", "Delete last occurrence of phrase X"),

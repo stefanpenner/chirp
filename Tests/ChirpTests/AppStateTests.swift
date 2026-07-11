@@ -6333,4 +6333,136 @@ struct AppStateTests {
         #expect(preview?.contains("world") == true,
                 "Preview should include current peek, got: \"\(preview ?? "nil")\"")
     }
+
+    // MARK: - On-demand AI cleanup
+
+    /// Fake cleanup processor: uppercases input (deterministic, no T5/LLM).
+    private struct UppercaseCleanupProcessor: TextPostProcessing {
+        func process(_ text: String) async throws -> String {
+            text.uppercased()
+        }
+    }
+
+    @Test("runAICleanup rewrites last phrase via injected processor")
+    func aiCleanupLastPhrase() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.cleanupProcessorOverride = UppercaseCleanupProcessor()
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !state.transcribedText.isEmpty { break }
+        }
+        #expect(!state.transcribedText.isEmpty)
+
+        state.runAICleanup()
+        for _ in 0..<50 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            if !state.isCleaningUp { break }
+        }
+
+        #expect(!state.isCleaningUp)
+        #expect(state.transcribedText == "HELLO WORLD")
+        #expect(inserter.deletedCounts.contains { $0 > 0 })
+        #expect(inserter.typedTexts.contains("HELLO WORLD"))
+    }
+
+    @Test("spoken clean that up triggers AI cleanup")
+    func aiCleanupSpokenCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["messy words"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.cleanupProcessorOverride = UppercaseCleanupProcessor()
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("messy") { break }
+        }
+
+        await mock.setFeedAudioResult(["clean that up"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<50 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            if state.transcribedText == "MESSY WORDS" { break }
+        }
+
+        #expect(state.transcribedText == "MESSY WORDS",
+                "expected cleaned buffer, got \"\(state.transcribedText)\"")
+        #expect(!inserter.typedTexts.contains("clean that up"))
+    }
+
+    @Test("runAICleanup no-op when buffer empty")
+    func aiCleanupEmptyNoOp() {
+        let (state, _, _, inserter) = makeAppState()
+        state.cleanupProcessorOverride = UppercaseCleanupProcessor()
+        state.status = .ready
+        #expect(state.transcribedText.isEmpty)
+
+        state.runAICleanup()
+
+        #expect(!state.isCleaningUp)
+        #expect(inserter.typedTexts.isEmpty)
+        #expect(inserter.deletedCounts.isEmpty)
+    }
+
+    @Test("runAICleanup rewrites selection when armed")
+    func aiCleanupSelection() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["alpha beta gamma"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.cleanupProcessorOverride = UppercaseCleanupProcessor()
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("beta") { break }
+        }
+
+        // Select "beta" only
+        await mock.setFeedAudioResult(["select beta"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.contains(4) { break }
+        }
+
+        state.runAICleanup()
+        for _ in 0..<50 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            if state.transcribedText.contains("BETA") { break }
+        }
+
+        let text = state.transcribedText
+        #expect(text.contains("BETA"), "selection cleaned, got \"\(text)\"")
+        #expect(text.lowercased().contains("alpha"), "prefix preserved, got \"\(text)\"")
+        #expect(text.lowercased().contains("gamma"), "suffix preserved, got \"\(text)\"")
+        #expect(inserter.typedTexts.contains("BETA"))
+    }
 }

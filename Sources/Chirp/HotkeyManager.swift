@@ -204,6 +204,7 @@ final class HotkeyManager {
     private let onPress: @Sendable () -> Void
     private let onRelease: @Sendable () -> Void
     private let onCancel: @Sendable () -> Void
+    private let onCleanup: @Sendable () -> Void
 
     /// Tracks hotkey state. Accessed from the event tap callback thread
     /// and read from @MainActor context, so marked nonisolated(unsafe).
@@ -221,11 +222,16 @@ final class HotkeyManager {
 
     nonisolated(unsafe) private static var current: HotkeyManager?
 
+    /// Default on-demand AI cleanup chord: ⌘⇧U (one-shot, not hold-to-talk).
+    static let cleanupKeyCode: UInt16 = 0x20  // U
+    static let cleanupRequiredModifiers: CGEventFlags = [.maskCommand, .maskShift]
+
     init(
         config: HotkeyConfig = .saved,
         onPress: @escaping @MainActor () -> Void,
         onRelease: @escaping @MainActor () -> Void,
-        onCancel: @escaping @MainActor () -> Void
+        onCancel: @escaping @MainActor () -> Void,
+        onCleanup: @escaping @MainActor () -> Void = {}
     ) {
         self.config = config
         // Wrap @MainActor closures so they can be called safely from
@@ -233,6 +239,7 @@ final class HotkeyManager {
         self.onPress = { MainActor.assumeIsolated { onPress() } }
         self.onRelease = { MainActor.assumeIsolated { onRelease() } }
         self.onCancel = { MainActor.assumeIsolated { onCancel() } }
+        self.onCleanup = { MainActor.assumeIsolated { onCleanup() } }
         HotkeyManager.current = self
         setupEventTap()
     }
@@ -307,6 +314,20 @@ final class HotkeyManager {
                     if type == .keyDown && keyCode == 0x35 && mgr.sessionActive {
                         DispatchQueue.main.async { mgr.onCancel() }
                         return nil
+                    }
+
+                    // On-demand AI cleanup: ⌘⇧U (one-shot). Does not steal hold-to-talk.
+                    if type == .keyDown
+                        && keyCode == HotkeyManager.cleanupKeyCode
+                        && !mgr.suppressOnly
+                    {
+                        let currentMods = flags.intersection(
+                            CGEventFlags([.maskCommand, .maskShift, .maskAlternate, .maskControl])
+                        )
+                        if currentMods == HotkeyManager.cleanupRequiredModifiers {
+                            DispatchQueue.main.async { mgr.onCleanup() }
+                            return nil
+                        }
                     }
 
                     if keyCode == cfg.keyCode {

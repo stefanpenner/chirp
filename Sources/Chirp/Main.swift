@@ -28,6 +28,14 @@ struct ChirpApp: App {
                 hotkeySection
                 aiModeLabel
                 microphoneSection
+
+                SectionDivider()
+
+                MenuRow("AI Cleanup", shortcut: "⌘⇧U") { appState.runAICleanup() }
+                    .disabled(appState.transcribedText.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    ).isEmpty || appState.isCleaningUp)
+
                 CheckForUpdatesView(updater: updaterController.updater)
                 MenuRow("Settings\u{2026}") { appState.showSettings() }
 
@@ -287,10 +295,12 @@ private struct SectionDivider: View {
 private struct MenuRow: View {
     @Environment(\.isEnabled) private var isEnabled
     let title: String
+    let shortcut: String?
     let action: () -> Void
 
-    init(_ title: String, action: @escaping () -> Void) {
+    init(_ title: String, shortcut: String? = nil, action: @escaping () -> Void) {
         self.title = title
+        self.shortcut = shortcut
         self.action = action
     }
 
@@ -301,6 +311,11 @@ private struct MenuRow: View {
                     .font(.system(size: 13))
                     .foregroundColor(.primary.opacity(isEnabled ? 0.7 : 0.3))
                 Spacer()
+                if let shortcut {
+                    Text(shortcut)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundColor(.primary.opacity(isEnabled ? 0.3 : 0.15))
+                }
             }
             .contentShape(Rectangle())
             .padding(.horizontal, 12)

@@ -22,6 +22,21 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("please replace that") == .replaceThat)
     }
 
+    @Test("recognizes AI cleanup without stealing fix that")
+    func aiCleanupCommands() {
+        #expect(DictationCommand.parse("clean that up") == .aiCleanup)
+        #expect(DictationCommand.parse("Clean that up.") == .aiCleanup)
+        #expect(DictationCommand.parse("ai cleanup") == .aiCleanup)
+        #expect(DictationCommand.parse("AI clean up") == .aiCleanup)
+        #expect(DictationCommand.parse("polish that") == .aiCleanup)
+        #expect(DictationCommand.parse("please polish that") == .aiCleanup)
+        #expect(DictationCommand.parse("cleanup that") == .aiCleanup)
+        #expect(DictationCommand.parse("clean this up") == .aiCleanup)
+        // "fix that" remains undo/scratch
+        #expect(DictationCommand.parse("fix that") == .scratchThat)
+        #expect(DictationCommand.parse("correct that") == .scratchThat)
+    }
+
     @Test("recognizes replace X with Y without stealing replace that")
     func replacePhraseCommands() {
         #expect(

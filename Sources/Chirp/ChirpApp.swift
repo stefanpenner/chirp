@@ -156,6 +156,13 @@ public final class AppState {
     /// Observable for overlay badge. Dual of specs/ReplaceThat.tla.
     private(set) var awaitingReplace = false
 
+    /// On-demand AI cleanup in flight (menu / hotkey / spoken "clean that up").
+    private(set) var isCleaningUp = false
+    private var cleanupTask: Task<Void, Never>?
+
+    /// Test hook: inject a post-processor for on-demand cleanup (avoids real T5/LLM).
+    var cleanupProcessorOverride: (any TextPostProcessing)?
+
     /// Buffer range currently selected in the host (select that / first sentence / …).
     /// Next content splices this range so session buffer matches type-over. Dual of SelectionCommit.tla.
     private var sessionSelection: (start: Int, length: Int)? = nil
@@ -220,7 +227,8 @@ public final class AppState {
         hotkeyManager = HotkeyManager(
             onPress: { [weak self] in self?.startRecording() },
             onRelease: { [weak self] in self?.stopRecording() },
-            onCancel: { [weak self] in self?.cancelSession() }
+            onCancel: { [weak self] in self?.cancelSession() },
+            onCleanup: { [weak self] in self?.runAICleanup() }
         )
         textInserter.checkAccessibilityPermission()
         ensureModel()
@@ -241,7 +249,8 @@ public final class AppState {
         hotkeyManager = HotkeyManager(
             onPress: { [weak self] in self?.startRecording() },
             onRelease: { [weak self] in self?.stopRecording() },
-            onCancel: { [weak self] in self?.cancelSession() }
+            onCancel: { [weak self] in self?.cancelSession() },
+            onCleanup: { [weak self] in self?.runAICleanup() }
         )
         textInserter.checkAccessibilityPermission()
         ensureModel()
@@ -408,6 +417,163 @@ public final class AppState {
         } catch {
             Log.model.error("Failed to initialize T5 post-processor: \(error.localizedDescription)")
             return nil
+        }
+    }
+
+    /// Post-processor for on-demand AI cleanup (menu / hotkey / spoken).
+    /// Prefers active-mode cloud LLM, else offline T5, else regex.
+    private func buildCleanupPostProcessor() -> any TextPostProcessing {
+        if let mode = aiSettings.activeMode {
+            switch mode.postProcessingMode {
+            case .llm, .regexThenLLM:
+                if let client = buildLLMClient(for: mode) {
+                    return LLMPostProcessor(client: client, systemPrompt: mode.llmSystemPrompt)
+                }
+            case .offlineLLM, .regexThenOfflineLLM:
+                if let t5 = buildT5PostProcessor() {
+                    return OfflineLLMPostProcessor(t5: t5)
+                }
+            case .none, .regex:
+                break
+            }
+        }
+        if let t5 = buildT5PostProcessor() {
+            return OfflineLLMPostProcessor(t5: t5)
+        }
+        return RegexPostProcessor()
+    }
+
+    /// On-demand AI cleanup of selection / last phrase / session buffer.
+    /// Triggers: menu "AI Cleanup", ⌘⇧U, or spoken "clean that up".
+    public func runAICleanup() {
+        guard cleanupTask == nil, !isCleaningUp else { return }
+
+        let scope = AICleanupDecision.resolve(
+            buffer: transcribedText,
+            selectionStart: sessionSelection?.start,
+            selectionLength: sessionSelection?.length,
+            lastDelta: editStack.lastDelta
+        )
+        guard scope != .empty else { return }
+
+        let sourceText: String
+        switch scope {
+        case .selection(_, _, let text), .lastPhrase(let text), .fullBuffer(let text):
+            sourceText = text
+        case .empty:
+            return
+        }
+
+        let processor = cleanupProcessorOverride ?? buildCleanupPostProcessor()
+        let rewriteHost: Bool
+        switch status {
+        case .ready:
+            // Session ended; host already has the typed text.
+            rewriteHost = true
+        case .recording, .transcribing:
+            rewriteHost = AICleanupDecision.shouldRewriteHost(
+                typesIncrementally: pipelineTypesIncrementally
+            )
+        default:
+            return
+        }
+
+        isCleaningUp = true
+        processingPhase = .fixing
+        overlayPanel?.showOverlay()
+
+        cleanupTask = Task { @MainActor [weak self] in
+            defer {
+                self?.cleanupTask = nil
+                self?.isCleaningUp = false
+                self?.processingPhase = .none
+            }
+            do {
+                let cleaned = try await processor.process(sourceText)
+                guard let self, !Task.isCancelled else { return }
+                let result = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !result.isEmpty, result != sourceText else { return }
+                self.applyCleanupResult(scope: scope, cleaned: result, rewriteHost: rewriteHost)
+            } catch {
+                Log.general.error("AI cleanup failed: \(error.localizedDescription)")
+            }
+            // Hide overlay only if we are idle (menu/hotkey after session).
+            if case .ready = self?.status {
+                self?.overlayPanel?.hideOverlay()
+            }
+        }
+    }
+
+    /// Apply cleaned text for the resolved scope into buffer + optional host.
+    private func applyCleanupResult(
+        scope: AICleanupScope,
+        cleaned: String,
+        rewriteHost: Bool
+    ) {
+        switch scope {
+        case .empty:
+            return
+
+        case .selection(let start, let length, let old):
+            guard cleaned != old,
+                  let newText = SelectionCommitDecision.bufferAfterRangeReplace(
+                    buffer: transcribedText,
+                    start: start,
+                    length: length,
+                    replacement: cleaned
+                  ) else { return }
+            if rewriteHost {
+                moveToSessionOffset(start)
+                textInserter.selectForward(count: length)
+                textInserter.typeText(cleaned)
+            }
+            applyPhraseEditResult(
+                newText: newText,
+                matchStart: start,
+                matchLength: length,
+                stackPush: cleaned
+            )
+
+        case .lastPhrase(let old):
+            guard cleaned != old, transcribedText.hasSuffix(old) else { return }
+            transcribedText = String(transcribedText.dropLast(old.count)) + cleaned
+            if rewriteHost {
+                textInserter.deleteBackward(count: old.count)
+                textInserter.typeText(cleaned)
+            }
+            if editStack.dropTrailingSuffix(old) {
+                editStack.push(cleaned)
+            } else {
+                editStack.clear()
+                editStack.push(cleaned)
+            }
+            lastCommittedNormalized = ""
+            sessionSelection = nil
+            sessionCaret = nil
+
+        case .fullBuffer(let old):
+            guard cleaned != old else { return }
+            if rewriteHost {
+                let n = transcribedText.count
+                if n > 0 {
+                    textInserter.deleteBackward(count: n)
+                }
+                textInserter.typeText(cleaned)
+            }
+            transcribedText = cleaned
+            editStack.clear()
+            editStack.push(cleaned)
+            lastCommittedNormalized = ""
+            sessionSelection = nil
+            sessionCaret = nil
+            sentenceNavIndex = nil
+            sentenceSelectionActive = false
+            paragraphNavIndex = nil
+            paragraphSelectionActive = false
+            lineNavIndex = nil
+            lineSelectionActive = false
+            wordNavIndex = nil
+            wordSelectionActive = false
         }
     }
 
@@ -818,6 +984,9 @@ public final class AppState {
                         )
                     case .noSpaceThat:
                         self.performNoSpaceThat(typesIncrementally: false)
+                    case .aiCleanup:
+                        self.awaitingReplace = false
+                        self.runAICleanup()
                     case .selectThat:
                         self.performSelectThat(typesIncrementally: false)
                     case .selectPhrase(let target):
@@ -1106,6 +1275,9 @@ public final class AppState {
             performTransformLastPhrase(CapsTransform.sentenceCase, typesIncrementally: typesIncrementally)
         case .noSpaceThat:
             performNoSpaceThat(typesIncrementally: typesIncrementally)
+        case .aiCleanup:
+            awaitingReplace = false
+            runAICleanup()
         case .selectThat:
             performSelectThat(typesIncrementally: typesIncrementally)
         case .selectPhrase(let target):
