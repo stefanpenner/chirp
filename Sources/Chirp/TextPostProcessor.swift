@@ -302,9 +302,14 @@ enum TextPostProcessor {
         "subscribe.", "please subscribe.", "please subscribe",
         "please like and subscribe.", "please like and subscribe",
         "like and subscribe.", "like and subscribe",
-        // Subtitle / media dumps common on silence
+        // Subtitle / media dumps common on silence (Whisper training leftovers)
         "subtitles by the amara.org community",
         "subtitles by the amara.org community.",
+        "thanks for watching, and i'll see you next time.",
+        "thanks for watching, and i'll see you next time",
+        "thank you so much for joining us.",
+        "thank you so much for joining us",
+        "see you next time.", "see you next time",
         "the end.", "the end",
         "music", "[music]", "(music)",
         "applause", "[applause]", "laughter", "[laughter]",

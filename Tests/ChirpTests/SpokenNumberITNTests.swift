@@ -44,10 +44,20 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("five times an hour") == "5 times an hour")
         #expect(SpokenNumberITN.apply("four times a year") == "4 times a year")
         #expect(SpokenNumberITN.apply("twenty five times a day") == "25 times a day")
+        // per: "three times per day"
+        #expect(SpokenNumberITN.apply("three times per day") == "3 times per day")
+        #expect(SpokenNumberITN.apply("ten times per week") == "10 times per week")
+        // once / twice a day (not bare "once" / "twice")
+        #expect(SpokenNumberITN.apply("once a day") == "1 time a day")
+        #expect(SpokenNumberITN.apply("twice a week") == "2 times a week")
+        #expect(SpokenNumberITN.apply("once per month") == "1 time per month")
+        #expect(SpokenNumberITN.apply("twice per hour") == "2 times per hour")
         // Bare "three times" / multiply sense — do not force
         #expect(SpokenNumberITN.apply("three times") == "three times")
         #expect(SpokenNumberITN.apply("two times faster") == "two times faster")
         #expect(SpokenNumberITN.apply("times a day") == "times a day")
+        #expect(SpokenNumberITN.apply("once more") == "once more")
+        #expect(SpokenNumberITN.apply("twice as fast") == "twice as fast")
     }
 
     @Test("converts teens and tens compounds")

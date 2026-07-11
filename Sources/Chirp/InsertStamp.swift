@@ -18,7 +18,9 @@ enum InsertStamp {
     }
 
     /// Absolute date, same style as `SpokenDateITN.formatAbsoluteDate` (e.g. "July 10, 2026").
-    static func formatDate(_ date: Date = nowProvider()) -> String {
+    /// Reads `nowProvider` / `timeZoneProvider` at call time (not as default-arg capture).
+    static func formatDate(_ date: Date? = nil) -> String {
+        let date = date ?? nowProvider()
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = timeZoneProvider()
@@ -27,7 +29,9 @@ enum InsertStamp {
     }
 
     /// Local 12-hour time with dotted meridiem (e.g. "3:45 p.m.").
-    static func formatTime(_ date: Date = nowProvider()) -> String {
+    /// Reads `nowProvider` / `timeZoneProvider` at call time (not as default-arg capture).
+    static func formatTime(_ date: Date? = nil) -> String {
+        let date = date ?? nowProvider()
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = timeZoneProvider()

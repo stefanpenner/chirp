@@ -809,11 +809,16 @@ struct AppStateTests {
             if !state.transcribedText.isEmpty { break }
         }
 
+        // Re-pin after awaits — other parallel suites may reset static clock.
+        InsertStamp.nowProvider = { pinned }
+        InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
         await mock.setFeedAudioResult(["insert date"])
         recorder.lastOnSamples?([0.1])
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 100_000_000)
             if state.transcribedText.contains("July 10, 2026") { break }
+            InsertStamp.nowProvider = { pinned }
+            InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
         }
 
         #expect(state.transcribedText == "HelloJuly 10, 2026")
@@ -851,11 +856,16 @@ struct AppStateTests {
             if !state.transcribedText.isEmpty { break }
         }
 
+        // Re-pin after awaits — other parallel suites may reset static clock.
+        InsertStamp.nowProvider = { pinned }
+        InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
         await mock.setFeedAudioResult(["insert time"])
         recorder.lastOnSamples?([0.1])
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 100_000_000)
             if state.transcribedText.contains("3:45 p.m.") { break }
+            InsertStamp.nowProvider = { pinned }
+            InsertStamp.timeZoneProvider = { TimeZone(identifier: "UTC")! }
         }
 
         #expect(state.transcribedText == "Hello3:45 p.m.")
@@ -1638,6 +1648,95 @@ struct AppStateTests {
         #expect(inserter.moveBackwardCounts.last == "Hello. World now".count - start)
         #expect(inserter.selectForwardCounts.last == "World now".count)
         #expect(!inserter.typedTexts.contains("select next sentence"))
+    }
+
+    @Test("select next sentence twice advances to third sentence")
+    func selectNextSentenceProgressive() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello. World. Done"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World. Done" { break }
+        }
+
+        let text = "Hello. World. Done"
+        let ranges = TranscriptSelection.sentenceRanges(text)
+        #expect(ranges.count == 3)
+
+        await mock.setFeedAudioResult(["select next sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+        #expect(inserter.selectForwardCounts.last == ranges[1].end - ranges[1].start)
+
+        let clearsBefore = inserter.clearSelectionCallCount
+        await mock.setFeedAudioResult(["select next sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count >= 2 { break }
+        }
+        // Second hop: collapse prior selection, then select third
+        #expect(inserter.clearSelectionCallCount > clearsBefore)
+        #expect(inserter.selectForwardCounts.last == ranges[2].end - ranges[2].start)
+        #expect(state.transcribedText == text)
+        #expect(!inserter.typedTexts.contains("select next sentence"))
+    }
+
+    @Test("select first sentence then select next advances to second")
+    func selectFirstThenNextSentence() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello. World. Done"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello. World. Done" { break }
+        }
+
+        let text = "Hello. World. Done"
+        let ranges = TranscriptSelection.sentenceRanges(text)
+
+        await mock.setFeedAudioResult(["select first sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectForwardCounts.isEmpty { break }
+        }
+        #expect(inserter.selectForwardCounts.last == ranges[0].end - ranges[0].start)
+
+        let clearsBefore = inserter.clearSelectionCallCount
+        await mock.setFeedAudioResult(["select next sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count >= 2 { break }
+        }
+        #expect(inserter.clearSelectionCallCount > clearsBefore)
+        #expect(inserter.selectForwardCounts.last == ranges[1].end - ranges[1].start)
+        #expect(state.transcribedText == text)
     }
 
     @Test("select next sentence is no-op for single-sentence buffer")

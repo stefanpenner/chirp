@@ -148,6 +148,15 @@ enum SpokenNumberITN {
                 }
             }
 
+            // once/twice a|per <period> → "1 time a day" / "2 times a week"
+            if core == "once" || core == "twice" {
+                if let rewritten = tryConsumeOnceTwiceFrequency(parts: parts, start: i) {
+                    out.append(contentsOf: rewritten.tokens)
+                    i = rewritten.nextIndex
+                    continue
+                }
+            }
+
             // Cardinal multi-token / teen / decade / digit-run
             if numberWords.contains(core) {
                 let prevCore = i > 0 ? normalizeToken(parts[i - 1]) : ""
@@ -239,7 +248,7 @@ enum SpokenNumberITN {
         return nil
     }
 
-    /// True when tokens at `afterNumber` form `times a/an <period>` (e.g. "times a day").
+    /// True when tokens at `afterNumber` form `times a/an/per <period>` (e.g. "times a day").
     /// Does not match bare "times" or "times faster".
     private static func isFrequencyTimesAPeriod(parts: [String], afterNumber: Int) -> Bool {
         guard afterNumber + 2 < parts.count else { return false }
@@ -247,8 +256,29 @@ enum SpokenNumberITN {
         let t1 = normalizeToken(parts[afterNumber + 1])
         let t2 = normalizeToken(parts[afterNumber + 2])
         guard t0 == "times" else { return false }
-        guard t1 == "a" || t1 == "an" else { return false }
+        guard t1 == "a" || t1 == "an" || t1 == "per" else { return false }
         return frequencyPeriods.contains(t2)
+    }
+
+    /// "once a day" → ["1", "time", "a", "day"]; "twice per week" → ["2", "times", "per", "week"].
+    /// Bare "once"/"twice" / "once more" / "twice as" stay unchanged.
+    private static func tryConsumeOnceTwiceFrequency(
+        parts: [String], start: Int
+    ) -> (tokens: [String], nextIndex: Int)? {
+        guard start + 2 < parts.count else { return nil }
+        let core = normalizeToken(parts[start])
+        guard core == "once" || core == "twice" else { return nil }
+        let det = normalizeToken(parts[start + 1])
+        let period = normalizeToken(parts[start + 2])
+        guard det == "a" || det == "an" || det == "per" else { return nil }
+        guard frequencyPeriods.contains(period) else { return nil }
+        // Preserve trailing punct on period word if any
+        let periodRaw = parts[start + 2]
+        let periodOut = period + trailingPunctuation(periodRaw)
+        if core == "once" {
+            return (["1", "time", det, periodOut], start + 3)
+        }
+        return (["2", "times", det, periodOut], start + 3)
     }
 
     /// Parse a phrase of number words into a numeric value, or nil if invalid.

@@ -158,6 +158,10 @@ public final class AppState {
     /// Non-nil = 0-based sentence under caret (at content start of that sentence).
     private var sentenceNavIndex: Int? = nil
 
+    /// True when a sentence selection is active (select first/last/next).
+    /// After `clearSelection`, caret is at end of that sentence; after move, at start.
+    private var sentenceSelectionActive = false
+
     /// Progressive paragraph navigation index (select next paragraph).
     /// `nil` = caret at end; non-nil = last selected paragraph (dual of ParagraphCursor).
     private var paragraphNavIndex: Int? = nil
@@ -562,6 +566,7 @@ public final class AppState {
         awaitingReplace = false
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
+        sentenceSelectionActive = false
         paragraphNavIndex = nil
         recordingSession &+= 1
         let session = recordingSession
@@ -821,6 +826,7 @@ public final class AppState {
                         }
                         self.lastCommittedNormalized = TranscriptNormalize.key(text)
                         self.sentenceNavIndex = nil
+                        self.sentenceSelectionActive = false
                         self.paragraphNavIndex = nil
                     }
                 }
@@ -1016,6 +1022,7 @@ public final class AppState {
             editStack.push(joined.delta)
             lastCommittedNormalized = norm
             sentenceNavIndex = nil
+            sentenceSelectionActive = false
             paragraphNavIndex = nil
         }
     }
@@ -1344,6 +1351,7 @@ public final class AppState {
         editStack.clear()
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
+        sentenceSelectionActive = false
         paragraphNavIndex = nil
     }
 
@@ -1473,26 +1481,39 @@ public final class AppState {
     /// Select the last sentence. Buffer unchanged.
     private func performSelectLastSentence(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
-        let selected = TranscriptSelection.lastSentence(transcribedText)
-        if !selected.isEmpty {
+        let text = transcribedText
+        let ranges = TranscriptSelection.sentenceRanges(text)
+        guard !ranges.isEmpty else { return }
+        let last = ranges.count - 1
+        let selected = TranscriptSelection.lastSentence(text)
+        guard !selected.isEmpty else { return }
+        // Prefer trailing selectBackward when caret model is end (index nil).
+        if sentenceNavIndex == nil && !sentenceSelectionActive {
             textInserter.selectBackward(count: selected.count)
+        } else {
+            moveToSessionOffset(ranges[last].start)
+            textInserter.selectForward(count: ranges[last].end - ranges[last].start)
         }
+        sentenceNavIndex = last
+        sentenceSelectionActive = true
     }
 
-    /// Select the first sentence. Assumes caret at end of session text.
-    /// Moves to session start, then selects forward over the first sentence.
+    /// Select the first sentence. Moves to first sentence start, selects forward.
+    /// Sets `sentenceNavIndex` so further select/move next are progressive.
     private func performSelectFirstSentence(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         let text = transcribedText
-        guard !text.isEmpty else { return }
-        let first = TranscriptSelection.firstSentence(text)
-        guard !first.isEmpty else { return }
-        textInserter.moveBackward(count: text.count)
-        textInserter.selectForward(count: first.count)
+        let ranges = TranscriptSelection.sentenceRanges(text)
+        guard !ranges.isEmpty else { return }
+        let range = ranges[0]
+        moveToSessionOffset(range.start)
+        textInserter.selectForward(count: range.end - range.start)
+        sentenceNavIndex = 0
+        sentenceSelectionActive = true
     }
 
     /// Select the next sentence (progressive). From end: second sentence; further
-    /// calls advance. Content start (skip whitespace). Buffer unchanged.
+    /// calls advance. Collapses prior selection first. Buffer unchanged.
     private func performSelectNextSentence(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         let text = transcribedText
@@ -1509,6 +1530,7 @@ public final class AppState {
         moveToSessionOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
         sentenceNavIndex = next
+        sentenceSelectionActive = true
     }
 
     /// Delete the next sentence (progressive). From end: second sentence; further
@@ -1537,6 +1559,7 @@ public final class AppState {
                 typesIncrementally: typesIncrementally
             )
             sentenceNavIndex = nil
+            sentenceSelectionActive = false
             paragraphNavIndex = nil
             return
         }
@@ -1559,27 +1582,45 @@ public final class AppState {
         editStack.clear()
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
+        sentenceSelectionActive = false
         paragraphNavIndex = nil
     }
 
     /// Select the last paragraph. Buffer unchanged.
     private func performSelectLastParagraph(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
-        let selected = TranscriptSelection.lastParagraph(transcribedText)
-        if !selected.isEmpty {
-            textInserter.selectBackward(count: selected.count)
-        }
+        let text = transcribedText
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        guard !ranges.isEmpty else { return }
+        let selected = TranscriptSelection.lastParagraph(text)
+        guard !selected.isEmpty else { return }
+        textInserter.selectBackward(count: selected.count)
+        paragraphNavIndex = ranges.count - 1
     }
 
     /// Select the first paragraph. Assumes caret at end of session text.
     private func performSelectFirstParagraph(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         let text = transcribedText
-        guard !text.isEmpty else { return }
-        let first = TranscriptSelection.firstParagraph(text)
-        guard !first.isEmpty else { return }
-        textInserter.moveBackward(count: text.count)
-        textInserter.selectForward(count: first.count)
+        let ranges = TranscriptSelection.paragraphRanges(text)
+        guard !ranges.isEmpty else { return }
+        let range = ranges[0]
+        // From end (or after prior para select collapse is not modeled here);
+        // first select assumes session-end caret like the original path.
+        if paragraphNavIndex == nil {
+            textInserter.moveBackward(count: text.count)
+            textInserter.moveForward(count: range.start)
+        } else {
+            // Collapse prior progressive selection then hop.
+            textInserter.clearSelection()
+            let idx = paragraphNavIndex!
+            let from = ranges.indices.contains(idx) ? ranges[idx].end : text.count
+            let delta = range.start - from
+            if delta > 0 { textInserter.moveForward(count: delta) }
+            if delta < 0 { textInserter.moveBackward(count: -delta) }
+        }
+        textInserter.selectForward(count: range.end - range.start)
+        paragraphNavIndex = 0
     }
 
     /// Select the next paragraph (progressive). From end: second paragraph;
@@ -1690,6 +1731,7 @@ public final class AppState {
         }
         moveToSessionOffset(ranges[next].start)
         sentenceNavIndex = next
+        sentenceSelectionActive = false
     }
 
     /// Session-relative progressive "next sentence".
@@ -1708,16 +1750,31 @@ public final class AppState {
         }
         moveToSessionOffset(ranges[next].start)
         sentenceNavIndex = next
+        sentenceSelectionActive = false
     }
 
     /// Move caret to a Character offset within the session buffer.
-    /// Current position: end when `sentenceNavIndex == nil`, else start of that sentence.
+    /// Current position:
+    /// - end when `sentenceNavIndex == nil`
+    /// - start of that sentence after a move
+    /// - end of that sentence when a sentence selection is active (collapsed first)
     private func moveToSessionOffset(_ offset: Int) {
         let text = transcribedText
         let from: Int
         if let idx = sentenceNavIndex {
             let ranges = TranscriptSelection.sentenceRanges(text)
-            from = ranges.indices.contains(idx) ? ranges[idx].start : text.count
+            if ranges.indices.contains(idx) {
+                if sentenceSelectionActive {
+                    // Collapse selection to its trailing edge (end of sentence).
+                    textInserter.clearSelection()
+                    from = ranges[idx].end
+                    sentenceSelectionActive = false
+                } else {
+                    from = ranges[idx].start
+                }
+            } else {
+                from = text.count
+            }
         } else {
             from = text.count
         }
@@ -1816,6 +1873,7 @@ public final class AppState {
         awaitingReplace = false
         lastCommittedNormalized = ""
         sentenceNavIndex = nil
+        sentenceSelectionActive = false
         paragraphNavIndex = nil
         audioLevel = 0
         processingPhase = .none

@@ -78,8 +78,9 @@ time ranges still win over cardinals), ratings
 `out of order` stays), spoken cardinals
 (`one hundred`→`100`, `twenty five`→`25`, `three point five`→`3.5`,
 `five emails`/`ten items`→`5 emails`/`10 items` via quantity nouns;
-`three times a day`/`ten times a week`→`3 times a day`/`10 times a week`
-(not bare `three times`); bare `one more thing` stays), ordinals
+`three times a day`/`ten times a week`/`three times per day`→digits;
+`once a day`→`1 time a day`, `twice a week`→`2 times a week`
+(not bare `three times` / `once more`); bare `one more thing` stays), ordinals
 (`twenty first`→`21st`, `first of all` stays), dates (`march fifth twenty
 twenty four`→`March 5, 2024`, `tomorrow`/`next monday` → absolute dates,
 weekdays → `Monday`, bare `may I` stays), `50 percent`→`50%`, currency multi
@@ -165,7 +166,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **delete next word** / **delete forward word** — delete next word (⇧⌥→ then ⌫; keyboard only; buffer unchanged). Does **not** steal **delete last word**
 - **select last sentence** / **select previous sentence** / **select sentence** — select trailing sentence
 - **select first sentence** / **select the first sentence** / **highlight first sentence** / **select 1st sentence** — select first sentence (← session then ⇧→ × n). Buffer unchanged
-- **select next sentence** / **select forward sentence** / **highlight next sentence** — progressive: from end select second sentence (content start, skip whitespace); further calls advance. Buffer unchanged. Does **not** steal bare **next sentence** (move) or **select last sentence**
+- **select next sentence** / **select forward sentence** / **highlight next sentence** — progressive: from end select second sentence; further calls collapse prior selection then advance. **select first/last** set `sentenceNavIndex`. Buffer unchanged. Does **not** steal bare **next sentence** (move) or **select last sentence**
 - **delete next sentence** / **delete forward sentence** — progressive: remove next sentence from session cursor (from end = second). When target is last, stack-aware trailing peel; else middle string surgery (stack cleared). Resets sentence nav index. Does **not** steal **delete last sentence** / **delete previous sentence**
 - **select last paragraph** / **select previous paragraph** / **select paragraph** — select trailing paragraph
 - **select first paragraph** / **select the first paragraph** / **highlight first paragraph** / **select 1st paragraph** — select first paragraph (← session then ⇧→ × n). Buffer unchanged
