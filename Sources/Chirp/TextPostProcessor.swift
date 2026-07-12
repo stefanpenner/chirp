@@ -2073,9 +2073,20 @@ enum TextPostProcessor {
     private static let combiningBar = "\u{0304}"
     private static let combiningTilde = "\u{0303}"
     private static let combiningVector = "\u{20D7}"
+    /// Prime marks (not combining): ′ ″ ‴
+    private static let primeMark = "\u{2032}"
+    private static let doublePrimeMark = "\u{2033}"
+    private static let triplePrimeMark = "\u{2034}"
 
     private static let letterAccentSpecs: [(pattern: NSRegularExpression, mark: String)] = {
+        // Longer prime phrases first so "double prime" is not "prime" after "double ".
         let specs: [(String, String)] = [
+            (#"\b([A-Za-z])\s+triple\s+prime\b"#, triplePrimeMark),
+            (#"\btriple\s+prime\s+([A-Za-z])\b"#, triplePrimeMark),
+            (#"\b([A-Za-z])\s+double\s+prime\b"#, doublePrimeMark),
+            (#"\bdouble\s+prime\s+([A-Za-z])\b"#, doublePrimeMark),
+            (#"\b([A-Za-z])\s+prime\b"#, primeMark),
+            (#"\bprime\s+([A-Za-z])\b"#, primeMark),
             (#"\b([A-Za-z])\s+hat\b"#, combiningHat),
             (#"\bhat\s+([A-Za-z])\b"#, combiningHat),
             (#"\b([A-Za-z])\s+bar\b"#, combiningBar),
