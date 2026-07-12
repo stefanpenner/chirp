@@ -46,7 +46,8 @@ Coverage:
 - **Spoken list compounds** — through millions (`number one million` → `1000000.`)
 - **Ratios** — `N out of M` / `N over M` / `N divided by M` → `N/M` (numeric bounds only)
 - **Math ops** — `N plus/minus/times/equals M` → spaced operators; frequency `N times a day` kept
-- **Powers** — `N squared/cubed`, `N to the power of M`, `N to the Nth power` → unicode superscripts
+- **Powers** — `N squared/cubed`, `N to the power of M` (incl. negative exp), `N to the Nth power`
+- **Scientific notation** — `N times ten to the power of M` → `N×10ᴹ` (before product `times`)
 - **Roots / abs** — `square root of N` → `√N`; `cube root of N` → `∛N`; `absolute value of N` → `|N|`
 - **Factorial / log** — `N factorial` → `N!`; `log of N` / `ln of N` / `log base B of N`
 - **Percent** — `N percent` / `N per cent` → `N%`; multi-digit after cardinal ITN

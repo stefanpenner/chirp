@@ -675,6 +675,22 @@ struct TextPostProcessorTests {
             || TextPostProcessor.process("square root beer").contains("root"))
     }
 
+    @Test("Light ITN scientific notation times ten to the")
+    func lightITNScientificNotation() {
+        #expect(TextPostProcessor.process("three times ten to the power of five") == "3×10⁵")
+        #expect(TextPostProcessor.process("three times 10 to the power of five") == "3×10⁵")
+        #expect(TextPostProcessor.process("3.5 times ten to the power of two") == "3.5×10²")
+        #expect(TextPostProcessor.process("six times ten to the power of minus three") == "6×10⁻³")
+        #expect(TextPostProcessor.process("two times ten to the fourth power") == "2×10⁴")
+        #expect(TextPostProcessor.process("1.2 times 10 to the power of 3") == "1.2×10³")
+        // Frequency / prose must not become sci notation
+        #expect(TextPostProcessor.process("three times a day") == "3 times a day")
+        #expect(TextPostProcessor.process("ten times twenty") == "10 × 20")
+        // Bare power still works
+        #expect(TextPostProcessor.process("ten to the power of minus two") == "10⁻²")
+        #expect(TextPostProcessor.process("two to the power of minus three") == "2⁻³")
+    }
+
     @Test("Light ITN factorial and logarithms")
     func lightITNFactorialAndLog() {
         #expect(TextPostProcessor.process("five factorial") == "5!")

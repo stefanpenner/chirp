@@ -766,6 +766,14 @@ enum TextPostProcessor {
     private static let cardinalRangeNumberToken =
         #"(\d{1,6}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"#
 
+    /// Mantissa for scientific notation (allows decimals after SpokenNumberITN).
+    private static let sciMantissaToken =
+        #"(\d+\.\d+|\d{1,9}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"#
+
+    /// Exponent: signed digits (after "minus three" → "-3") or bare spoken unit/decade.
+    private static let signedExpToken =
+        #"(-?\d{1,6}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"#
+
     /// "from 10 to 20" / "from ten to twenty" / "3 through 5" → "from 10-20" / "3-5".
     /// Negative lookahead: do not consume bounds that still have am/pm (time ranges
     /// should already have run; belt-and-suspenders).
@@ -899,6 +907,8 @@ enum TextPostProcessor {
         // Math ratios: "three over four" / "22 divided by 7" → "3/4" / "22/7".
         result = applyOverRatioITN(result)
         result = applyDividedByRatioITN(result)
+        // Scientific notation before bare "times" product: "3 times ten to the power of 5".
+        result = applyScientificNotationITN(result)
         // Infix math: plus / minus / times / multiplied by / equals.
         // Times is N×M only (not "N times a day" — right side must be a number).
         result = applyMathOpsITN(result)
@@ -1423,13 +1433,37 @@ enum TextPostProcessor {
         )
     }()
 
-    /// "two to the power of three" / "2 to the power of 10".
+    /// "two to the power of three" / "2 to the power of -3" / "10 to the power of minus two".
+    /// Exponent allows signed digits after SpokenNumberITN signed-minus conversion.
     private static let powerOfITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
             pattern: #"\b"# + cardinalRangeNumberToken
                 + #"\s+to\s+the\s+power\s+of\s+"#
-                + cardinalRangeNumberToken
+                + signedExpToken
                 + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "three times ten to the power of five" / "3.5 times 10 to the power of -2".
+    private static let sciPowerOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + sciMantissaToken
+                + #"\s+times\s+(?:ten|10)\s+to\s+the\s+power\s+of\s+"#
+                + signedExpToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "two times ten to the fourth power".
+    private static let sciNthPowerITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + sciMantissaToken
+                + #"\s+times\s+(?:ten|10)\s+to\s+the\s+"#
+                + #"(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|"#
+                + #"1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|\d{1,2})"#
+                + #"\s+power\b"#,
             options: .caseInsensitive
         )
     }()
@@ -1577,6 +1611,62 @@ enum TextPostProcessor {
         return result
     }
 
+    /// Scientific notation before product "times": N×10ᴹ.
+    private static func applyScientificNotationITN(_ text: String) -> String {
+        var result = text
+        result = applySciPowerOfITN(result)
+        result = applySciNthPowerITN(result)
+        return result
+    }
+
+    private static func applySciPowerOfITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = sciPowerOfITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let mantRange = Range(match.range(at: 1), in: result),
+                  let expRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let mant = rangeDigits(from: String(result[mantRange]))
+            let expDigits = rangeDigits(from: String(result[expRange]))
+            result.replaceSubrange(
+                fullRange,
+                with: "\(mant)×10\(superscriptFromDigits(expDigits))"
+            )
+        }
+        return result
+    }
+
+    private static func applySciNthPowerITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = sciNthPowerITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let mantRange = Range(match.range(at: 1), in: result),
+                  let ordRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let mant = rangeDigits(from: String(result[mantRange]))
+            let ordRaw = String(result[ordRange]).lowercased()
+            let exp: Int
+            if let w = ordinalPowerWords[ordRaw] {
+                exp = w
+            } else if let n = Int(ordRaw.filter(\.isNumber)) {
+                exp = n
+            } else {
+                continue
+            }
+            result.replaceSubrange(
+                fullRange,
+                with: "\(mant)×10\(superscriptString(exp))"
+            )
+        }
+        return result
+    }
+
     private static func applyUnaryPowerITN(
         _ text: String,
         pattern: NSRegularExpression,
@@ -1643,8 +1733,14 @@ enum TextPostProcessor {
     }
 
     private static func superscriptFromDigits(_ digits: String) -> String {
+        var raw = digits
+        var negative = false
+        if raw.hasPrefix("-") {
+            negative = true
+            raw.removeFirst()
+        }
         var out = ""
-        for ch in digits {
+        for ch in raw {
             if let s = superscriptDigits[ch] {
                 out.append(s)
             } else if ch.isNumber {
@@ -1652,7 +1748,8 @@ enum TextPostProcessor {
                 return "^" + digits
             }
         }
-        return out.isEmpty ? "^" + digits : out
+        if out.isEmpty { return "^" + digits }
+        return negative ? "⁻" + out : out
     }
 
     /// "(the )?square root of N" / "cube root of N" / "absolute value of N".
