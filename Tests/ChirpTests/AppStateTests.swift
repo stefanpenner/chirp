@@ -721,6 +721,45 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("press escape"))
     }
 
+    @Test("press escape N times posts Escape N times without changing buffer")
+    func pressEscapeNCommand() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText == "Hello world" { break }
+        }
+
+        await mock.setFeedAudioResult(["press escape 3 times"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.pressEscapeCallCount >= 3 { break }
+        }
+
+        #expect(
+            inserter.pressEscapeCallCount >= 3,
+            "EscapeN dual: host posts 3 Escapes, got \(inserter.pressEscapeCallCount)"
+        )
+        #expect(state.transcribedText == "Hello world", "keyboard-only; buffer unchanged")
+        guard case .recording = state.status else {
+            Issue.record("voice press escape N must not cancel session; got \(state.status)")
+            return
+        }
+        #expect(!inserter.typedTexts.contains("press escape 3 times"))
+    }
+
     @Test("system undo sends ⌘Z without changing buffer or stack")
     func pressUndoCommand() async throws {
         let mock = MockTranscriber()

@@ -3,12 +3,14 @@
   Keyboard-only dictation commands must not mutate the session buffer.
 
   Dual of:
-    DictationCommand.pressBackspace / pressEscape / pressUndo / pressRedo / pressForwardDelete
+    DictationCommand.pressBackspace / pressEscape(count) / pressUndo / pressRedo /
+      pressForwardDelete
     AppState.performPressBackspace / performPressEscape / performPressUndo /
       performPressRedo / performPressForwardDelete
     (TextInserter key posts only; transcribedText unchanged)
 
   Grain: bufferLen only (0..4). Key actions leave bufferLen unchanged.
+  Counted Escape N is EscapeN.tla (presses); this module only checks buffer safety.
 
   Note: spoken "scratch that" is EditStack (session undo), not a key command.
   System Cmd+Z (pressUndo) and Cmd+Shift+Z (pressRedo) share this invariant.

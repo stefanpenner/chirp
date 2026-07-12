@@ -145,6 +145,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that N times** / **undo that N times** — undo last N phrases in one utterance (`ScratchThatN.tla`)
 - **redo that N times** / **redo that twice** — redo last N scratched phrases (`RedoThatN.tla`)
 - **backspace N** / **press backspace N times** — host Backspace N times, keyboard-only (`BackspaceN.tla`)
+- **press escape N times** / **escape key 3** — host Escape N times, keyboard-only; does not cancel session (`EscapeN.tla`)
 - **forward delete N** / **delete forward 3 times** — host Forward Delete N times, keyboard-only (`ForwardDeleteN.tla`)
 - **select previous character** / **select next character** — bare single-character keyboard select
 - **move up N lines** / **move down 3 lines** — host ↑/↓ × N; buffer unchanged (`MoveLinesN.tla`)
@@ -252,6 +253,7 @@ Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **press backspace** / **delete key** — Backspace once (keyboard only; buffer unchanged)
 - **forward delete** / **press forward delete** / **delete forward** / **press delete forward** — Forward Delete once (0x75; keyboard only; buffer unchanged). Does **not** steal **press delete** / **delete key** (Backspace)
 - **press escape** / **press esc** / **hit escape** / **escape key** — Escape once (keyboard only; buffer unchanged; does **not** cancel session). Bare **escape** is not a command
+- **press escape N times** / **escape key 3** / **press escape twice** — Escape N times (keyboard only; does **not** cancel session; `EscapeN.tla`)
 - **system undo** / **press undo** / **undo key** / **app undo** / **command undo** — system undo (⌘Z; keyboard only; buffer / edit stack unchanged). Does **not** steal **undo that** / **scratch that** / **correct that**
 - **system redo** / **press redo** / **redo key** / **app redo** / **command redo** — system redo (⌘⇧Z; keyboard only; buffer / edit stack unchanged). Does **not** steal **redo that** (EditStack redo)
 - **insert date** / **today's date** / **insert the date** — type today's date (e.g. `July 10, 2026`)

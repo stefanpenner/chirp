@@ -372,15 +372,31 @@ struct DictationCommandTests {
 
     @Test("recognizes press escape without bare escape")
     func pressEscape() {
-        #expect(DictationCommand.parse("press escape") == .pressEscape)
-        #expect(DictationCommand.parse("press esc") == .pressEscape)
-        #expect(DictationCommand.parse("hit escape") == .pressEscape)
-        #expect(DictationCommand.parse("escape key") == .pressEscape)
-        #expect(DictationCommand.parse("Press Escape.") == .pressEscape)
-        #expect(DictationCommand.parse("please press escape") == .pressEscape)
+        #expect(DictationCommand.parse("press escape") == .pressEscape(count: 1))
+        #expect(DictationCommand.parse("press esc") == .pressEscape(count: 1))
+        #expect(DictationCommand.parse("hit escape") == .pressEscape(count: 1))
+        #expect(DictationCommand.parse("escape key") == .pressEscape(count: 1))
+        #expect(DictationCommand.parse("Press Escape.") == .pressEscape(count: 1))
+        #expect(DictationCommand.parse("please press escape") == .pressEscape(count: 1))
         // Bare "escape" is too aggressive — content / unclear intent
         #expect(DictationCommand.parse("escape") == .none)
         #expect(DictationCommand.parse("esc") == .none)
+    }
+
+    @Test("Dragon press escape N times / escape key N")
+    func escapeN() {
+        #expect(DictationCommand.parse("press escape 3") == .pressEscape(count: 3))
+        #expect(DictationCommand.parse("press escape 3 times") == .pressEscape(count: 3))
+        #expect(DictationCommand.parse("press escape three times") == .pressEscape(count: 3))
+        #expect(DictationCommand.parse("hit escape 2") == .pressEscape(count: 2))
+        #expect(DictationCommand.parse("escape key 4") == .pressEscape(count: 4))
+        #expect(DictationCommand.parse("esc key 2 times") == .pressEscape(count: 2))
+        #expect(DictationCommand.parse("press esc twice") == .pressEscape(count: 2))
+        #expect(DictationCommand.parse("escape 5 times") == .pressEscape(count: 5))
+        #expect(DictationCommand.parse("please press escape 2 times") == .pressEscape(count: 2))
+        // Single still count 1; bare escape stays content
+        #expect(DictationCommand.parse("press escape") == .pressEscape(count: 1))
+        #expect(DictationCommand.parse("escape") == .none)
     }
 
     @Test("recognizes system undo without stealing undo that")

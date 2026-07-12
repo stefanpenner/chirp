@@ -1,5 +1,6 @@
-// BackspaceDecision.swift — Pure host key-repeat clamp (Backspace / Forward Delete).
-// Dual of specs/BackspaceN.tla and specs/ForwardDeleteN.tla (host-only peel).
+// BackspaceDecision.swift — Pure host key-repeat clamp
+// (Backspace / Forward Delete / Escape).
+// Dual of specs/BackspaceN.tla, ForwardDeleteN.tla, EscapeN.tla.
 
 import Foundation
 

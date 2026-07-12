@@ -958,8 +958,8 @@ public final class AppState {
                         self.performPressSpace(count: count, typesIncrementally: false)
                     case .pressBackspace(let count):
                         self.performPressBackspace(count: count)
-                    case .pressEscape:
-                        self.performPressEscape()
+                    case .pressEscape(let count):
+                        self.performPressEscape(count: count)
                     case .pressUndo:
                         self.performPressUndo()
                     case .pressRedo:
@@ -1311,8 +1311,8 @@ public final class AppState {
             performPressSpace(count: count, typesIncrementally: typesIncrementally)
         case .pressBackspace(let count):
             performPressBackspace(count: count)
-        case .pressEscape:
-            performPressEscape()
+        case .pressEscape(let count):
+            performPressEscape(count: count)
         case .pressUndo:
             performPressUndo()
         case .pressRedo:
@@ -2419,10 +2419,14 @@ public final class AppState {
         textInserter.deleteBackward(count: n)
     }
 
-    /// Press Escape once. Keyboard-only; buffer / stack unchanged.
+    /// Press Escape N times. Keyboard-only; buffer / stack unchanged.
     /// Does not cancel the Chirp session (physical ESC hotkey still does).
-    private func performPressEscape() {
-        textInserter.pressEscape()
+    /// Dual of specs/EscapeN.tla (host key posts only).
+    private func performPressEscape(count: Int = 1) {
+        let n = BackspaceDecision.clampCount(count)
+        for _ in 0..<n {
+            textInserter.pressEscape()
+        }
     }
 
     /// System undo (⌘Z). Keyboard-only; buffer / edit stack unchanged.

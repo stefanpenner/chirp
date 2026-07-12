@@ -63,8 +63,9 @@ enum DictationCommand: Equatable, Sendable {
     /// Press Backspace / Delete N times (Dragon "Backspace <n>").
     /// Keyboard-only; session buffer / edit stack unchanged. Count ≥ 1.
     case pressBackspace(count: Int)
-    /// Press Escape once. Keyboard-only; buffer unchanged; does not cancel session.
-    case pressEscape
+    /// Press Escape N times (Dragon "press escape N times"). Count ≥ 1.
+    /// Keyboard-only; buffer unchanged; does not cancel Chirp session.
+    case pressEscape(count: Int)
     /// System undo (⌘Z). Keyboard-only; buffer / edit stack unchanged.
     case pressUndo
     /// System redo (⌘⇧Z). Keyboard-only; buffer / edit stack unchanged.
@@ -599,6 +600,19 @@ enum DictationCommand: Equatable, Sendable {
                 #"^backspace "# + num + #"(?: times?)?$"#,
                 { c in (1...100).contains(c) ? .pressBackspace(count: c) : nil }
             ),
+            // Dragon "press escape N times" / "escape key 3". Bare "escape" is not a command.
+            (
+                #"^(?:press |hit )?(?:escape|esc)(?: key)? "# + num + #"(?: times?)?$"#,
+                { c in (1...100).contains(c) ? .pressEscape(count: c) : nil }
+            ),
+            (
+                #"^(?:escape|esc) key "# + num + #"(?: times?)?$"#,
+                { c in (1...100).contains(c) ? .pressEscape(count: c) : nil }
+            ),
+            (
+                #"^(?:escape|esc) "# + num + #" times?$"#,
+                { c in (1...100).contains(c) ? .pressEscape(count: c) : nil }
+            ),
             // Forward Delete N (right-of-caret). Do not steal "delete forward character"
             // (deleteNextCharacters) or "delete next N characters".
             (
@@ -1028,7 +1042,10 @@ enum DictationCommand: Equatable, Sendable {
         // Escape requires press/hit/key — bare "escape" is not a command.
         case "press escape", "press esc", "hit escape", "hit esc",
              "escape key", "esc key", "press the escape key", "hit the escape key":
-            return .pressEscape
+            return .pressEscape(count: 1)
+        case "press escape twice", "hit escape twice", "escape key twice",
+             "esc key twice", "press esc twice", "hit esc twice":
+            return .pressEscape(count: 2)
         // System ⌘Z — do not steal "undo that" / "scratch that" / "correct that".
         case "system undo", "press undo", "undo key", "app undo", "command undo":
             return .pressUndo
@@ -1341,6 +1358,7 @@ enum DictationCommand: Equatable, Sendable {
         ("forward delete N / delete forward 3 times", "Press Forward Delete N times (keyboard only)"),
         ("select previous character / select next character", "Select one character left/right (keyboard)"),
         ("press escape / escape key", "Press Escape once (keyboard only; does not cancel)"),
+        ("press escape N times / escape key 3", "Press Escape N times (keyboard only; does not cancel)"),
         ("system undo / press undo / undo key", "System undo (⌘Z; keyboard only; not scratch that)"),
         ("system redo / press redo / redo key", "System redo (⌘⇧Z; keyboard only; not redo that)"),
         ("insert date / today's date", "Type today's date (e.g. July 10, 2026)"),
