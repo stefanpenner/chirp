@@ -916,6 +916,9 @@ enum TextPostProcessor {
         // Letter accents before remaining bare-tilde/caret fallout; relations next.
         result = applyLetterAccentITN(result)
         result = applyMathRelationITN(result)
+        // f of x → f(x); x sub i → xᵢ (after numbers so "h of zero" → h(0))
+        result = applyFunctionOfITN(result)
+        result = applySubscriptITN(result)
         // Cued Greek letters + "N pi" (after numbers so "two pi" → "2π")
         result = applyGreekLetterITN(result)
         // Cardinal ranges after time ranges so "from 3 to 5 pm" is already
@@ -2115,6 +2118,88 @@ enum TextPostProcessor {
             }
         }
         return result
+    }
+
+    // MARK: - Function application + subscripts
+
+    /// Named math functions allowed before "of" (not prose verbs).
+    private static let mathFunctionNames =
+        "sin|cos|tan|sec|csc|cot|arcsin|arccos|arctan|sinh|cosh|tanh|exp|det|max|min|gcd|lcm|erf|abs"
+
+    /// Single-letter or named: "f of x" / "sin of x" / "h of 0"
+    private static let functionOfITNPattern: NSRegularExpression = {
+        let arg =
+            #"[A-Za-z]|\d{1,6}|zero|one|two|three|four|five|six|seven|eight|nine|ten"#
+        let pattern =
+            #"\b((?:[fghFGH])|(?:"# + mathFunctionNames + #"))\s+of\s+("# + arg + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// "x sub i" / "a subscript 0" / "v sub n"
+    private static let subscriptITNPattern: NSRegularExpression = {
+        let idx =
+            #"[A-Za-z]|\d{1,3}|zero|one|two|three|four|five|six|seven|eight|nine|ten"#
+        let pattern =
+            #"\b([A-Za-z])\s+(?:sub(?:script)?)\s+("# + idx + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    private static let subscriptLetterMap: [Character: Character] = [
+        "a": "ₐ", "e": "ₑ", "h": "ₕ", "i": "ᵢ", "j": "ⱼ", "k": "ₖ",
+        "l": "ₗ", "m": "ₘ", "n": "ₙ", "o": "ₒ", "p": "ₚ", "r": "ᵣ",
+        "s": "ₛ", "t": "ₜ", "u": "ᵤ", "v": "ᵥ", "x": "ₓ",
+        "A": "ₐ", "E": "ₑ", "H": "ₕ", "I": "ᵢ", "J": "ⱼ", "K": "ₖ",
+        "L": "ₗ", "M": "ₘ", "N": "ₙ", "O": "ₒ", "P": "ₚ", "R": "ᵣ",
+        "S": "ₛ", "T": "ₜ", "U": "ᵤ", "V": "ᵥ", "X": "ₓ",
+    ]
+
+    private static func applyFunctionOfITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = functionOfITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let fnRange = Range(match.range(at: 1), in: result),
+                  let argRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let fn = String(result[fnRange])
+            let arg = rangeDigits(from: String(result[argRange]))
+            result.replaceSubrange(fullRange, with: "\(fn)(\(arg))")
+        }
+        return result
+    }
+
+    private static func applySubscriptITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = subscriptITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let baseRange = Range(match.range(at: 1), in: result),
+                  let idxRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let base = String(result[baseRange])
+            let idxRaw = String(result[idxRange])
+            let idx = formatSubscriptIndex(idxRaw)
+            result.replaceSubrange(fullRange, with: base + idx)
+        }
+        return result
+    }
+
+    private static func formatSubscriptIndex(_ raw: String) -> String {
+        // Spoken/digit numbers → subscript digits
+        let asDigits = rangeDigits(from: raw)
+        if asDigits.allSatisfy(\.isNumber) {
+            return subscriptFromDigits(asDigits)
+        }
+        // Single letter → unicode subscript letter when available
+        if raw.count == 1, let ch = raw.first, let sub = subscriptLetterMap[ch] {
+            return String(sub)
+        }
+        // Fallback underscore form
+        return "_\(raw)"
     }
 
     private static func applySciPowerOfITN(_ text: String) -> String {

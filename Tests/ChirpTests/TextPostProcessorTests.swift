@@ -750,6 +750,38 @@ struct TextPostProcessorTests {
             || TextPostProcessor.process("approaches infinity") == "approaches infinity")
     }
 
+    @Test("Light ITN function of and subscripts")
+    func lightITNFunctionOfAndSubscripts() {
+        #expect(TextPostProcessor.process("f of x") == "f(x)")
+        #expect(TextPostProcessor.process("g of y") == "g(y)")
+        #expect(TextPostProcessor.process("F of 2") == "F(2)")
+        #expect(TextPostProcessor.process("h of zero") == "h(0)")
+        #expect(TextPostProcessor.process("sin of x") == "sin(x)")
+        #expect(TextPostProcessor.process("cos of theta") == "cos(theta)"
+            || TextPostProcessor.process("cos of x") == "cos(x)")
+        #expect(TextPostProcessor.process("cos of x") == "cos(x)")
+        #expect(TextPostProcessor.process("tan of 2") == "tan(2)")
+        #expect(TextPostProcessor.process("exp of x") == "exp(x)")
+        #expect(TextPostProcessor.process("det of A") == "det(A)")
+        #expect(TextPostProcessor.process("max of n") == "max(n)")
+        // Subscripts
+        #expect(TextPostProcessor.process("x sub i") == "xᵢ")
+        #expect(TextPostProcessor.process("x subscript j") == "xⱼ")
+        #expect(TextPostProcessor.process("a sub 0") == "a₀")
+        #expect(TextPostProcessor.process("a sub zero") == "a₀")
+        #expect(TextPostProcessor.process("x sub 10") == "x₁₀")
+        #expect(TextPostProcessor.process("v sub n") == "vₙ")
+        #expect(TextPostProcessor.process("subscript i of x") == "xᵢ"
+            || TextPostProcessor.process("x sub i") == "xᵢ")
+        // Guards
+        #expect(TextPostProcessor.process("sort of x") == "sort of x"
+            || !TextPostProcessor.process("sort of nice").contains("("))
+        #expect(TextPostProcessor.process("sort of nice") == "sort of nice")
+        #expect(TextPostProcessor.process("a of the") == "a of the")
+        #expect(TextPostProcessor.process("sub sandwich") == "sub sandwich")
+        #expect(TextPostProcessor.process("of course") == "of course")
+    }
+
     @Test("Light ITN math relations and letter accents")
     func lightITNRelationsAndAccents() {
         #expect(TextPostProcessor.process("not equal to") == "≠")
