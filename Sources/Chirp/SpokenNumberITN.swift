@@ -205,6 +205,29 @@ enum SpokenNumberITN {
                     i = rewritten.nextIndex
                     continue
                 }
+                if let rewritten = tryConsumeCoupleOrPairOf(parts: parts, start: i) {
+                    out.append(rewritten.text)
+                    i = rewritten.nextIndex
+                    continue
+                }
+            }
+            // "couple of" / "pair of" without leading "a"
+            if core == "couple" || core == "pair" {
+                if let rewritten = tryConsumeCoupleOrPairOf(parts: parts, start: i) {
+                    out.append(rewritten.text)
+                    i = rewritten.nextIndex
+                    continue
+                }
+            }
+            // After phraseFixes: "2½ dozen" → 30
+            if let n = unicodeHalfValue(core),
+               i + 1 < parts.count,
+               normalizeToken(parts[i + 1]) == "dozen"
+            {
+                let trailing = trailingPunctuation(parts[i + 1])
+                out.append(formatValue(Double(n * 12 + 6)) + trailing)
+                i += 2
+                continue
             }
 
             // Cardinal multi-token / teen / decade / digit-run
@@ -288,6 +311,18 @@ enum SpokenNumberITN {
                 j += 2
                 continue
             }
+            if c == "and" {
+                // Only consume "and" inside compounds ("one hundred and five").
+                // Stop before "two and a half dozen" so half-dozen can match.
+                guard j + 1 < parts.count else { break }
+                let nxt = normalizeToken(parts[j + 1])
+                guard numberWords.contains(nxt) || units[nxt] != nil || tens[nxt] != nil
+                        || magnitudes[nxt] != nil
+                else { break }
+                // Skip "and" without storing (parseIntegerPhrase also skips it)
+                j += 1
+                continue
+            }
             if numberWords.contains(c) {
                 words.append(c)
                 j += 1
@@ -304,12 +339,19 @@ enum SpokenNumberITN {
         let afterFrequency = isFrequencyTimesAPeriod(parts: parts, afterNumber: j)
         // "two dozen" → 24 (multiplier, not "2 dozen")
         let afterDozen = nextCore == "dozen"
-        let allowBare = forceConvert || afterQuantity || afterFrequency || afterDozen
+        // "two and a half dozen" → 30
+        let halfDozen = matchAndAHalfDozen(parts: parts, start: j)
+        let allowBare =
+            forceConvert || afterQuantity || afterFrequency || afterDozen || halfDozen != nil
 
         // Phone-style: consecutive single-digit units → concatenate
         // "five five five one two one two" → "5551212", "oh five five five" → "0555"
         // Short runs ("one two") stay conversational words unless min length lowered.
         if isDigitRun(words) {
+            if let end = halfDozen, let n = digitRunInt(words) {
+                let trailing = trailingPunctuation(parts[end - 1])
+                return (formatValue(Double(n * 12 + 6)) + trailing, end)
+            }
             if afterDozen, let n = digitRunInt(words) {
                 let trailing = trailingPunctuation(parts[j])
                 return (formatValue(Double(n * 12)) + trailing, j + 1)
@@ -327,6 +369,11 @@ enum SpokenNumberITN {
             }
             return nil
         } else if let value = parsePhrase(words), allowBare || shouldConvert(words) {
+            if let end = halfDozen {
+                let trailing = trailingPunctuation(parts[end - 1])
+                let n = Int(value.rounded())
+                return (formatValue(Double(n * 12 + 6)) + trailing, end)
+            }
             if afterDozen {
                 let trailing = trailingPunctuation(parts[j])
                 let n = Int(value.rounded())
@@ -337,6 +384,49 @@ enum SpokenNumberITN {
             return (formatValue(value) + trailing, j)
         }
         return nil
+    }
+
+    /// If parts[start…] is "and (a)? half dozen", return index after dozen.
+    private static func matchAndAHalfDozen(parts: [String], start: Int) -> Int? {
+        guard start < parts.count, normalizeToken(parts[start]) == "and" else {
+            return nil
+        }
+        var j = start + 1
+        guard j < parts.count else { return nil }
+        if normalizeToken(parts[j]) == "a" {
+            j += 1
+            guard j < parts.count else { return nil }
+        }
+        guard normalizeToken(parts[j]) == "half" else { return nil }
+        j += 1
+        guard j < parts.count, normalizeToken(parts[j]) == "dozen" else { return nil }
+        return j + 1
+    }
+
+    /// Whole-token mixed fractions from phraseFixes (½ … 5½) → integer whole part.
+    private static func unicodeHalfValue(_ core: String) -> Int? {
+        let map: [String: Int] = [
+            "½": 0, "1½": 1, "2½": 2, "3½": 3, "4½": 4, "5½": 5,
+        ]
+        return map[core]
+    }
+
+    /// "(a )?couple of" / "(a )?pair of" → 2 (following noun kept by outer loop).
+    private static func tryConsumeCoupleOrPairOf(
+        parts: [String], start: Int
+    ) -> (text: String, nextIndex: Int)? {
+        var j = start
+        guard j < parts.count else { return nil }
+        if normalizeToken(parts[j]) == "a" {
+            j += 1
+            guard j < parts.count else { return nil }
+        }
+        let head = normalizeToken(parts[j])
+        guard head == "couple" || head == "pair" else { return nil }
+        j += 1
+        guard j < parts.count, normalizeToken(parts[j]) == "of" else { return nil }
+        // Consume through "of"; noun stays for outer apply loop.
+        return ("2", j + 1)
     }
 
     /// Integer from a pure single-digit unit run (for dozen multiplier).

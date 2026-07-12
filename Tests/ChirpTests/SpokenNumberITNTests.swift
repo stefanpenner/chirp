@@ -226,6 +226,36 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("one more thing") == "one more thing")
     }
 
+    @Test("N and a half dozen multiplies to N*12+6")
+    func andAHalfDozen() {
+        #expect(SpokenNumberITN.apply("two and a half dozen") == "30")
+        #expect(SpokenNumberITN.apply("one and a half dozen") == "18")
+        #expect(SpokenNumberITN.apply("three and a half dozen") == "42")
+        #expect(SpokenNumberITN.apply("two and a half dozen eggs") == "30 eggs")
+        #expect(SpokenNumberITN.apply("I need two and a half dozen") == "I need 30")
+        #expect(SpokenNumberITN.apply("two and half dozen") == "30")
+        // Without dozen, spoken form stays (unicode fractions live in phraseFixes)
+        #expect(SpokenNumberITN.apply("two and a half") == "two and a half")
+        #expect(SpokenNumberITN.apply("half a dozen") == "6")
+    }
+
+    @Test("a couple of / a pair of force two")
+    func coupleAndPairOf() {
+        #expect(SpokenNumberITN.apply("a couple of minutes") == "2 minutes")
+        #expect(SpokenNumberITN.apply("a couple of eggs") == "2 eggs")
+        #expect(SpokenNumberITN.apply("need a couple of files") == "need 2 files")
+        #expect(SpokenNumberITN.apply("a pair of shoes") == "2 shoes")
+        #expect(SpokenNumberITN.apply("bring a pair of socks") == "bring 2 socks")
+        #expect(SpokenNumberITN.apply("couple of days") == "2 days")
+        #expect(SpokenNumberITN.apply("pair of socks") == "2 socks")
+        // Guards
+        #expect(SpokenNumberITN.apply("a couple") == "a couple")
+        #expect(SpokenNumberITN.apply("power couple") == "power couple")
+        #expect(SpokenNumberITN.apply("couple more") == "couple more")
+        #expect(SpokenNumberITN.apply("a pair") == "a pair")
+        #expect(SpokenNumberITN.apply("pair programming") == "pair programming")
+    }
+
     @Test("force-number cues include chapter gate aisle page")
     func expandedForceNumberCues() {
         #expect(SpokenNumberITN.apply("chapter five") == "chapter 5")

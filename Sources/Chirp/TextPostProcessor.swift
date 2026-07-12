@@ -195,6 +195,12 @@ enum TextPostProcessor {
             (#"\bfive eighths\b"#, "⅝"),
             (#"\bseven eighths\b"#, "⅞"),
             // Mixed numbers
+            // Dozen compounds before bare "N and a half" fraction rewrites
+            (#"\bone and a half dozen\b"#, "18"),
+            (#"\btwo and a half dozen\b"#, "30"),
+            (#"\bthree and a half dozen\b"#, "42"),
+            (#"\bfour and a half dozen\b"#, "54"),
+            (#"\bfive and a half dozen\b"#, "60"),
             (#"\btwo and a half\b"#, "2½"),
             (#"\bthree and a half\b"#, "3½"),
             (#"\bfour and a half\b"#, "4½"),

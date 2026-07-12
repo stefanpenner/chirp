@@ -359,6 +359,11 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("three eighths").contains("⅜"))
         #expect(TextPostProcessor.process("two and a half cups").contains("2½"))
         #expect(TextPostProcessor.process("one and a half") == "1½" || TextPostProcessor.process("one and a half").contains("1½"))
+        // Dozen compound must not stop at fraction rewrite
+        #expect(TextPostProcessor.process("two and a half dozen") == "30")
+        #expect(TextPostProcessor.process("two and a half dozen eggs") == "30 eggs")
+        #expect(TextPostProcessor.process("a couple of minutes") == "2 minutes")
+        #expect(TextPostProcessor.process("a pair of shoes") == "2 shoes")
         #expect(TextPostProcessor.process("site dot edu") == "site.edu")
         // Tilde at start of string (path prefix) and mid-phrase
         #expect(TextPostProcessor.process("tilde") == "~")
