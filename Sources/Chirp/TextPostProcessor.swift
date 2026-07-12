@@ -791,6 +791,28 @@ enum TextPostProcessor {
         )
     }()
 
+    /// Math / score ratios: "three over four", "22 divided by 7" → "3/4", "22/7".
+    /// Both sides must be number tokens so "look over there" stays prose.
+    private static let overRatioITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+over\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let dividedByRatioITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+divided\s+by\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     private static let spokenNumbers: [String: String] = [
         "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
         "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
@@ -820,6 +842,9 @@ enum TextPostProcessor {
         // Ratings after numbers: "four out of five" / "4 out of 5" → "4/5"
         // (optional "stars" left in place: "4/5 stars"). Not "out of order".
         result = applyRatingsITN(result)
+        // Math ratios: "three over four" / "22 divided by 7" → "3/4" / "22/7".
+        result = applyOverRatioITN(result)
+        result = applyDividedByRatioITN(result)
         // Sterling/quid before units so "20 pounds sterling" → "£20" not "20 lb sterling".
         // Bare "pounds" stays weight via units; currency needs "sterling" or "quid".
         result = applySterlingCurrencyITN(result)
@@ -1353,8 +1378,23 @@ enum TextPostProcessor {
 
     /// Ratings: "four out of five" / "4 out of 5" → "4/5". Keeps trailing "stars".
     private static func applyRatingsITN(_ text: String) -> String {
+        applySlashRatioITN(text, pattern: ratingsITNPattern)
+    }
+
+    /// "three over four" / "22 over 100" → "3/4" / "22/100".
+    private static func applyOverRatioITN(_ text: String) -> String {
+        applySlashRatioITN(text, pattern: overRatioITNPattern)
+    }
+
+    /// "three divided by four" / "22 divided by 7" → "3/4" / "22/7".
+    private static func applyDividedByRatioITN(_ text: String) -> String {
+        applySlashRatioITN(text, pattern: dividedByRatioITNPattern)
+    }
+
+    /// Shared N ‹connector› M → N/M for ratings, over, divided-by.
+    private static func applySlashRatioITN(_ text: String, pattern: NSRegularExpression) -> String {
         let range = NSRange(text.startIndex..., in: text)
-        let matches = ratingsITNPattern.matches(in: text, range: range)
+        let matches = pattern.matches(in: text, range: range)
         guard !matches.isEmpty else { return text }
 
         var result = text

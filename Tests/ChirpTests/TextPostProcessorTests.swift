@@ -579,12 +579,32 @@ struct TextPostProcessorTests {
         // Teens / decades
         #expect(TextPostProcessor.process("ten out of ten") == "10/10")
         #expect(TextPostProcessor.process("nine out of ten") == "9/10")
+        // Multi-digit after SpokenNumber (22 out of 100)
+        #expect(TextPostProcessor.process("twenty two out of one hundred") == "22/100")
+        #expect(TextPostProcessor.process("twenty out of twenty five") == "20/25")
         // Do not convert "out of order" without number bounds
         #expect(TextPostProcessor.process("out of order") == "out of order")
         #expect(TextPostProcessor.process("that is out of order") == "that is out of order")
         // Quantity nouns still convert bare units (regression)
         #expect(TextPostProcessor.process("five emails") == "5 emails")
         #expect(TextPostProcessor.process("ten items") == "10 items")
+    }
+
+    @Test("Light ITN N over M and N divided by M as N/M")
+    func lightITNOverAndDividedBy() {
+        #expect(TextPostProcessor.process("three over four") == "3/4")
+        #expect(TextPostProcessor.process("twenty two over one hundred") == "22/100")
+        #expect(TextPostProcessor.process("3 over 4") == "3/4")
+        #expect(TextPostProcessor.process("ten over twenty") == "10/20")
+        #expect(TextPostProcessor.process("three divided by four") == "3/4")
+        #expect(TextPostProcessor.process("22 divided by 7") == "22/7")
+        #expect(TextPostProcessor.process("one hundred divided by five") == "100/5")
+        // Guards: prose "over" / "divided by" without numeric bounds
+        #expect(TextPostProcessor.process("look over there") == "look over there")
+        #expect(TextPostProcessor.process("over the hill") == "over the hill")
+        #expect(TextPostProcessor.process("take over please") == "take over please")
+        #expect(TextPostProcessor.process("the city was divided by war")
+            == "the city was divided by war")
     }
 
     @Test("Light ITN formats percent and dollars")

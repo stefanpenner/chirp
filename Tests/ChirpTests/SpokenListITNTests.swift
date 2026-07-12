@@ -139,4 +139,25 @@ struct SpokenListITNTests {
         _ = SpokenListITN.apply("number two hundred", counter: &c)
         #expect(c == 201)
     }
+
+    @Test("number one thousand compounds")
+    func compoundThousand() {
+        #expect(SpokenListITN.apply("number one thousand milk").contains("1000. "))
+        #expect(SpokenListITN.apply("number two thousand alpha").contains("2000. "))
+        #expect(SpokenListITN.apply("number one thousand one beta").contains("1001. "))
+        #expect(SpokenListITN.apply("number one thousand and five gamma").contains("1005. "))
+        #expect(SpokenListITN.apply("number one thousand two hundred delta").contains("1200. "))
+        #expect(SpokenListITN.apply("number one thousand two hundred thirty one item")
+            .contains("1231. "))
+        #expect(SpokenListITN.apply("number 1000 eggs").contains("1000. "))
+        #expect(SpokenListITN.apply("number 1231 flour").contains("1231. "))
+        let r = SpokenListITN.apply("number one thousand two hundred thirty one item")
+        #expect(!r.lowercased().contains("thousand"), "got \(r)")
+        #expect(!r.lowercased().contains("hundred"), "got \(r)")
+        // Bare "number one" still 1
+        #expect(SpokenListITN.apply("number one eggs").contains("1. "))
+        var c = 1
+        _ = SpokenListITN.apply("number one thousand", counter: &c)
+        #expect(c == 1001)
+    }
 }

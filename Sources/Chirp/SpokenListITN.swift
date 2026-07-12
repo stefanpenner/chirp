@@ -3,8 +3,8 @@
 //   "number one milk next number eggs next number bread"
 //     → "\n1. milk\n2. eggs\n3. bread"
 //   "number twenty one milk" → "\n21. milk"
-//   "number one hundred twenty one" → "\n121. "
 //   "number two hundred five" → "\n205. "
+//   "number one thousand two hundred thirty one" → "\n1231. "
 //   "end list" / "stop numbering" → resets counter (emits newline)
 //
 // Counter is session-scoped (reset on new recording). Pure apply() takes
@@ -31,30 +31,12 @@ enum SpokenListITN {
         "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
     ]
 
-    /// Pattern groups (1-based):
-    ///   1 = hundred multiplier (one–nine)
-    ///   2–4 = after hundred: tens [unit]? | singles
-    ///   5–6 tens [unit]
-    ///   7 singles
-    ///   8 digit 1–3
-    ///   9 next number
-    ///   10 end list
-    private static let commandPattern: NSRegularExpression = {
-        let tens = tensWords.sorted { $0.count > $1.count }.joined(separator: "|")
-        let units = unitWords.sorted { $0.count > $1.count }.joined(separator: "|")
-        let singles = wordToNumber.keys
-            .filter { !tensWords.contains($0) }
-            .sorted { $0.count > $1.count }
-            .joined(separator: "|")
-        let hundredMult = unitWords.sorted { $0.count > $1.count }.joined(separator: "|")
-        // After "N hundred [and]?": optional rest as tens+unit or single token.
-        let afterHundred =
-            #"(?:[\s-]+(?:("# + tens + #")(?:[\s-]+("# + units + #"))?|("# + singles + #")))?"#
+    /// Command lead only — number body parsed by `parseListCardinal`.
+    /// Groups: 1 = next number / number next, 2 = end list, 3 = bare "number "
+    /// (order matters: "number next" must win over bare "number").
+    private static let commandLeadPattern: NSRegularExpression = {
         let pattern =
-            #"(?:(?<=^)|(?<=\s))(?:number\s+(?:("# + hundredMult + #")\s+hundred(?:\s+and)?"#
-            + afterHundred
-            + #"|("# + tens + #")(?:[\s-]+("# + units + #"))?|("# + singles
-            + #")|(\d{1,3}))|(next\s+number|number\s+next)|(end\s+list|stop\s+list|stop\s+numbering|end\s+numbering))\b\s*"#
+            #"(?:(?<=^)|(?<=\s))(?:(next\s+number|number\s+next)|(end\s+list|stop\s+list|stop\s+numbering|end\s+numbering)|(number)\s+)\b\s*"#
         return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }()
 
@@ -67,74 +49,56 @@ enum SpokenListITN {
     static func apply(_ text: String, counter: inout Int) -> String {
         if counter < 1 { counter = 1 }
         let nsRange = NSRange(text.startIndex..., in: text)
-        let matches = commandPattern.matches(in: text, range: nsRange)
-        guard !matches.isEmpty else { return text }
+        let leads = commandLeadPattern.matches(in: text, range: nsRange)
+        guard !leads.isEmpty else { return text }
 
         var result = text
-        var planned: [(range: Range<String.Index>, replacement: String)] = []
         var sim = counter
-        for match in matches {
-            guard let fullRange = Range(match.range, in: text) else { continue }
+        // Process left-to-right for counter; replace right-to-left for indices.
+        var ordered: [(range: Range<String.Index>, replacement: String, nextSim: Int)] = []
+        var local = sim
 
-            // Group 10 = end list / stop numbering
-            if match.numberOfRanges > 10, match.range(at: 10).location != NSNotFound {
-                sim = 1
-                planned.append((fullRange, "\n"))
+        for match in leads {
+            guard let leadRange = Range(match.range, in: text) else { continue }
+
+            // Group 1 = next number / number next
+            if match.numberOfRanges > 1, match.range(at: 1).location != NSNotFound {
+                let n = local
+                local = n + 1
+                ordered.append((leadRange, "\n\(n). ", local))
                 continue
             }
 
-            let n: Int
-            let matched = String(text[fullRange]).lowercased()
-            if matched.contains("hundred"),
-               match.numberOfRanges > 1, match.range(at: 1).location != NSNotFound,
-               let hr = Range(match.range(at: 1), in: text) {
-                let mult = wordToNumber[String(text[hr]).lowercased()] ?? 1
-                var val = mult * 100
-                if match.numberOfRanges > 2, match.range(at: 2).location != NSNotFound,
-                   let tr = Range(match.range(at: 2), in: text) {
-                    let tw = String(text[tr]).lowercased()
-                    val += wordToNumber[tw] ?? 0
-                    if match.numberOfRanges > 3, match.range(at: 3).location != NSNotFound,
-                       let ur = Range(match.range(at: 3), in: text) {
-                        val += wordToNumber[String(text[ur]).lowercased()] ?? 0
-                    }
-                } else if match.numberOfRanges > 4, match.range(at: 4).location != NSNotFound,
-                          let sr = Range(match.range(at: 4), in: text) {
-                    val += wordToNumber[String(text[sr]).lowercased()] ?? 0
-                }
-                n = min(val, 999)
-                sim = n + 1
-            } else if match.numberOfRanges > 5, match.range(at: 5).location != NSNotFound,
-                      let tr = Range(match.range(at: 5), in: text) {
-                // Tens (+ optional unit)
-                let tensWord = String(text[tr]).lowercased()
-                let tensVal = wordToNumber[tensWord] ?? 0
-                if match.numberOfRanges > 6, match.range(at: 6).location != NSNotFound,
-                   let ur = Range(match.range(at: 6), in: text) {
-                    n = tensVal + (wordToNumber[String(text[ur]).lowercased()] ?? 0)
-                } else {
-                    n = tensVal
-                }
-                sim = n + 1
-            } else if match.numberOfRanges > 7, match.range(at: 7).location != NSNotFound,
-                      let wr = Range(match.range(at: 7), in: text) {
-                let word = String(text[wr]).lowercased()
-                n = wordToNumber[word] ?? sim
-                sim = n + 1
-            } else if match.numberOfRanges > 8, match.range(at: 8).location != NSNotFound,
-                      let dr = Range(match.range(at: 8), in: text),
-                      let digit = Int(text[dr]) {
-                n = max(1, min(digit, 999))
-                sim = n + 1
-            } else {
-                // Group 9 "next number" / "number next"
-                n = sim
-                sim = n + 1
+            // Group 2 = end list
+            if match.numberOfRanges > 2, match.range(at: 2).location != NSNotFound {
+                local = 1
+                ordered.append((leadRange, "\n", local))
+                continue
             }
-            planned.append((fullRange, "\n\(n). "))
+
+            // Group 3 = bare "number " — parse cardinal after the lead
+            let afterLead = leadRange.upperBound
+            let tail = String(text[afterLead...])
+            let tokens = tokenize(tail)
+            if let (n, consumed) = parseListCardinal(tokens, start: 0), consumed > 0 {
+                let consumedEnd = endIndex(
+                    ofFirst: consumed,
+                    tokens: tokens,
+                    in: tail,
+                    base: afterLead,
+                    text: text
+                )
+                let fullRange = leadRange.lowerBound..<consumedEnd
+                let val = min(max(n, 1), 9999)
+                local = val + 1
+                ordered.append((fullRange, "\n\(val). ", local))
+            }
+            // If "number" with no parseable body, leave text alone (no rewrite).
         }
 
-        for item in planned.reversed() {
+        sim = local
+        // Right-to-left so earlier ranges stay valid in `result`.
+        for item in ordered.reversed() {
             result.replaceSubrange(item.range, with: item.replacement)
         }
         counter = sim
@@ -151,6 +115,124 @@ enum SpokenListITN {
     static func apply(_ text: String) -> String {
         var c = 1
         return apply(text, counter: &c)
+    }
+
+    // MARK: - Cardinal parse (1…9999)
+
+    /// Tokenize on whitespace and hyphens so "twenty-one" → ["twenty","one"].
+    private static func tokenize(_ s: String) -> [String] {
+        s.split { $0.isWhitespace || $0 == "-" }
+            .map(String.init)
+            .filter { !$0.isEmpty }
+    }
+
+    private static func core(_ w: String) -> String {
+        w.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    /// Parse list cardinal at `tokens[start…]` → (value, tokens consumed).
+    private static func parseListCardinal(_ tokens: [String], start: Int) -> (Int, Int)? {
+        guard start < tokens.count else { return nil }
+        let c0 = core(tokens[start])
+
+        // Digit form 1…9999
+        if let d = Int(c0), d >= 1, d <= 9999, c0.allSatisfy(\.isNumber) {
+            return (d, 1)
+        }
+
+        // N thousand [and]? [below-thousand]
+        if unitWords.contains(c0), start + 1 < tokens.count, core(tokens[start + 1]) == "thousand" {
+            var val = (wordToNumber[c0] ?? 1) * 1000
+            var i = start + 2
+            if i < tokens.count, core(tokens[i]) == "and" { i += 1 }
+            if let (rest, n) = parseBelowThousand(tokens, start: i) {
+                val += rest
+                i += n
+            }
+            return (min(val, 9999), i - start)
+        }
+
+        if let (below, n) = parseBelowThousand(tokens, start: start) {
+            return (below, n)
+        }
+        return nil
+    }
+
+    /// 1…999: N hundred [and]? rest | tens [unit] | single word | fail
+    private static func parseBelowThousand(_ tokens: [String], start: Int) -> (Int, Int)? {
+        guard start < tokens.count else { return nil }
+        let c0 = core(tokens[start])
+
+        // N hundred [and]? [tens unit | singles]
+        if unitWords.contains(c0), start + 1 < tokens.count, core(tokens[start + 1]) == "hundred" {
+            var val = (wordToNumber[c0] ?? 1) * 100
+            var i = start + 2
+            if i < tokens.count, core(tokens[i]) == "and" { i += 1 }
+            if let (rest, n) = parseTensOrSingle(tokens, start: i) {
+                val += rest
+                i += n
+            }
+            return (min(val, 999), i - start)
+        }
+
+        return parseTensOrSingle(tokens, start: start)
+    }
+
+    /// Tens (+ optional unit) or single teen/unit/ten word.
+    private static func parseTensOrSingle(_ tokens: [String], start: Int) -> (Int, Int)? {
+        guard start < tokens.count else { return nil }
+        let c0 = core(tokens[start])
+
+        if tensWords.contains(c0), let tens = wordToNumber[c0] {
+            if start + 1 < tokens.count {
+                let c1 = core(tokens[start + 1])
+                if unitWords.contains(c1), let u = wordToNumber[c1] {
+                    return (tens + u, 2)
+                }
+            }
+            return (tens, 1)
+        }
+
+        if let v = wordToNumber[c0], !tensWords.contains(c0) {
+            return (v, 1)
+        }
+        return nil
+    }
+
+    /// Map first `count` tokens in `tail` back to an index in the original `text`.
+    private static func endIndex(
+        ofFirst count: Int,
+        tokens: [String],
+        in tail: String,
+        base: String.Index,
+        text: String
+    ) -> String.Index {
+        guard count > 0, count <= tokens.count else { return base }
+        var searchFrom = tail.startIndex
+        var lastEnd = tail.startIndex
+        for k in 0..<count {
+            let tok = tokens[k]
+            if let r = tail.range(
+                of: tok,
+                options: [.caseInsensitive, .diacriticInsensitive],
+                range: searchFrom..<tail.endIndex
+            ) {
+                lastEnd = r.upperBound
+                searchFrom = r.upperBound
+                // Skip hyphen in "twenty-one"
+                if k + 1 < count, searchFrom < tail.endIndex, tail[searchFrom] == "-" {
+                    searchFrom = tail.index(after: searchFrom)
+                }
+            } else {
+                break
+            }
+        }
+        // Trailing whitespace after the last number token (matches prior `\s*`).
+        while lastEnd < tail.endIndex, tail[lastEnd].isWhitespace {
+            lastEnd = tail.index(after: lastEnd)
+        }
+        let offset = tail.distance(from: tail.startIndex, to: lastEnd)
+        return text.index(base, offsetBy: offset)
     }
 
     /// "1. milk" → "1. Milk"
