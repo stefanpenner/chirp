@@ -31,6 +31,57 @@ struct PhraseReplaceDecisionTests {
         #expect(caseFold?.length == "WORLD".count)
     }
 
+    @Test("findLastRange before walks earlier occurrence (Select Again dual)")
+    func findLastRangeBefore() {
+        let buf = "foo bar foo baz foo"
+        let last = PhraseReplaceDecision.findLastRange(target: "foo", in: buf)
+        #expect(last?.start == "foo bar foo baz ".count)
+        let mid = PhraseReplaceDecision.findLastRange(
+            target: "foo",
+            in: buf,
+            before: last!.start
+        )
+        #expect(mid?.start == "foo bar ".count)
+        let first = PhraseReplaceDecision.findLastRange(
+            target: "foo",
+            in: buf,
+            before: mid!.start
+        )
+        #expect(first?.start == 0)
+        #expect(
+            PhraseReplaceDecision.findLastRange(target: "foo", in: buf, before: 0) == nil
+        )
+        #expect(
+            PhraseReplaceDecision.findLastRange(target: "foo", in: buf, before: 1) == nil
+        )
+    }
+
+    @Test("findFirstRange after walks later occurrence")
+    func findFirstRangeAfter() {
+        let buf = "foo bar foo baz foo"
+        let first = PhraseReplaceDecision.findLastRange(target: "foo", in: "foo")
+        #expect(first?.start == 0)
+        let second = PhraseReplaceDecision.findFirstRange(
+            target: "foo",
+            in: buf,
+            after: 3
+        )
+        #expect(second?.start == "foo bar ".count)
+        let third = PhraseReplaceDecision.findFirstRange(
+            target: "foo",
+            in: buf,
+            after: second!.start + second!.length
+        )
+        #expect(third?.start == "foo bar foo baz ".count)
+        #expect(
+            PhraseReplaceDecision.findFirstRange(
+                target: "foo",
+                in: buf,
+                after: third!.start + third!.length
+            ) == nil
+        )
+    }
+
     @Test("bufferAfterReplace splices last match; miss is nil")
     func bufferAfterReplace() {
         #expect(

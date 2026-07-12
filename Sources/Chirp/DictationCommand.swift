@@ -17,6 +17,10 @@ enum DictationCommand: Equatable, Sendable {
     case deletePhrase(target: String)
     /// Single-utterance select last occurrence of `target` (arms type-over).
     case selectPhrase(target: String)
+    /// Dragon "select again": previous occurrence of last selected phrase.
+    case selectAgain
+    /// Next occurrence of last selected phrase (forward walk).
+    case selectNextOccurrence
     /// Move caret to start of last occurrence of `target` (no selection arm).
     case goToPhrase(target: String)
     /// Move caret to end of last occurrence of `target` (no selection arm).
@@ -1171,6 +1175,13 @@ enum DictationCommand: Equatable, Sendable {
         case "unselect that", "unselect", "deselect that", "clear selection",
              "deselect":
             return .unselectThat
+        // Dragon "Select Again" — previous occurrence of last phrase select.
+        // Do not steal "select previous word/sentence/paragraph/line".
+        case "select again", "select previous occurrence",
+             "select last occurrence again", "select the previous occurrence":
+            return .selectAgain
+        case "select next occurrence", "select the next occurrence":
+            return .selectNextOccurrence
         case "bold that", "bold it", "make that bold", "make it bold":
             return .boldThat
         case "italic that", "italicize that", "italics that",
@@ -1299,6 +1310,8 @@ enum DictationCommand: Equatable, Sendable {
         ("replace X with Y / change X to Y / swap X for Y", "Replace last occurrence of X with Y"),
         ("delete X / remove X", "Delete last occurrence of phrase X"),
         ("select X / highlight X", "Select last occurrence of phrase X (type-over next)"),
+        ("select again / select previous occurrence", "Previous occurrence of last select X"),
+        ("select next occurrence", "Next occurrence of last select X"),
         ("go to X / move to X / insert before X", "Move caret to start of last occurrence of X"),
         ("go after X / move after X / insert after X", "Move caret to end of last occurrence of X"),
         ("resume with X / continue with X", "Keep through X, delete after, continue dictating"),

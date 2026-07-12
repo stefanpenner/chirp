@@ -27,6 +27,46 @@ enum PhraseReplaceDecision {
         return Match(start: start, length: length)
     }
 
+    /// Last case-insensitive occurrence of `target` whose start is **strictly before**
+    /// `beforeStart`. Dual of SelectAgain.tla (walk earlier matches).
+    /// Used by Dragon "select again" after a phrase select.
+    static func findLastRange(
+        target: String,
+        in buffer: String,
+        before beforeStart: Int
+    ) -> Match? {
+        guard beforeStart > 0 else { return nil }
+        let end = min(beforeStart, buffer.count)
+        guard end > 0 else { return nil }
+        let prefix = String(buffer.prefix(end))
+        return findLastRange(target: target, in: prefix)
+    }
+
+    /// First case-insensitive occurrence of `target` starting **at or after** `afterStart`.
+    /// Dual of SelectAgain.tla SelectNext. Used by "select next occurrence".
+    static func findFirstRange(
+        target: String,
+        in buffer: String,
+        after afterStart: Int
+    ) -> Match? {
+        let t = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, !buffer.isEmpty else { return nil }
+        let start = min(max(afterStart, 0), buffer.count)
+        guard start < buffer.count else { return nil }
+        let from = buffer.index(buffer.startIndex, offsetBy: start)
+        guard let range = buffer.range(
+            of: t,
+            options: .caseInsensitive,
+            range: from..<buffer.endIndex
+        ) else {
+            return nil
+        }
+        let matchStart = buffer.distance(from: buffer.startIndex, to: range.lowerBound)
+        let length = buffer.distance(from: range.lowerBound, to: range.upperBound)
+        guard length > 0 else { return nil }
+        return Match(start: matchStart, length: length)
+    }
+
     /// Last match expanded to absorb one adjacent whitespace so delete does not
     /// leave double spaces ("hello world foo" → "hello foo").
     /// Prefers leading space; else trailing space.

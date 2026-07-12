@@ -174,6 +174,12 @@ public final class AppState {
     /// Next content splices this range so session buffer matches type-over. Dual of SelectionCommit.tla.
     private var sessionSelection: (start: Int, length: Int)? = nil
 
+    /// Last phrase-select search (Dragon "select again" / "select next occurrence").
+    /// Dual of SelectAgain.tla. Cleared on clear-all / new session content wipe.
+    private var lastSelectTarget: String? = nil
+    private var lastSelectMatchStart: Int? = nil
+    private var lastSelectMatchLength: Int? = nil
+
     /// Session caret offset after go-to / unit move (nil = end of buffer).
     /// Mid-buffer content inserts here so host and session stay dual. Dual of GoToPhrase.tla.
     private var sessionCaret: Int? = nil
@@ -1016,6 +1022,10 @@ public final class AppState {
                         self.performSelectThat(typesIncrementally: false)
                     case .selectPhrase(let target):
                         self.performSelectPhrase(target: target, typesIncrementally: false)
+                    case .selectAgain:
+                        self.performSelectAgain(typesIncrementally: false)
+                    case .selectNextOccurrence:
+                        self.performSelectNextOccurrence(typesIncrementally: false)
                     case .goToPhrase(let target):
                         self.performGoToPhrase(target: target, after: false, typesIncrementally: false)
                     case .goAfterPhrase(let target):
@@ -1350,6 +1360,10 @@ public final class AppState {
             performSelectThat(typesIncrementally: typesIncrementally)
         case .selectPhrase(let target):
             performSelectPhrase(target: target, typesIncrementally: typesIncrementally)
+        case .selectAgain:
+            performSelectAgain(typesIncrementally: typesIncrementally)
+        case .selectNextOccurrence:
+            performSelectNextOccurrence(typesIncrementally: typesIncrementally)
         case .goToPhrase(let target):
             performGoToPhrase(target: target, after: false, typesIncrementally: typesIncrementally)
         case .goAfterPhrase(let target):
@@ -2193,6 +2207,7 @@ public final class AppState {
         }
         editStack.clear()
         lastCommittedNormalized = ""
+        clearSelectSearchMemory()
         sentenceNavIndex = nil
         sentenceSelectionActive = false
         paragraphNavIndex = nil
@@ -2221,9 +2236,65 @@ public final class AppState {
         ) else {
             return
         }
+        rememberSelectSearch(target: target, match: match)
         armSessionSelection(start: match.start, length: match.length)
         moveToSessionOffset(match.start)
         textInserter.selectForward(count: match.length)
+    }
+
+    /// Dragon "select again": previous occurrence of last select-X phrase.
+    /// Dual of PhraseReplaceDecision.findLastRange(before:) / SelectAgain.tla.
+    private func performSelectAgain(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        guard let target = lastSelectTarget, let prevStart = lastSelectMatchStart else {
+            return
+        }
+        guard let match = PhraseReplaceDecision.findLastRange(
+            target: target,
+            in: transcribedText,
+            before: prevStart
+        ) else {
+            return
+        }
+        applySelectMatch(match, target: target)
+    }
+
+    /// "select next occurrence": next match of last select-X phrase after current.
+    private func performSelectNextOccurrence(typesIncrementally: Bool) {
+        guard typesIncrementally else { return }
+        guard let target = lastSelectTarget,
+              let prevStart = lastSelectMatchStart,
+              let prevLen = lastSelectMatchLength
+        else {
+            return
+        }
+        guard let match = PhraseReplaceDecision.findFirstRange(
+            target: target,
+            in: transcribedText,
+            after: prevStart + prevLen
+        ) else {
+            return
+        }
+        applySelectMatch(match, target: target)
+    }
+
+    private func rememberSelectSearch(target: String, match: PhraseReplaceDecision.Match) {
+        lastSelectTarget = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        lastSelectMatchStart = match.start
+        lastSelectMatchLength = match.length
+    }
+
+    private func applySelectMatch(_ match: PhraseReplaceDecision.Match, target: String) {
+        rememberSelectSearch(target: target, match: match)
+        armSessionSelection(start: match.start, length: match.length)
+        moveToSessionOffset(match.start)
+        textInserter.selectForward(count: match.length)
+    }
+
+    private func clearSelectSearchMemory() {
+        lastSelectTarget = nil
+        lastSelectMatchStart = nil
+        lastSelectMatchLength = nil
     }
 
     /// Dragon "resume with X": keep through last X, delete everything after, append next.

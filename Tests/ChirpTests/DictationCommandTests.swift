@@ -115,6 +115,22 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("select all") == .selectAll)
     }
 
+    @Test("Dragon select again / select next occurrence")
+    func selectAgainCommands() {
+        #expect(DictationCommand.parse("select again") == .selectAgain)
+        #expect(DictationCommand.parse("Select again.") == .selectAgain)
+        #expect(DictationCommand.parse("select previous occurrence") == .selectAgain)
+        #expect(DictationCommand.parse("select the previous occurrence") == .selectAgain)
+        #expect(DictationCommand.parse("please select again") == .selectAgain)
+        #expect(DictationCommand.parse("select next occurrence") == .selectNextOccurrence)
+        #expect(DictationCommand.parse("select the next occurrence") == .selectNextOccurrence)
+        // Do not steal structural previous/next
+        #expect(DictationCommand.parse("select previous word") == .selectPreviousWord)
+        #expect(DictationCommand.parse("select next word") == .selectNextWord)
+        #expect(DictationCommand.parse("select previous sentence") == .selectPreviousSentence)
+        #expect(DictationCommand.parse("select previous paragraph") == .selectPreviousParagraph)
+    }
+
     @Test("recognizes go to / go after phrase without stealing structural go-tos")
     func goToPhraseCommands() {
         #expect(DictationCommand.parse("go to world") == .goToPhrase(target: "world"))
