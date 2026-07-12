@@ -256,6 +256,10 @@ enum DictationCommand: Equatable, Sendable {
     case selectUpParagraphs(count: Int)
     /// Select N paragraphs downward from caret (inclusive). Buffer unchanged until type-over.
     case selectDownParagraphs(count: Int)
+    /// Select N sentences upward from caret (inclusive). Buffer unchanged until type-over.
+    case selectUpSentences(count: Int)
+    /// Select N sentences downward from caret (inclusive). Buffer unchanged until type-over.
+    case selectDownSentences(count: Int)
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
@@ -809,6 +813,15 @@ enum DictationCommand: Equatable, Sendable {
                 #"^select (?:the )?down "# + num + #" paragraphs?$"#,
                 { c in (1...20).contains(c) ? .selectDownParagraphs(count: c) : nil }
             ),
+            // Select up/down N sentences from caret (not buffer last/next peels).
+            (
+                #"^select (?:the )?up "# + num + #" sentences?$"#,
+                { c in (1...20).contains(c) ? .selectUpSentences(count: c) : nil }
+            ),
+            (
+                #"^select (?:the )?down "# + num + #" sentences?$"#,
+                { c in (1...20).contains(c) ? .selectDownSentences(count: c) : nil }
+            ),
         ]
 
         for spec in specs {
@@ -1243,6 +1256,11 @@ enum DictationCommand: Equatable, Sendable {
             return .selectUpParagraphs(count: 1)
         case "select down a paragraph", "select down paragraph", "select paragraph down":
             return .selectDownParagraphs(count: 1)
+        // Select one sentence up/down from caret (not progressive select previous).
+        case "select up a sentence", "select up sentence", "select sentence up":
+            return .selectUpSentences(count: 1)
+        case "select down a sentence", "select down sentence", "select sentence down":
+            return .selectDownSentences(count: 1)
         default:
             return nil
         }
@@ -1349,6 +1367,7 @@ enum DictationCommand: Equatable, Sendable {
         ("move up N lines / move down 3 lines", "Cursor up/down N lines (host ↑↓ × N)"),
         ("move up N paragraphs / move down 3 paragraphs", "Jump N paragraphs (session dual)"),
         ("select up N paragraphs / select down 2 paragraphs", "Select N paragraphs from caret"),
+        ("select up N sentences / select down 2 sentences", "Select N sentences from caret"),
         ("select up N lines / select down 3 lines", "Select N lines up/down (⇧↑/↓; keyboard only)"),
         ("next line / previous line", "Progressive line start (session dual)"),
         ("go to start / beginning of line", "Cursor to line start (⌘←)"),
@@ -1860,18 +1879,16 @@ enum TranscriptSelection {
         return ranges[targetIdx].start
     }
 
-    /// Span for selecting `count` paragraphs up/down from caret (inclusive).
-    /// Dual of SelectParagraphsN.tla. Nil when empty or count ≤ 0.
-    static func selectParagraphsSpan(
-        _ text: String,
+    /// Shared span for selecting `count` units (sentence/paragraph) from caret.
+    private static func selectUnitsSpan(
+        ranges: [SentenceRange],
+        textCount: Int,
         caret: Int?,
         up: Bool,
         count: Int
     ) -> (start: Int, length: Int, navIndex: Int)? {
-        guard count > 0, !text.isEmpty else { return nil }
-        let ranges = paragraphRanges(text)
-        guard !ranges.isEmpty else { return nil }
-        let pos = min(max(caret ?? text.count, 0), text.count)
+        guard count > 0, textCount > 0, !ranges.isEmpty else { return nil }
+        let pos = min(max(caret ?? textCount, 0), textCount)
         guard let idx = rangeIndexContaining(pos, ranges: ranges) else { return nil }
         let n = min(count, ranges.count)
         let startIdx: Int
@@ -1887,6 +1904,40 @@ enum TranscriptSelection {
         let end = ranges[endIdx].end
         guard end > start else { return nil }
         return (start, end - start, up ? startIdx : endIdx)
+    }
+
+    /// Span for selecting `count` paragraphs up/down from caret (inclusive).
+    /// Dual of SelectParagraphsN.tla. Nil when empty or count ≤ 0.
+    static func selectParagraphsSpan(
+        _ text: String,
+        caret: Int?,
+        up: Bool,
+        count: Int
+    ) -> (start: Int, length: Int, navIndex: Int)? {
+        selectUnitsSpan(
+            ranges: paragraphRanges(text),
+            textCount: text.count,
+            caret: caret,
+            up: up,
+            count: count
+        )
+    }
+
+    /// Span for selecting `count` sentences up/down from caret (inclusive).
+    /// Dual of SelectSentencesN.tla. Nil when empty or count ≤ 0.
+    static func selectSentencesSpan(
+        _ text: String,
+        caret: Int?,
+        up: Bool,
+        count: Int
+    ) -> (start: Int, length: Int, navIndex: Int)? {
+        selectUnitsSpan(
+            ranges: sentenceRanges(text),
+            textCount: text.count,
+            caret: caret,
+            up: up,
+            count: count
+        )
     }
 
     /// Start of the line under caret. Dual of LineCaret.tla LineStart.

@@ -61,4 +61,25 @@ struct ParagraphMoveDecisionTests {
         #expect(TranscriptSelection.selectParagraphsSpan(t, caret: 0, up: true, count: 0) == nil)
         #expect(TranscriptSelection.selectParagraphsSpan("", caret: 0, up: true, count: 1) == nil)
     }
+
+    @Test("selectSentencesSpan covers N sentences inclusive")
+    func selectSentenceSpan() {
+        let t = "One. Two. Three. Four."
+        let ranges = TranscriptSelection.sentenceRanges(t)
+        #expect(ranges.count >= 3)
+        let lastStart = ranges[ranges.count - 1].start
+        let up = TranscriptSelection.selectSentencesSpan(
+            t, caret: lastStart, up: true, count: 2
+        )
+        #expect(up != nil)
+        #expect(up!.start == ranges[ranges.count - 2].start)
+        #expect(up!.start + up!.length == ranges[ranges.count - 1].end)
+        let down = TranscriptSelection.selectSentencesSpan(
+            t, caret: ranges[0].start, up: false, count: 2
+        )
+        #expect(down != nil)
+        #expect(down!.start == ranges[0].start)
+        #expect(down!.start + down!.length == ranges[1].end)
+        #expect(TranscriptSelection.selectSentencesSpan(t, caret: 0, up: true, count: 0) == nil)
+    }
 }
