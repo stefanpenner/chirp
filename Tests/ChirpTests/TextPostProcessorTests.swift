@@ -746,7 +746,30 @@ struct TextPostProcessorTests {
         // Guards
         #expect(TextPostProcessor.process("limit as soon as possible")
             == "limit as soon as possible")
-        #expect(TextPostProcessor.process("approaches infinity") == "approaches infinity")
+        #expect(TextPostProcessor.process("approaches infinity") == "approaches ∞"
+            || TextPostProcessor.process("approaches infinity") == "approaches infinity")
+    }
+
+    @Test("Light ITN nabla partial gradient curl infinity")
+    func lightITNCalcOperators() {
+        #expect(TextPostProcessor.process("nabla") == "∇")
+        #expect(TextPostProcessor.process("operator nabla") == "∇")
+        #expect(TextPostProcessor.process("del operator") == "∇")
+        #expect(TextPostProcessor.process("partial f") == "∂f")
+        #expect(TextPostProcessor.process("partial of f") == "∂f")
+        #expect(TextPostProcessor.process("partial of f with respect to x") == "∂f/∂x")
+        #expect(TextPostProcessor.process("partial with respect to y") == "∂/∂y")
+        #expect(TextPostProcessor.process("partial derivative with respect to t") == "∂/∂t")
+        #expect(TextPostProcessor.process("gradient of f") == "∇f")
+        #expect(TextPostProcessor.process("divergence of F") == "∇·F"
+            || TextPostProcessor.process("divergence of f") == "∇·f")
+        #expect(TextPostProcessor.process("curl of f") == "∇×f")
+        #expect(TextPostProcessor.process("to infinity") == "to ∞")
+        #expect(TextPostProcessor.process("approaches infinity") == "approaches ∞")
+        // Guards
+        #expect(TextPostProcessor.process("partial payment") == "partial payment")
+        #expect(TextPostProcessor.process("delete the file") == "delete the file")
+        #expect(TextPostProcessor.process("gradient of the hill") == "gradient of the hill")
     }
 
     @Test("Light ITN sum product integral from A to B")

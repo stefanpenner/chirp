@@ -902,6 +902,8 @@ enum TextPostProcessor {
         result = applyAggregateFromToITN(result)
         // Limits: "limit as n approaches infinity" → lim(n→∞)
         result = applyLimitAsITN(result)
+        // Calc ops: nabla, partial, gradient/divergence/curl, bare infinity
+        result = applyCalcOperatorITN(result)
         // Cued Greek letters + "N pi" (after numbers so "two pi" → "2π")
         result = applyGreekLetterITN(result)
         // Cardinal ranges after time ranges so "from 3 to 5 pm" is already
@@ -1850,6 +1852,158 @@ enum TextPostProcessor {
                 bound = rangeDigits(from: boundRaw)
             }
             result.replaceSubrange(fullRange, with: "lim(\(v)→\(bound))")
+        }
+        return result
+    }
+
+    // MARK: - Calc operators (∇ ∂ ∞)
+
+    /// "partial of f with respect to x" → ∂f/∂x
+    private static let partialOfWRTITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bpartial(?:\s+derivative)?(?:\s+of)?\s+([A-Za-z])\s+with\s+respect\s+to\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "partial with respect to x" / "partial derivative with respect to t"
+    private static let partialWRTITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bpartial(?:\s+derivative)?\s+with\s+respect\s+to\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "partial f" / "partial of f" — single-letter field only (not "partial payment")
+    private static let partialOfVarITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bpartial(?:\s+of)?\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let gradientOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bgradient\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let divergenceOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bdivergence\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let curlOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bcurl\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let nablaITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:operator\s+)?nabla\b|\bdel\s+operator\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let infinityITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(pattern: #"\binfinity\b"#, options: .caseInsensitive)
+    }()
+
+    private static func applyCalcOperatorITN(_ text: String) -> String {
+        var result = text
+        // Longest partial forms first
+        result = applyTwoLetterOpITN(
+            result,
+            pattern: partialOfWRTITNPattern,
+            wrap: { f, x in "∂\(f)/∂\(x)" }
+        )
+        result = applyOneLetterOpITN(
+            result,
+            pattern: partialWRTITNPattern,
+            wrap: { x in "∂/∂\(x)" }
+        )
+        result = applyOneLetterOpITN(
+            result,
+            pattern: partialOfVarITNPattern,
+            wrap: { f in "∂\(f)" }
+        )
+        result = applyOneLetterOpITN(
+            result,
+            pattern: gradientOfITNPattern,
+            wrap: { f in "∇\(f)" }
+        )
+        result = applyOneLetterOpITN(
+            result,
+            pattern: divergenceOfITNPattern,
+            wrap: { f in "∇·\(f)" }
+        )
+        result = applyOneLetterOpITN(
+            result,
+            pattern: curlOfITNPattern,
+            wrap: { f in "∇×\(f)" }
+        )
+        // nabla / del operator
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = nablaITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard let full = Range(match.range, in: result) else { continue }
+                result.replaceSubrange(full, with: "∇")
+            }
+        }
+        // bare infinity (after limit ITN already consumed "approaches infinity" in lim forms)
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = infinityITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard let full = Range(match.range, in: result) else { continue }
+                result.replaceSubrange(full, with: "∞")
+            }
+        }
+        return result
+    }
+
+    private static func applyOneLetterOpITN(
+        _ text: String,
+        pattern: NSRegularExpression,
+        wrap: (String) -> String
+    ) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let letterRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let letter = String(result[letterRange])
+            result.replaceSubrange(fullRange, with: wrap(letter))
+        }
+        return result
+    }
+
+    private static func applyTwoLetterOpITN(
+        _ text: String,
+        pattern: NSRegularExpression,
+        wrap: (String, String) -> String
+    ) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let aRange = Range(match.range(at: 1), in: result),
+                  let bRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let a = String(result[aRange])
+            let b = String(result[bRange])
+            result.replaceSubrange(fullRange, with: wrap(a, b))
         }
         return result
     }

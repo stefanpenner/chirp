@@ -52,6 +52,7 @@ Coverage:
 - **Aggregate ranges** — `sum/product/integral from A to B` → `∑/∏/∫(A…B)` (numeric bounds)
 - **Greek letters** — cued `letter/greek/symbol [capital] name` → α…Ω; `N pi` → `Nπ`
 - **Limits** — `limit as x approaches infinity` → `lim(x→∞)`
+- **Calc ops** — `nabla`/`del operator` → ∇; `partial f with respect to x` → ∂f/∂x; `gradient/divergence/curl of f`; bare `infinity` → ∞
 - **Roots / abs** — `square root of N` → `√N`; `cube root of N` → `∛N`; `absolute value of N` → `|N|`
 - **Factorial / log** — `N factorial` → `N!`; `log of N` / `ln of N` / `log base B of N`
 - **Percent** — `N percent` / `N per cent` → `N%`; multi-digit after cardinal ITN
