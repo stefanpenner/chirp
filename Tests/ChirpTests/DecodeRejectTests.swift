@@ -132,12 +132,49 @@ struct DecodeRejectTests {
         ))
     }
 
-    @Test("multi-word hyp is not filler even on one frame")
-    func multiWordNotFiller() {
-        #expect(!DecodeReject.shouldReject(
+    @Test("multi-word hyp is not single-token filler")
+    func multiWordNotSingleTokenFiller() {
+        // Single-token filler path does not apply; multi-word low-energy
+        // nil-score rule may still reject (see multiWordLowEnergyNilScores).
+        #expect(!DecodeReject.isLowEnergyFiller("yeah sure"))
+    }
+
+    /// Parakeet often omits log-probs. Multi-word dumps on ≤2 energy frames
+    /// are typical silence hallucinations ("thank you for watching").
+    @Test("multi-word low-energy hyp without scores rejects")
+    func multiWordLowEnergyNilScores() {
+        #expect(DecodeReject.shouldReject(
+            hyp: "thank you for watching",
+            meanLogProb: nil,
+            speechFrameCount: 2
+        ))
+        #expect(DecodeReject.shouldReject(
             hyp: "yeah sure",
             meanLogProb: nil,
             speechFrameCount: 1
+        ))
+        #expect(DecodeReject.shouldReject(
+            hyp: "hello world",
+            meanLogProb: nil,
+            speechFrameCount: 2
+        ))
+        // Real short speech (1 token) still accepted with a few frames
+        #expect(!DecodeReject.shouldReject(
+            hyp: "ok",
+            meanLogProb: nil,
+            speechFrameCount: 2
+        ))
+        // Real multi-word with enough energy frames kept
+        #expect(!DecodeReject.shouldReject(
+            hyp: "hello world",
+            meanLogProb: nil,
+            speechFrameCount: 8
+        ))
+        // With healthy scores, keep multi-word even on low frames
+        #expect(!DecodeReject.shouldReject(
+            hyp: "hello world",
+            meanLogProb: -0.5,
+            speechFrameCount: 2
         ))
     }
 

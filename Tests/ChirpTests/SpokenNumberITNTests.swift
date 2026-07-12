@@ -191,6 +191,27 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("two zero two four") == "2024")
     }
 
+    @Test("double/triple digit repeats expand in phone-style runs")
+    func doubleTripleDigitRuns() {
+        // "double five" → two fives inside a run
+        #expect(SpokenNumberITN.apply("double five five one two one two") == "555-1212")
+        #expect(SpokenNumberITN.apply("five double five one two one two") == "555-1212")
+        #expect(SpokenNumberITN.apply("triple five one two one two") == "555-1212")
+        // triple oh → three zeros; + five continues the digit run
+        #expect(SpokenNumberITN.apply("triple oh five") == "0005")
+        #expect(SpokenNumberITN.apply("double oh five five") == "0055")
+        // Bare letter-o zero (ASR often drops "h" from oh)
+        #expect(SpokenNumberITN.apply("o five five five") == "0555")
+        // 8 digits (o + 7) stay plain — phone dash only for 7/10/11
+        #expect(SpokenNumberITN.apply("o five five five one two one two") == "05551212")
+        #expect(SpokenNumberITN.apply("call double five five one two one two") == "call 555-1212")
+        // Free dictation: double/triple before non-digits stay words
+        #expect(SpokenNumberITN.apply("double check that") == "double check that")
+        #expect(SpokenNumberITN.apply("triple jump") == "triple jump")
+        #expect(SpokenNumberITN.apply("double the amount") == "double the amount")
+        #expect(SpokenNumberITN.apply("triple a") == "triple a")
+    }
+
     @Test("negative numbers via minus/negative prefix")
     func negativeNumbers() {
         #expect(SpokenNumberITN.apply("minus twenty") == "-20")

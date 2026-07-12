@@ -39,6 +39,8 @@ Coverage:
 - **Clean corpus** — 16 golden phrases, mean majorWER ≤ 8%, WER ≤ 12%, CER ≤ 8%, median ≤ 5%, RTF ≤ 0.5
 - **Command soak** — Dragon phrases TTS → parse hit rate ≥ 90% (`CommandPhraseEval.soakMinHitRate`)
 - **Multi-voice command soak** — expanded Dragon subset × US/UK/AU/IE/ZA/IN TTS voices; pooled ≥ 90%, worst voice ≥ 80%
+- **Phone digit ITN** — `double`/`triple` + bare `o` expand inside digit runs (`SpokenNumberITN`)
+- **DecodeReject** — multi-word near-silence dumps without log-probs rejected (Parakeet often nil scores)
 - **AppState E2E** — MockAudioRecorder → typed text, ranked subset
 - **Silence** — no hallucination (WER 0 against empty ref)
 - **Noisy** — 15 dB SNR, 6 phrases, mean majorWER ≤ 40%, WER ≤ 55%

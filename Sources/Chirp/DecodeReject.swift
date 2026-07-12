@@ -15,6 +15,11 @@ enum DecodeReject {
         "ah", "oh", "er", "mm", "huh",
     ]
 
+    /// Max energy frames for multi-word nil-score silence dumps.
+    /// Parakeet often omits log-probs; multi-token hyps on ≤ this many frames
+    /// are typical padding hallucinations ("thank you for watching").
+    static let multiWordLowEnergyMaxFrames: Int = 2
+
     /// Reject ASR hyp when energy + text heuristics say garbage.
     ///
     /// Rules:
@@ -22,7 +27,9 @@ enum DecodeReject {
     /// 2. speechFrameCount == 0 and non-empty hyp → reject (decode on silence)
     /// 3. speechFrameCount == 0 and empty hyp → accept
     /// 4. speechFrameCount ≤ 1 and whole hyp is a known filler → reject
-    /// 5. Real short words with speechFrameCount > 0 are kept (user said "ok")
+    /// 5. multi-word (≥2 tokens) + nil scores + frames ≤ multiWordLowEnergyMaxFrames → reject
+    /// 6. Real short words with speechFrameCount > 0 are kept (user said "ok")
+    /// Dual: specs/DecodeReject.tla
     static func shouldReject(
         hyp: String,
         meanLogProb: Float?,
@@ -42,7 +49,23 @@ enum DecodeReject {
             return true
         }
 
+        // Nil scores (common Parakeet): multi-word on near-silence is garbage.
+        // Keep when scores exist (even low frames) or single-token short speech.
+        if meanLogProb == nil,
+           speechFrameCount <= multiWordLowEnergyMaxFrames,
+           tokenCount(trimmed) >= 2
+        {
+            return true
+        }
+
         return false
+    }
+
+    /// Whitespace-separated token count (empty → 0).
+    static func tokenCount(_ hyp: String) -> Int {
+        let trimmed = hyp.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return 0 }
+        return trimmed.split(whereSeparator: { $0.isWhitespace }).count
     }
 
     /// Case-insensitive whole-hyp match against the filler set.

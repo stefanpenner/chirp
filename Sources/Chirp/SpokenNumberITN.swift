@@ -6,7 +6,8 @@
 // - Needs compound (twenty five), teen, magnitude (hundred/thousand), or "point"
 // - Exception: bare units before quantity nouns → digits ("five emails" → "5 emails")
 // - Digit runs: ≥3 consecutive single-digit units → concatenate ("five five five" → "555")
-//   Short pure runs ("one two") stay words; "oh" → 0 (leading zeros kept)
+//   Short pure runs ("one two") stay words; "oh"/"o" → 0 (leading zeros kept)
+//   "double five" / "triple oh" expand inside a run (phone dictation)
 //   Exception: after suite/room/floor/apt/unit/extension/version cues, digit runs of ≥1 convert
 // - Negatives: "minus"/"negative" + number phrase → "-N" (not bare "minus" / "minus sign")
 // - Ordinals: "first" blocked before of/all/class; "twenty first" → 21st always
@@ -66,12 +67,18 @@ enum SpokenNumberITN {
         "day", "week", "month", "hour", "year", "minute", "second",
     ]
     private static let units: [String: Int] = [
-        "zero": 0, "oh": 0,
+        "zero": 0, "oh": 0, "o": 0, // bare "o" — ASR often drops h from "oh"
         "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
         "six": 6, "seven": 7, "eight": 8, "nine": 9,
         "ten": 10, "eleven": 11, "twelve": 12,
         "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
         "seventeen": 17, "eighteen": 18, "nineteen": 19,
+    ]
+
+    /// Phone-style repeaters: "double five" → five five; "triple oh" → oh oh oh.
+    private static let digitRepeaters: [String: Int] = [
+        "double": 2,
+        "triple": 3,
     ]
 
     private static let tens: [String: Int] = [
@@ -180,7 +187,8 @@ enum SpokenNumberITN {
             }
 
             // Cardinal multi-token / teen / decade / digit-run
-            if numberWords.contains(core) {
+            // "double"/"triple" start phone-style runs (not bare numberWords).
+            if numberWords.contains(core) || digitRepeaters[core] != nil {
                 let prevCore = i > 0 ? normalizeToken(parts[i - 1]) : ""
                 let afterCue = forceNumberCues.contains(prevCore)
                 if let rewritten = tryConsumeCardinal(
@@ -230,6 +238,18 @@ enum SpokenNumberITN {
         while j < parts.count {
             let c = normalizeToken(parts[j])
             if c.isEmpty { break }
+            // "double five" / "triple oh" → expand into single-digit units
+            if let reps = digitRepeaters[c] {
+                guard j + 1 < parts.count else { break }
+                let next = normalizeToken(parts[j + 1])
+                // Only expand when next is a single digit (0–9), not "double check"
+                guard let u = units[next], u < 10 else { break }
+                for _ in 0..<reps {
+                    words.append(next)
+                }
+                j += 2
+                continue
+            }
             if numberWords.contains(c) {
                 words.append(c)
                 j += 1
