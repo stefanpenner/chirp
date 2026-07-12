@@ -43,8 +43,9 @@ Coverage:
 - **Phone digit ITN** — `double`/`triple` + bare `o` expand inside digit runs; ASR digit blobs `5551212` → `555-1212`
 - **Dozen ITN** — `two dozen` → `24`, `half a dozen` → `6`, `two and a half dozen` → `30`
 - **N and mixed fractions** — half/quarter/thirds/fifths/sixths/eighths (`6½`, `6⅕`, `6⅗`, `2⅚` …)
-- **Spoken list compounds** — `number twenty one` → `21.`; `number two hundred five` → `205.`; `number one thousand…` → `1xxx.`
+- **Spoken list compounds** — through millions (`number one million` → `1000000.`)
 - **Ratios** — `N out of M` / `N over M` / `N divided by M` → `N/M` (numeric bounds only)
+- **Math ops** — `N plus/minus/times/equals M` → spaced operators; frequency `N times a day` kept
 - **Couple/pair** — `a couple of` / `a pair of` → `2`
 - **Jargon dict seeds** — DevOps, frontend/backend, Terraform, C#, README, …
 - **Clock half/quarter/minutes** — `half past three` / `ten to three` → `3:30` / `2:50`

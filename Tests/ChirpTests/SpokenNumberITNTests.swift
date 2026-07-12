@@ -395,6 +395,12 @@ struct SpokenNumberITNTests {
         // "minus" not followed by a number phrase → leave "minus"; ordinal may still ITN
         #expect(SpokenNumberITN.apply("minus the first one") == "minus the 1st one")
         #expect(SpokenNumberITN.apply("negative") == "negative")
+        // Expression "N minus M": leave "minus" for math ITN (prev is number word/digit)
+        let expr = SpokenNumberITN.apply("ten minus three")
+        #expect(!expr.contains("-3"), "got \(expr)")
+        #expect(expr.contains("minus"), "got \(expr)")
+        // Bare "ten" may stay spoken until full pipeline math ITN digitizes both sides
+        #expect(expr == "ten minus three" || expr.hasPrefix("10"), "got \(expr)")
     }
 }
 

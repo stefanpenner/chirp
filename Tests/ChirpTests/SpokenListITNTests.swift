@@ -160,4 +160,18 @@ struct SpokenListITNTests {
         _ = SpokenListITN.apply("number one thousand", counter: &c)
         #expect(c == 1001)
     }
+
+    @Test("number one million compounds")
+    func compoundMillion() {
+        #expect(SpokenListITN.apply("number one million milk").contains("1000000. "))
+        #expect(SpokenListITN.apply("number two million alpha").contains("2000000. "))
+        #expect(SpokenListITN.apply("number one million five hundred beta").contains("1000500. "))
+        #expect(SpokenListITN.apply("number 1000000 eggs").contains("1000000. "))
+        let r = SpokenListITN.apply("number one million item")
+        #expect(r.contains("1000000. "), "got \(r)")
+        #expect(!r.lowercased().contains("million"), "got \(r)")
+        var c = 1
+        _ = SpokenListITN.apply("number one million", counter: &c)
+        #expect(c == 1_000_001)
+    }
 }

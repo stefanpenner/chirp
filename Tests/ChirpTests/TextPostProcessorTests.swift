@@ -607,6 +607,34 @@ struct TextPostProcessorTests {
             == "the city was divided by war")
     }
 
+    @Test("Light ITN math operators plus minus times equals")
+    func lightITNMathOps() {
+        #expect(TextPostProcessor.process("three plus four") == "3 + 4")
+        #expect(TextPostProcessor.process("ten plus twenty") == "10 + 20")
+        #expect(TextPostProcessor.process("22 plus 7") == "22 + 7")
+        #expect(TextPostProcessor.process("ten minus three") == "10 - 3")
+        #expect(TextPostProcessor.process("one hundred minus five") == "100 - 5")
+        #expect(TextPostProcessor.process("three times four") == "3 × 4")
+        #expect(TextPostProcessor.process("ten times twenty") == "10 × 20")
+        #expect(TextPostProcessor.process("three multiplied by four") == "3 × 4")
+        #expect(TextPostProcessor.process("five equals five") == "5 = 5")
+        #expect(TextPostProcessor.process("ten equals ten") == "10 = 10")
+        // Chain
+        #expect(TextPostProcessor.process("three plus four equals seven") == "3 + 4 = 7")
+        // Frequency must not become product
+        #expect(TextPostProcessor.process("three times a day") == "3 times a day")
+        #expect(TextPostProcessor.process("ten times a week") == "10 times a week")
+        #expect(TextPostProcessor.process("five times an hour") == "5 times an hour")
+        // Signed temperature still works
+        #expect(TextPostProcessor.process("temperature is minus twenty")
+            == "temperature is -20")
+        #expect(TextPostProcessor.process("minus twenty") == "-20")
+        // Prose guards
+        #expect(TextPostProcessor.process("plus size") == "plus size"
+            || TextPostProcessor.process("plus size").contains("plus"))
+        #expect(TextPostProcessor.process("times are hard") == "times are hard")
+    }
+
     @Test("Light ITN formats percent and dollars")
     func lightITNPercentCurrency() {
         #expect(TextPostProcessor.process("about 50 percent done") == "about 50% done")

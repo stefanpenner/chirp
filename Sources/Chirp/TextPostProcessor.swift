@@ -813,6 +813,60 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "three plus four" → "3 + 4". Numeric bounds both sides.
+    private static let plusMathITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+plus\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "ten minus three" → "10 - 3". Not bare "minus twenty" (no left number).
+    private static let minusMathITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+minus\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "three times four" → "3 × 4". Negative lookahead: not "times a/an/per …"
+    /// (frequency: "three times a day").
+    private static let timesMathITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+times\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let multipliedByMathITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+multiplied\s+by\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let equalsMathITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+equals\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     private static let spokenNumbers: [String: String] = [
         "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
         "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
@@ -845,6 +899,9 @@ enum TextPostProcessor {
         // Math ratios: "three over four" / "22 divided by 7" → "3/4" / "22/7".
         result = applyOverRatioITN(result)
         result = applyDividedByRatioITN(result)
+        // Infix math: plus / minus / times / multiplied by / equals.
+        // Times is N×M only (not "N times a day" — right side must be a number).
+        result = applyMathOpsITN(result)
         // Sterling/quid before units so "20 pounds sterling" → "£20" not "20 lb sterling".
         // Bare "pounds" stays weight via units; currency needs "sterling" or "quid".
         result = applySterlingCurrencyITN(result)
@@ -1393,6 +1450,26 @@ enum TextPostProcessor {
 
     /// Shared N ‹connector› M → N/M for ratings, over, divided-by.
     private static func applySlashRatioITN(_ text: String, pattern: NSRegularExpression) -> String {
+        applyBinaryOpITN(text, pattern: pattern, joiner: "/")
+    }
+
+    /// plus / minus / times / multiplied by / equals → spaced operators.
+    private static func applyMathOpsITN(_ text: String) -> String {
+        var result = text
+        result = applyBinaryOpITN(result, pattern: plusMathITNPattern, joiner: " + ")
+        result = applyBinaryOpITN(result, pattern: minusMathITNPattern, joiner: " - ")
+        result = applyBinaryOpITN(result, pattern: timesMathITNPattern, joiner: " × ")
+        result = applyBinaryOpITN(result, pattern: multipliedByMathITNPattern, joiner: " × ")
+        result = applyBinaryOpITN(result, pattern: equalsMathITNPattern, joiner: " = ")
+        return result
+    }
+
+    /// Shared N ‹connector› M → left + joiner + right (digits preferred).
+    private static func applyBinaryOpITN(
+        _ text: String,
+        pattern: NSRegularExpression,
+        joiner: String
+    ) -> String {
         let range = NSRange(text.startIndex..., in: text)
         let matches = pattern.matches(in: text, range: range)
         guard !matches.isEmpty else { return text }
@@ -1406,7 +1483,7 @@ enum TextPostProcessor {
                   let fullRange = Range(match.range, in: result) else { continue }
             let left = rangeDigits(from: String(result[leftRange]))
             let right = rangeDigits(from: String(result[rightRange]))
-            result.replaceSubrange(fullRange, with: "\(left)/\(right)")
+            result.replaceSubrange(fullRange, with: "\(left)\(joiner)\(right)")
         }
         return result
     }

@@ -152,8 +152,11 @@ enum SpokenNumberITN {
 
             // Negative: "minus twenty" / "negative five" → "-20" / "-5"
             // Only when followed by a convertible number phrase (not bare "minus" / "minus sign").
+            // Skip when previous token is a number/digit — "ten minus three" is an
+            // expression for TextPostProcessor math ITN, not a signed "10 -3".
             if core == "minus" || core == "negative" {
-                if let rewritten = tryConsumeSignedNumber(parts: parts, start: i + 1) {
+                let prevNumeric = out.last.map { tokenLooksNumericOrNumberWord($0) } ?? false
+                if !prevNumeric, let rewritten = tryConsumeSignedNumber(parts: parts, start: i + 1) {
                     out.append(rewritten.text)
                     i = rewritten.nextIndex
                     continue
@@ -745,6 +748,32 @@ enum SpokenNumberITN {
         if tens[w] != nil { return true }
         if magnitudes[w] != nil { return true }
         if let u = units[w], u >= 13 { return true }
+        return false
+    }
+
+    /// True if a written token is already a number (digit run, signed, phone dashes).
+    private static func tokenLooksNumeric(_ token: String) -> Bool {
+        let t = token.trimmingCharacters(in: .punctuationCharacters)
+        if t.isEmpty { return false }
+        if t.allSatisfy({ $0.isNumber || $0 == "-" || $0 == "," || $0 == "." }) {
+            return t.contains(where: \.isNumber)
+        }
+        // Unicode mixed fractions produced mid-pass (6½)
+        let fractionMarks: Set<Character> = [
+            "½", "¼", "¾", "⅓", "⅔", "⅕", "⅖", "⅗", "⅘", "⅙", "⅚", "⅛", "⅜", "⅝", "⅞",
+        ]
+        if t.contains(where: { fractionMarks.contains($0) }) { return true }
+        return false
+    }
+
+    /// Left-hand of "N minus M" may still be a spoken number word ("ten") when
+    /// bare-unit ITN did not force digits — still treat as expression context.
+    private static func tokenLooksNumericOrNumberWord(_ token: String) -> Bool {
+        if tokenLooksNumeric(token) { return true }
+        let c = normalizeToken(token)
+        if c.isEmpty { return false }
+        if units[c] != nil || tens[c] != nil || magnitudes[c] != nil { return true }
+        if numberWords.contains(c) { return true }
         return false
     }
 

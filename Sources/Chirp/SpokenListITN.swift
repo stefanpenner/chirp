@@ -5,6 +5,7 @@
 //   "number twenty one milk" → "\n21. milk"
 //   "number two hundred five" → "\n205. "
 //   "number one thousand two hundred thirty one" → "\n1231. "
+//   "number one million" → "\n1000000. "
 //   "end list" / "stop numbering" → resets counter (emits newline)
 //
 // Counter is session-scoped (reset on new recording). Pure apply() takes
@@ -89,7 +90,7 @@ enum SpokenListITN {
                     text: text
                 )
                 let fullRange = leadRange.lowerBound..<consumedEnd
-                let val = min(max(n, 1), 9999)
+                let val = min(max(n, 1), listCardinalMax)
                 local = val + 1
                 ordered.append((fullRange, "\n\(val). ", local))
             }
@@ -117,7 +118,9 @@ enum SpokenListITN {
         return apply(text, counter: &c)
     }
 
-    // MARK: - Cardinal parse (1…9999)
+    // MARK: - Cardinal parse (1…9_999_999)
+
+    private static let listCardinalMax = 9_999_999
 
     /// Tokenize on whitespace and hyphens so "twenty-one" → ["twenty","one"].
     private static func tokenize(_ s: String) -> [String] {
@@ -135,12 +138,34 @@ enum SpokenListITN {
         guard start < tokens.count else { return nil }
         let c0 = core(tokens[start])
 
-        // Digit form 1…9999
-        if let d = Int(c0), d >= 1, d <= 9999, c0.allSatisfy(\.isNumber) {
+        // Digit form 1…listCardinalMax
+        if let d = Int(c0), d >= 1, d <= listCardinalMax, c0.allSatisfy(\.isNumber) {
             return (d, 1)
         }
 
-        // N thousand [and]? [below-thousand]
+        // N million [and]? [rest below million]
+        if unitWords.contains(c0), start + 1 < tokens.count, core(tokens[start + 1]) == "million" {
+            var val = (wordToNumber[c0] ?? 1) * 1_000_000
+            var i = start + 2
+            if i < tokens.count, core(tokens[i]) == "and" { i += 1 }
+            if let (rest, n) = parseBelowMillion(tokens, start: i) {
+                val += rest
+                i += n
+            }
+            return (min(val, listCardinalMax), i - start)
+        }
+
+        if let (below, n) = parseBelowMillion(tokens, start: start) {
+            return (below, n)
+        }
+        return nil
+    }
+
+    /// 1…999_999: N thousand [and]? rest | below-thousand
+    private static func parseBelowMillion(_ tokens: [String], start: Int) -> (Int, Int)? {
+        guard start < tokens.count else { return nil }
+        let c0 = core(tokens[start])
+
         if unitWords.contains(c0), start + 1 < tokens.count, core(tokens[start + 1]) == "thousand" {
             var val = (wordToNumber[c0] ?? 1) * 1000
             var i = start + 2
@@ -149,13 +174,10 @@ enum SpokenListITN {
                 val += rest
                 i += n
             }
-            return (min(val, 9999), i - start)
+            return (min(val, 999_999), i - start)
         }
 
-        if let (below, n) = parseBelowThousand(tokens, start: start) {
-            return (below, n)
-        }
-        return nil
+        return parseBelowThousand(tokens, start: start)
     }
 
     /// 1…999: N hundred [and]? rest | tens [unit] | single word | fail
