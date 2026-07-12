@@ -686,6 +686,30 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "half past three" / "half past three pm" → 3:30 / 3:30 p.m.
+    private static let halfPastPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bhalf\s+past\s+(\#(hourToken))(?:\s*([ap])\.?\s*m\.?)?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "(a) quarter past three" → 3:15
+    private static let quarterPastPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:a\s+)?quarter\s+past\s+(\#(hourToken))(?:\s*([ap])\.?\s*m\.?)?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "(a) quarter to four" → 3:45 (hour wraps 1 → 12)
+    private static let quarterToPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:a\s+)?quarter\s+to\s+(\#(hourToken))(?:\s*([ap])\.?\s*m\.?)?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     /// Bare hour + am/pm: "three pm" → "3 p.m."
     private static let timeITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
@@ -942,9 +966,11 @@ enum TextPostProcessor {
         return result
     }
 
-    /// Clock ITN: minutes+am/pm, o'clock, ranges, bare hour+am/pm. Idempotent.
+    /// Clock ITN: half/quarter, minutes+am/pm, o'clock, ranges, bare hour+am/pm.
+    /// Half/quarter first so "half past three pm" is not eaten by bare "three pm".
     private static func applyTimeITN(_ text: String) -> String {
-        var result = applyTimeWithMinutesITN(text)
+        var result = applyHalfQuarterITN(text)
+        result = applyTimeWithMinutesITN(result)
         result = applyOClockITN(result)
         // Dual-meridiem ranges before shared-meridiem; both before bare hour
         // so "nine am to five pm" / "three to five pm" are not partially rewritten.
@@ -952,6 +978,75 @@ enum TextPostProcessor {
         result = applyTimeRangeITN(result)
         result = applyBareHourITN(result)
         return result
+    }
+
+    /// half past / quarter past / quarter to — British-style clock phrases.
+    private static func applyHalfQuarterITN(_ text: String) -> String {
+        var result = applyClockPhrase(
+            text, pattern: halfPastPattern, minutes: 30, hourDelta: 0
+        )
+        result = applyClockPhrase(
+            result, pattern: quarterPastPattern, minutes: 15, hourDelta: 0
+        )
+        result = applyClockPhrase(
+            result, pattern: quarterToPattern, minutes: 45, hourDelta: -1
+        )
+        return result
+    }
+
+    /// Shared rewriter for half/quarter patterns: group1 = hour, group2 = optional a/p.
+    private static func applyClockPhrase(
+        _ text: String,
+        pattern: NSRegularExpression,
+        minutes: Int,
+        hourDelta: Int
+    ) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let hourRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            guard let h = hourAsClockInt(String(result[hourRange])) else { continue }
+            var hour = h + hourDelta
+            if hourDelta != 0 {
+                // Wrap 1…12 for spoken clock face; keep 13…23 linear for digit hours
+                if (1...12).contains(h) {
+                    if hour < 1 { hour = 12 }
+                } else if hour < 0 {
+                    hour = 23
+                }
+            }
+            let hourStr = String(hour)
+            let mins = String(format: "%02d", minutes)
+            var out = "\(hourStr):\(mins)"
+            if match.numberOfRanges >= 3,
+               match.range(at: 2).location != NSNotFound,
+               let apRange = Range(match.range(at: 2), in: result)
+            {
+                out += " \(formatMeridiem(result[apRange]))"
+            }
+            result.replaceSubrange(fullRange, with: out)
+        }
+        return result
+    }
+
+    /// Parse hour token to 1…12 (or 0…23 for digit input).
+    private static func hourAsClockInt(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if let n = Int(trimmed) {
+            if (1...12).contains(n) { return n }
+            if (13...23).contains(n) { return n } // keep 24h digit hours
+            if n == 0 { return 12 }
+            return nil
+        }
+        let map: [String: Int] = [
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+            "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+        ]
+        return map[trimmed.lowercased()]
     }
 
     private static func formatHour(_ raw: String) -> String {

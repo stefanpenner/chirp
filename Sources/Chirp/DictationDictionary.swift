@@ -20,6 +20,8 @@ enum DictationDictionary {
         "get lab": "GitLab",
         "git lab": "GitLab",
         "bit bucket": "Bitbucket",
+        "you tube": "YouTube",
+        "wi fi": "Wi-Fi",
         "vs code": "VS Code",
         "x code": "Xcode",
         "swift ui": "SwiftUI",

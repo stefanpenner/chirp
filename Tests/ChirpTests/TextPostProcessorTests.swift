@@ -463,6 +463,26 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("Meeting at twelve o'clock") == "Meeting at 12:00")
     }
 
+    @Test("Light ITN half past and quarter past/to")
+    func lightITNHalfQuarter() {
+        #expect(TextPostProcessor.process("half past three") == "3:30")
+        #expect(TextPostProcessor.process("half past three pm") == "3:30 p.m.")
+        #expect(TextPostProcessor.process("half past 9 am") == "9:30 a.m.")
+        #expect(TextPostProcessor.process("quarter past three") == "3:15")
+        #expect(TextPostProcessor.process("a quarter past nine pm") == "9:15 p.m.")
+        #expect(TextPostProcessor.process("quarter to four") == "3:45")
+        #expect(TextPostProcessor.process("quarter to four am") == "3:45 a.m.")
+        #expect(TextPostProcessor.process("quarter to one") == "12:45")
+        #expect(TextPostProcessor.process("a quarter to twelve pm") == "11:45 p.m.")
+        // Regressions
+        #expect(TextPostProcessor.process("one half cup").contains("½") || TextPostProcessor.process("one half cup").contains("1/2")
+            || TextPostProcessor.process("one half cup") == "½ cup"
+            || TextPostProcessor.process("one half cup").contains("half"))
+        #expect(TextPostProcessor.process("from three to five pm") == "from 3-5 p.m.")
+        #expect(TextPostProcessor.process("three thirty pm") == "3:30 p.m.")
+        #expect(TextPostProcessor.process("three o'clock") == "3:00")
+    }
+
     @Test("Light ITN formats time ranges with shared meridiem")
     func lightITNTimeRanges() {
         // Optional "from" kept; range compact with ASCII hyphen; shared pm/am

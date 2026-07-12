@@ -18,6 +18,9 @@ struct DictationDictionaryTests {
     func builtIn() {
         withCleanOverrides {
             #expect(DictationDictionary.apply("open get hub") == "open GitHub")
+            #expect(DictationDictionary.apply("watch you tube") == "watch YouTube")
+            #expect(DictationDictionary.apply("connect to wi fi") == "connect to Wi-Fi")
+            #expect(DictationDictionary.apply("wi fi password") == "Wi-Fi password")
             #expect(DictationDictionary.apply("I use vs code") == "I use VS Code")
             #expect(DictationDictionary.apply("build with swift ui") == "build with SwiftUI")
             #expect(DictationDictionary.apply("on mac os") == "on macOS")
@@ -106,6 +109,8 @@ struct DictationDictionaryTests {
     func viaPostProcessor() {
         withCleanOverrides {
             #expect(TextPostProcessor.process("open get hub please") == "open GitHub please")
+            #expect(TextPostProcessor.process("open you tube please") == "open YouTube please")
+            #expect(TextPostProcessor.process("join the wi fi") == "join the Wi-Fi")
         }
     }
 
