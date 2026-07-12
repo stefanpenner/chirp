@@ -675,6 +675,27 @@ struct TextPostProcessorTests {
             || TextPostProcessor.process("square root beer").contains("root"))
     }
 
+    @Test("Light ITN factorial and logarithms")
+    func lightITNFactorialAndLog() {
+        #expect(TextPostProcessor.process("five factorial") == "5!")
+        #expect(TextPostProcessor.process("ten factorial") == "10!")
+        #expect(TextPostProcessor.process("3 factorial") == "3!")
+        #expect(TextPostProcessor.process("one hundred factorial") == "100!")
+        #expect(TextPostProcessor.process("log of ten") == "log(10)")
+        #expect(TextPostProcessor.process("the log of one hundred") == "log(100)")
+        #expect(TextPostProcessor.process("logarithm of 10") == "log(10)")
+        #expect(TextPostProcessor.process("natural log of ten") == "ln(10)")
+        #expect(TextPostProcessor.process("natural log of five") == "ln(5)")
+        #expect(TextPostProcessor.process("the natural logarithm of five") == "ln(5)")
+        #expect(TextPostProcessor.process("ln of ten") == "ln(10)")
+        #expect(TextPostProcessor.process("log base two of eight") == "log₂(8)")
+        #expect(TextPostProcessor.process("log base 10 of 100") == "log₁₀(100)")
+        // Guards
+        #expect(TextPostProcessor.process("factorial design") == "factorial design")
+        #expect(TextPostProcessor.process("log cabin") == "log cabin")
+        #expect(TextPostProcessor.process("log of claims") == "log of claims")
+    }
+
     @Test("Light ITN formats percent and dollars")
     func lightITNPercentCurrency() {
         #expect(TextPostProcessor.process("about 50 percent done") == "about 50% done")

@@ -906,6 +906,8 @@ enum TextPostProcessor {
         result = applyPowerITN(result)
         // Roots / abs: "square root of nine" / "absolute value of five".
         result = applyRootAndAbsoluteITN(result)
+        // Factorial / logs: "five factorial" / "log of ten" / "ln of five".
+        result = applyFactorialAndLogITN(result)
         // Sterling/quid before units so "20 pounds sterling" → "£20" not "20 lb sterling".
         // Bare "pounds" stays weight via units; currency needs "sterling" or "quid".
         result = applySterlingCurrencyITN(result)
@@ -1721,6 +1723,114 @@ enum TextPostProcessor {
             result.replaceSubrange(fullRange, with: wrap(digits))
         }
         return result
+    }
+
+    /// "five factorial" → "5!"
+    private static let factorialITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken + #"\s+factorial\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "log of ten" / "the logarithm of 10" → "log(10)"
+    private static let logOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?log(?:arithm)?\s+of\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "natural log of five" / "ln of ten" → "ln(5)" / "ln(10)"
+    private static let naturalLogOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:natural\s+log(?:arithm)?|ln)\s+of\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "log base two of eight" → "log₂(8)"
+    private static let logBaseOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?log\s+base\s+"#
+                + cardinalRangeNumberToken
+                + #"\s+of\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static func applyFactorialAndLogITN(_ text: String) -> String {
+        var result = text
+        // Natural log / log base before bare "log of" so "natural log of" wins.
+        result = applyPrefixedNumberITN(
+            result,
+            pattern: naturalLogOfITNPattern,
+            wrap: { "ln(\($0))" }
+        )
+        result = applyLogBaseOfITN(result)
+        result = applyPrefixedNumberITN(
+            result,
+            pattern: logOfITNPattern,
+            wrap: { "log(\($0))" }
+        )
+        result = applyFactorialITN(result)
+        return result
+    }
+
+    private static func applyFactorialITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = factorialITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let digits = rangeDigits(from: String(result[numRange]))
+            result.replaceSubrange(fullRange, with: "\(digits)!")
+        }
+        return result
+    }
+
+    private static func applyLogBaseOfITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = logBaseOfITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let baseRange = Range(match.range(at: 1), in: result),
+                  let argRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let base = rangeDigits(from: String(result[baseRange]))
+            let arg = rangeDigits(from: String(result[argRange]))
+            let sub = subscriptFromDigits(base)
+            result.replaceSubrange(fullRange, with: "log\(sub)(\(arg))")
+        }
+        return result
+    }
+
+    private static let subscriptDigits: [Character: Character] = [
+        "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄",
+        "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
+    ]
+
+    private static func subscriptFromDigits(_ digits: String) -> String {
+        var out = ""
+        for ch in digits {
+            if let s = subscriptDigits[ch] {
+                out.append(s)
+            } else {
+                return "_\(digits)"
+            }
+        }
+        return out.isEmpty ? "_\(digits)" : out
     }
 
     /// Number token shared by currency patterns (digits preferred after SpokenNumberITN).
