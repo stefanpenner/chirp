@@ -682,6 +682,8 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("Press back space.") == .pressBackspace(count: 1))
         #expect(DictationCommand.parse("taste that") == .pasteThat)
         #expect(DictationCommand.parse("Taste that.") == .pasteThat)
+        #expect(DictationCommand.parse("Hap that.") == .capThat)
+        #expect(DictationCommand.parse("hap that") == .capThat)
     }
 
     @Test("recognizes select that / select last word / select all")

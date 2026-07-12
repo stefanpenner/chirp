@@ -14,6 +14,10 @@ struct CommandNearMissTests {
         #expect(CommandNearMiss.repair("capthat") == "cap that")
         #expect(DictationCommand.parse("Capta") == .capThat)
         #expect(DictationCommand.parse("capthat") == .capThat)
+        // Multi-voice Daniel TTS dump
+        #expect(CommandNearMiss.repair("Hap that.") == "cap that")
+        #expect(DictationCommand.parse("Hap that.") == .capThat)
+        #expect(DictationCommand.parse("hap that") == .capThat)
     }
 
     @Test("paste and backspace soak dumps repair")

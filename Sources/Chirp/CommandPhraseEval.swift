@@ -76,6 +76,8 @@ enum CommandPhraseEval {
         Trial(hyp: "cap that", expected: .capThat),
         Trial(hyp: "Capta", expected: .capThat), // live soak dump
         Trial(hyp: "capthat", expected: .capThat),
+        Trial(hyp: "Hap that.", expected: .capThat), // multi-voice Daniel
+        Trial(hyp: "hap that", expected: .capThat),
         Trial(hyp: "all caps that", expected: .allCapsThat),
         Trial(hyp: "spell that", expected: .spellThat),
         Trial(hyp: "spell mode", expected: .setSpellMode(.on)),

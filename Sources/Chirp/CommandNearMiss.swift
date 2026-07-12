@@ -20,6 +20,11 @@ enum CommandNearMiss {
         "capthat": "cap that",
         "kab that": "cap that",
         "cap the": "cap that", // lone utterance only via full-utterance gate
+        // Multi-voice soak (Daniel TTS): "cap that" → "Hap that."
+        "hap that": "cap that",
+        "hab that": "cap that",
+        "hat that": "cap that",
+        "crap that": "cap that",
         // paste that
         "taste that": "paste that",
         "taste it": "paste that",
