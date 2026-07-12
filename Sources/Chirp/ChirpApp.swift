@@ -2289,6 +2289,22 @@ public final class AppState {
         lastSelectMatchLength = match.length
     }
 
+    /// Seed select-again from a buffer span (unit selects: sentence/para/line).
+    /// Dual of SelectAgain.tla SelectPhrase after unit select lands.
+    private func rememberSelectFromBufferSpan(start: Int, length: Int) {
+        guard length > 0,
+              start >= 0,
+              start + length <= transcribedText.count
+        else { return }
+        let from = transcribedText.index(transcribedText.startIndex, offsetBy: start)
+        let to = transcribedText.index(from, offsetBy: length)
+        let target = String(transcribedText[from..<to])
+        rememberSelectSearch(
+            target: target,
+            match: PhraseReplaceDecision.Match(start: start, length: length)
+        )
+    }
+
     private func applySelectMatch(_ match: PhraseReplaceDecision.Match, target: String) {
         rememberSelectSearch(target: target, match: match)
         armSessionSelection(start: match.start, length: match.length)
@@ -2609,6 +2625,7 @@ public final class AppState {
     }
 
     /// Select the last sentence. Buffer unchanged.
+    /// Seeds select-again with the selected sentence text (SelectAgain dual).
     private func performSelectLastSentence(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         let text = transcribedText
@@ -2619,10 +2636,13 @@ public final class AppState {
         guard !selected.isEmpty else { return }
         // Prefer trailing selectBackward when caret model is end (index nil).
         if sentenceNavIndex == nil && !sentenceSelectionActive {
-            armSessionSelection(start: text.count - selected.count, length: selected.count)
+            let start = text.count - selected.count
+            rememberSelectFromBufferSpan(start: start, length: selected.count)
+            armSessionSelection(start: start, length: selected.count)
             textInserter.selectBackward(count: selected.count)
         } else {
             let range = ranges[last]
+            rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
             armSessionSelection(start: range.start, length: range.end - range.start)
             moveToSessionOffset(range.start)
             textInserter.selectForward(count: range.end - range.start)
@@ -2639,6 +2659,7 @@ public final class AppState {
         let ranges = TranscriptSelection.sentenceRanges(text)
         guard !ranges.isEmpty else { return }
         let range = ranges[0]
+        rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
         armSessionSelection(start: range.start, length: range.end - range.start)
         moveToSessionOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
@@ -2661,6 +2682,7 @@ public final class AppState {
             next = idx + 1
         }
         let range = ranges[next]
+        rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
         armSessionSelection(start: range.start, length: range.end - range.start)
         moveToSessionOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
@@ -2683,6 +2705,7 @@ public final class AppState {
             return
         }
         let range = ranges[next]
+        rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
         armSessionSelection(start: range.start, length: range.end - range.start)
         moveToSessionOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
@@ -2876,6 +2899,7 @@ public final class AppState {
             return
         }
         let range = ranges[next]
+        rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
         armSessionSelection(start: range.start, length: range.end - range.start)
         moveToParagraphOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
@@ -2898,6 +2922,7 @@ public final class AppState {
             return
         }
         let range = ranges[next]
+        rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
         armSessionSelection(start: range.start, length: range.end - range.start)
         moveToLineOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
@@ -2965,6 +2990,7 @@ public final class AppState {
     }
 
     /// Select the last paragraph. Buffer unchanged.
+    /// Seeds select-again with the selected paragraph text (SelectAgain dual).
     private func performSelectLastParagraph(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         let text = transcribedText
@@ -2974,10 +3000,13 @@ public final class AppState {
         let selected = TranscriptSelection.lastParagraph(text)
         guard !selected.isEmpty else { return }
         if paragraphNavIndex == nil && !paragraphSelectionActive {
-            armSessionSelection(start: text.count - selected.count, length: selected.count)
+            let start = text.count - selected.count
+            rememberSelectFromBufferSpan(start: start, length: selected.count)
+            armSessionSelection(start: start, length: selected.count)
             textInserter.selectBackward(count: selected.count)
         } else {
             let range = ranges[last]
+            rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
             armSessionSelection(start: range.start, length: range.end - range.start)
             moveToParagraphOffset(range.start)
             textInserter.selectForward(count: range.end - range.start)
@@ -2993,6 +3022,7 @@ public final class AppState {
         let ranges = TranscriptSelection.paragraphRanges(text)
         guard !ranges.isEmpty else { return }
         let range = ranges[0]
+        rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
         armSessionSelection(start: range.start, length: range.end - range.start)
         moveToParagraphOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
@@ -3016,6 +3046,7 @@ public final class AppState {
             next = idx + 1
         }
         let range = ranges[next]
+        rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
         armSessionSelection(start: range.start, length: range.end - range.start)
         moveToParagraphOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
@@ -3082,6 +3113,7 @@ public final class AppState {
     }
 
     /// Select the last line. Buffer unchanged.
+    /// Seeds select-again with the selected line text (SelectAgain dual).
     private func performSelectLastLine(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         let text = transcribedText
@@ -3090,11 +3122,14 @@ public final class AppState {
         let selected = TranscriptSelection.lastLine(text)
         guard !selected.isEmpty else { return }
         if lineNavIndex == nil && !lineSelectionActive {
-            armSessionSelection(start: text.count - selected.count, length: selected.count)
+            let start = text.count - selected.count
+            rememberSelectFromBufferSpan(start: start, length: selected.count)
+            armSessionSelection(start: start, length: selected.count)
             textInserter.selectBackward(count: selected.count)
         } else {
             let last = ranges.count - 1
             let range = ranges[last]
+            rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
             armSessionSelection(start: range.start, length: range.end - range.start)
             moveToLineOffset(range.start)
             textInserter.selectForward(count: range.end - range.start)
@@ -3110,6 +3145,7 @@ public final class AppState {
         let ranges = TranscriptSelection.lineRanges(text)
         guard !ranges.isEmpty else { return }
         let range = ranges[0]
+        rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
         armSessionSelection(start: range.start, length: range.end - range.start)
         moveToLineOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)
@@ -3131,6 +3167,7 @@ public final class AppState {
             next = idx + 1
         }
         let range = ranges[next]
+        rememberSelectFromBufferSpan(start: range.start, length: range.end - range.start)
         armSessionSelection(start: range.start, length: range.end - range.start)
         moveToLineOffset(range.start)
         textInserter.selectForward(count: range.end - range.start)

@@ -923,6 +923,8 @@ enum DictationCommand: Equatable, Sendable {
              "scratch it", "delete it", "undo it",
              "scrap that", // common mis-hear of "scratch"
              "scratch hat", // ASR near-miss
+             "scrap hat", "undo hat", // ASR near-miss (hat/that)
+             "scratched that", "scratched it", // tense slip
              "go back", "go back that",
              // Immediate undo synonyms
              "correct that", "fix that",
@@ -1116,7 +1118,9 @@ enum DictationCommand: Equatable, Sendable {
         case "no space on", "no spaces on", "compound on":
             return .setNoSpaceMode(.on)
         case "select that", "select it", "select last", "highlight that",
-             "highlight it", "highlight last":
+             "highlight it", "highlight last",
+             "selected that", "selected it", // ASR tense slip
+             "select dat": // rare ASR near-miss (that → dat)
             return .selectThat
         case "select last word", "highlight last word",
              "select the last word", "highlight the last word":
@@ -1195,7 +1199,8 @@ enum DictationCommand: Equatable, Sendable {
         // Dragon "Select Again" — previous occurrence of last phrase select.
         // Do not steal "select previous word/sentence/paragraph/line".
         case "select again", "select previous occurrence",
-             "select last occurrence again", "select the previous occurrence":
+             "select last occurrence again", "select the previous occurrence",
+             "select a gain": // ASR near-miss (again → a gain)
             return .selectAgain
         case "select next occurrence", "select the next occurrence":
             return .selectNextOccurrence

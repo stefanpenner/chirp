@@ -668,8 +668,15 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("remove the last word") == .deleteLastWord)
         #expect(DictationCommand.parse("scratch last") == .deleteLastWord)
         #expect(DictationCommand.parse("scratch hat") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("scrap hat") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("undo hat") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("scratched that") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("go back") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("press the enter key") == .pressEnter(count: 1))
+        // Select again / select that ASR slips
+        #expect(DictationCommand.parse("select a gain") == .selectAgain)
+        #expect(DictationCommand.parse("selected that") == .selectThat)
+        #expect(DictationCommand.parse("select dat") == .selectThat)
     }
 
     @Test("recognizes select that / select last word / select all")

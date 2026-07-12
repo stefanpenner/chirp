@@ -2393,6 +2393,53 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select again"))
     }
 
+    @Test("select last sentence seeds select again for repeated sentence")
+    func selectLastSentenceThenSelectAgain() async throws {
+        // Two identical sentence bodies so select again walks left.
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["Hello world. Hello world."])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("hello") { break }
+        }
+
+        await mock.setFeedAudioResult(["select last sentence"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty || !inserter.selectForwardCounts.isEmpty {
+                break
+            }
+        }
+        let forwardBefore = inserter.selectForwardCounts.count
+
+        await mock.setFeedAudioResult(["select again"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count > forwardBefore { break }
+        }
+
+        #expect(
+            inserter.selectForwardCounts.count > forwardBefore
+                || !inserter.selectBackwardCounts.isEmpty,
+            "select again after select last sentence should re-select earlier match"
+        )
+        #expect(!inserter.typedTexts.contains("select again"))
+        #expect(state.transcribedText.lowercased().contains("hello"))
+    }
+
     @Test("select last word seeds select again for repeated word")
     func selectLastWordThenSelectAgain() async throws {
         let mock = MockTranscriber()
