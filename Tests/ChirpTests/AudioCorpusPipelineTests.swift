@@ -870,6 +870,8 @@ struct AudioCorpusPipelineTests {
             ("itn_money", "costs twenty dollars", "costs 20 dollars"),
             ("itn_cardinal", "send one hundred emails", "send 100 emails"),
             ("itn_decimal", "about three point five miles", "about 3.5 miles"),
+            // Phone digit-run (double/triple pure units already covered in unit tests)
+            ("itn_phone", "call five five five one two one two", "call 555-1212"),
         ]
 
         var pairs: [(id: String, reference: String, hypothesis: String)] = []
@@ -931,6 +933,9 @@ struct AudioCorpusPipelineTests {
             ("itn_weekday", "meet on monday please", "meet on Monday please"),
             ("itn_tomorrow", "due tomorrow morning", "due July 9 2026 morning"),
             ("itn_full_date", "on july fifteenth twenty twenty four", "on July 15 2024"),
+            // Day-first free dictation (shipped pure ITN; protect under real ASR)
+            ("itn_day_first", "due the fifth of march", "due March 5"),
+            ("itn_year_19xx", "born in nineteen ninety nine", "born in 1999"),
         ]
 
         var pairs: [(id: String, reference: String, hypothesis: String)] = []
@@ -961,6 +966,43 @@ struct AudioCorpusPipelineTests {
                 || TranscriptionScoring.normalize(h).contains("monday")
         }
         #expect(anyDateShape, "expected at least one date-like rewrite in hyp set")
+    }
+
+    /// Spoken email packing under real TTS → ASR (soft shape gate — ASR hardest).
+    @Test("ITN email audio packs under soft shape budget")
+    func rankedITNEmail() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+        let voice = Self.workingVoice()
+        let items: [(id: String, spoken: String, reference: String)] = [
+            ("itn_email", "john at example dot com", "john@example.com"),
+            ("itn_email_under", "jane underscore smith at example dot org", "jane_smith@example.org"),
+        ]
+        var pairs: [(id: String, reference: String, hypothesis: String)] = []
+        for item in items {
+            guard let run = try await Self.runPhrase(
+                id: item.id, spoken: item.spoken, reference: item.reference,
+                paths: paths, voice: voice
+            ) else { continue }
+            pairs.append((id: run.id, reference: run.reference, hypothesis: run.hypothesis))
+            print("itn-email[\(item.id)] hyp=\"\(run.hypothesis)\"")
+        }
+        #expect(pairs.count >= 1, "need ≥1 email ITN audio trial")
+        let ranking = TranscriptionScoring.rank(pairs)
+        print(ranking.leaderboard)
+        // Soft: at least one hyp shows email packing OR content words survive.
+        let shapeHit = ranking.scores.contains { s in
+            let h = s.hypothesis
+            return h.contains("@") || h.contains(".com") || h.contains(".org")
+                || TranscriptionScoring.normalize(h).contains("example")
+        }
+        #expect(shapeHit, "expected email shape or host word in hyp set")
+        #expect(
+            ranking.meanMajorWER <= 0.60,
+            "email ITN mean majorWER \(ranking.meanMajorWER) exceeds 0.60\n\(ranking.leaderboard)"
+        )
     }
 
     /// Spoken list commands through real ASR + list ITN; rank content + check markers.

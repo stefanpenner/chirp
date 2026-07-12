@@ -428,6 +428,8 @@ enum TextPostProcessor {
             let range = NSRange(result.startIndex..., in: result)
             result = pattern.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
         }
+        // After TLD glue: ASR often yields "john at example.com" (live ITN dump).
+        result = applyDottedHostEmail(result)
         if FormatSettings.expandBullets {
             for (pattern, replacement) in bulletPatterns {
                 let range = NSRange(result.startIndex..., in: result)
@@ -479,6 +481,33 @@ enum TextPostProcessor {
             )
         }
         return s
+    }
+
+    /// "local at host.tld" when host already has a literal domain (ASR / TLD glue).
+    /// Does not steal "meet at noon" (no dotted host).
+    private static let dottedHostEmailPattern: NSRegularExpression = {
+        let tld = spokenEmailTlds
+        // local may include _ . + from prior connector packing
+        let pattern =
+            #"\b([\w]+(?:[._+][\w]+)*)\s+at\s+([\w-]+(?:\.[\w-]+)*\.(?:"# + tld + #"))\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    private static func applyDottedHostEmail(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = dottedHostEmailPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let localRange = Range(match.range(at: 1), in: result),
+                  let hostRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let local = String(result[localRange])
+            let host = String(result[hostRange])
+            result.replaceSubrange(fullRange, with: "\(local)@\(host)")
+        }
+        return result
     }
 
     // MARK: - Mid-segment spoken terminal punctuation

@@ -268,6 +268,9 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("john at the example dot com") == "john@example.com")
         #expect(TextPostProcessor.process("john under score smith at example dot com")
                 == "john_smith@example.com")
+        // Live ASR often glues TLD first: "john at example.com" (ITN audio dump)
+        #expect(TextPostProcessor.process("john at example.com") == "john@example.com")
+        #expect(TextPostProcessor.process("Jane_smith at example.org") == "Jane_smith@example.org")
         // Conversational "at" / content "period" must not steal
         #expect(TextPostProcessor.process("meet at noon") == "meet at noon")
         #expect(TextPostProcessor.process("look at this") == "look at this")

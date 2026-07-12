@@ -98,6 +98,13 @@ enum SpokenDateITN {
                 continue
             }
 
+            // European / ASR order: "5 March" / "15 July 2024" → month-first written form
+            if let (formatted, consumed) = parseDigitDayMonth(parts: parts, start: i) {
+                out.append(formatted)
+                i += consumed
+                continue
+            }
+
             // Month + optional "the" + day + optional year
             if let monthName = months[core] {
                 if let (formatted, consumed) = parseMonthDate(parts: parts, start: i, monthName: monthName) {
@@ -213,6 +220,38 @@ enum SpokenDateITN {
     }
 
     // MARK: - Day-first + Month + day (+ year)
+
+    /// "5 March" / "15 July 2024" → "March 5" / "July 15, 2024".
+    /// Live ASR often reorders day-first dates into digit + month (EU style).
+    private static func parseDigitDayMonth(
+        parts: [String],
+        start: Int
+    ) -> (String, Int)? {
+        guard start + 1 < parts.count else { return nil }
+        let dayCore = normalize(parts[start])
+        guard let day = parseDigitDay(dayCore) else { return nil }
+        guard let monthName = months[normalize(parts[start + 1])] else { return nil }
+        var j = start + 2
+        var year: Int?
+        // Digit year "2024" or spoken year
+        if j < parts.count {
+            let yc = normalize(parts[j])
+            if let y = Int(yc), y >= 1900, y <= 2100 {
+                year = y
+                j += 1
+            } else if let (y, ycCount) = parseYear(parts: parts, start: j) {
+                year = y
+                j += ycCount
+            }
+        }
+        let trailing = trailingPunct(parts[j - 1])
+        var formatted = "\(monthName) \(day)"
+        if let y = year {
+            formatted += ", \(y)"
+        }
+        formatted += trailing
+        return (formatted, j - start)
+    }
 
     /// "(the)? <day> of <month> [year]" → "March 5" / "March 5, 2024".
     /// Requires a real day token and a month after "of" so "the end of march"
@@ -376,6 +415,25 @@ enum SpokenDateITN {
                     return (2000 + t + u, 3)
                 }
                 return (2000 + t, 2)
+            }
+        }
+
+        // nineteen ninety / nineteen ninety nine → 1990 / 1999
+        // Bare "nineteen" alone is not a year (standalone apply requires ≥2 tokens).
+        if c0 == "nineteen", start + 1 < parts.count {
+            let c1 = normalize(parts[start + 1])
+            // nineteen ten … nineteen nineteen
+            if let teen = yearUnits[c1], teen >= 10, teen < 20 {
+                return (1900 + teen, 2)
+            }
+            // nineteen ninety / nineteen ninety five
+            if let t = yearUnits[c1], t >= 20, t <= 90, t % 10 == 0 {
+                if start + 2 < parts.count,
+                   let u = yearUnits[normalize(parts[start + 2])], u < 10
+                {
+                    return (1900 + t + u, 3)
+                }
+                return (1900 + t, 2)
             }
         }
 

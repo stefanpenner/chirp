@@ -37,6 +37,18 @@ struct SpokenDateITNTests {
         #expect(SpokenDateITN.apply("a lot of may") == "a lot of may")
     }
 
+    /// ASR often yields European order "5 March" (ITN audio dump).
+    @Test("digit day then month (European ASR form)")
+    func digitDayThenMonth() {
+        #expect(SpokenDateITN.apply("5 March") == "March 5")
+        #expect(SpokenDateITN.apply("15 July") == "July 15")
+        #expect(SpokenDateITN.apply("due 5 March") == "due March 5")
+        #expect(SpokenDateITN.apply("5 March 2024") == "March 5, 2024")
+        // Guards
+        #expect(SpokenDateITN.apply("5 birds") == "5 birds")
+        #expect(SpokenDateITN.apply("march 5") == "March 5") // month-first still works
+    }
+
     @Test("month day after ordinal ITN digit form")
     func monthDayDigit() {
         #expect(SpokenDateITN.apply("march 15th") == "March 15")
@@ -60,6 +72,18 @@ struct SpokenDateITNTests {
         #expect(SpokenDateITN.apply("in twenty twenty six") == "in 2026")
         #expect(SpokenDateITN.apply("since twenty nineteen") == "since 2019")
         #expect(SpokenDateITN.apply("two thousand twenty four") == "2024")
+    }
+
+    @Test("nineteen-hundreds years")
+    func years1900s() {
+        #expect(SpokenDateITN.apply("in nineteen ninety nine") == "in 1999")
+        #expect(SpokenDateITN.apply("since nineteen eighty four") == "since 1984")
+        #expect(SpokenDateITN.apply("nineteen ninety") == "1990")
+        #expect(SpokenDateITN.apply("march fifth nineteen ninety five") == "March 5, 1995")
+        #expect(SpokenDateITN.apply("the fifth of march nineteen eighty four") == "March 5, 1984")
+        // Guards: incomplete year phrase stays words
+        #expect(SpokenDateITN.apply("nineteen birds") == "nineteen birds")
+        #expect(SpokenDateITN.apply("the first of all") == "the first of all")
     }
 
     @Test("does not rewrite bare month or may I")
@@ -136,6 +160,8 @@ struct TextPostProcessorDateITNTests {
         let dayFirst = TextPostProcessor.process("due the fifth of march twenty twenty four")
         #expect(dayFirst.contains("March 5"), "got \(dayFirst)")
         #expect(dayFirst.contains("2024"), "got \(dayFirst)")
+        let y19 = TextPostProcessor.process("born in nineteen ninety nine")
+        #expect(y19.contains("1999"), "got \(y19)")
     }
 
     @Test("keeps twenty twenty for year (no stutter collapse)")
