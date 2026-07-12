@@ -121,4 +121,22 @@ struct SpokenListITNTests {
         let next = SpokenListITN.apply("next number after", counter: &c)
         #expect(next.contains("101. "), "got \(next)")
     }
+
+    @Test("number two–nine hundred compounds")
+    func compoundMultiHundred() {
+        #expect(SpokenListITN.apply("number two hundred milk").contains("200. "))
+        #expect(SpokenListITN.apply("number three hundred one alpha").contains("301. "))
+        #expect(SpokenListITN.apply("number two hundred and five beta").contains("205. "))
+        #expect(SpokenListITN.apply("number five hundred twenty gamma").contains("520. "))
+        #expect(SpokenListITN.apply("number nine hundred ninety nine delta").contains("999. "))
+        #expect(SpokenListITN.apply("number two hundred twenty one item").contains("221. "))
+        let r = SpokenListITN.apply("number two hundred twenty one item")
+        #expect(!r.lowercased().contains("hundred"), "got \(r)")
+        #expect(!r.lowercased().contains("twenty"), "got \(r)")
+        // Bare "number two" still 2, not 200
+        #expect(SpokenListITN.apply("number two eggs").contains("2. "))
+        var c = 1
+        _ = SpokenListITN.apply("number two hundred", counter: &c)
+        #expect(c == 201)
+    }
 }

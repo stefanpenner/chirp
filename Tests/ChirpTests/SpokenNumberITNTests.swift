@@ -304,6 +304,29 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("six and a quarter") == "6¼")
     }
 
+    @Test("general N and fifths / sixths mixed fractions")
+    func generalAndFifthsSixths() {
+        #expect(SpokenNumberITN.apply("six and a fifth") == "6⅕")
+        #expect(SpokenNumberITN.apply("ten and a fifth cups") == "10⅕ cups")
+        #expect(SpokenNumberITN.apply("six and two fifths") == "6⅖")
+        #expect(SpokenNumberITN.apply("six and three fifths") == "6⅗")
+        #expect(SpokenNumberITN.apply("six and four fifths") == "6⅘")
+        #expect(SpokenNumberITN.apply("6 and three fifths") == "6⅗")
+        #expect(SpokenNumberITN.apply("nine and a sixth") == "9⅙")
+        #expect(SpokenNumberITN.apply("two and five sixths") == "2⅚")
+        #expect(SpokenNumberITN.apply("twenty two and five sixths") == "22⅚")
+        // ASR drop plural
+        #expect(SpokenNumberITN.apply("six and two fifth") == "6⅖")
+        #expect(SpokenNumberITN.apply("six and five sixth") == "6⅚")
+        // Guards: compound integers still win
+        #expect(SpokenNumberITN.apply("one hundred and five") == "105")
+        #expect(SpokenNumberITN.apply("one hundred and three") == "103")
+        #expect(SpokenNumberITN.apply("two hundred and four") == "204")
+        // Prior fractions still work
+        #expect(SpokenNumberITN.apply("six and a third") == "6⅓")
+        #expect(SpokenNumberITN.apply("six and three eighths") == "6⅜")
+    }
+
     @Test("a couple of / a pair of force two")
     func coupleAndPairOf() {
         #expect(SpokenNumberITN.apply("a couple of minutes") == "2 minutes")

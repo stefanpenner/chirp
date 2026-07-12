@@ -494,7 +494,7 @@ enum SpokenNumberITN {
 
         let head = normalizeToken(parts[j])
 
-        // Singular after optional article: half / quarter / third / eighth
+        // Singular after optional article: half / quarter / third / fifth / sixth / eighth
         if head == "half" {
             // Bare half only (dozen path uses matchAndAHalf requireDozen).
             if j + 1 < parts.count, normalizeToken(parts[j + 1]) == "dozen" {
@@ -504,9 +504,11 @@ enum SpokenNumberITN {
         }
         if head == "quarter" { return (j + 1, "¼") }
         if head == "third" { return (j + 1, "⅓") }
+        if head == "fifth" { return (j + 1, "⅕") }
+        if head == "sixth" { return (j + 1, "⅙") }
         if head == "eighth" { return (j + 1, "⅛") }
 
-        // No article before multi-word: "three quarters", "two thirds", "N eighths"
+        // No article before multi-word: "three quarters", "two thirds", "N fifths/eighths"
         if sawArticle { return nil }
 
         if head == "three" {
@@ -514,18 +516,27 @@ enum SpokenNumberITN {
             let q = normalizeToken(parts[j + 1])
             if q == "quarters" || q == "quarter" { return (j + 2, "¾") }
             if q == "eighths" || q == "eighth" { return (j + 2, "⅜") }
+            if q == "fifths" || q == "fifth" { return (j + 2, "⅗") }
             return nil
         }
         if head == "two" {
             guard j + 1 < parts.count else { return nil }
             let q = normalizeToken(parts[j + 1])
             if q == "thirds" || q == "third" { return (j + 2, "⅔") }
+            if q == "fifths" || q == "fifth" { return (j + 2, "⅖") }
+            return nil
+        }
+        if head == "four" {
+            guard j + 1 < parts.count else { return nil }
+            let q = normalizeToken(parts[j + 1])
+            if q == "fifths" || q == "fifth" { return (j + 2, "⅘") }
             return nil
         }
         if head == "five" {
             guard j + 1 < parts.count else { return nil }
             let q = normalizeToken(parts[j + 1])
             if q == "eighths" || q == "eighth" { return (j + 2, "⅝") }
+            if q == "sixths" || q == "sixth" { return (j + 2, "⅚") }
             return nil
         }
         if head == "seven" {
