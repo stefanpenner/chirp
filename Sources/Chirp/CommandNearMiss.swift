@@ -20,15 +20,24 @@ enum CommandNearMiss {
         "capthat": "cap that",
         "kab that": "cap that",
         "cap the": "cap that", // lone utterance only via full-utterance gate
-        // Multi-voice soak (Daniel TTS): "cap that" → "Hap that."
+        // Multi-voice soak: "cap that" → Hap/Have/Caplat dumps
         "hap that": "cap that",
         "hab that": "cap that",
         "hat that": "cap that",
         "crap that": "cap that",
+        "have that": "cap that",
+        "had that": "cap that",
+        "caplat": "cap that",
+        "captage": "cap that",
+        "cab zot": "cap that",
         // paste that
         "taste that": "paste that",
         "taste it": "paste that",
         "paced that": "paste that",
+        "face that": "paste that",
+        "faced that": "paste that",
+        "hey dad": "paste that",
+        "hay dad": "paste that",
         // backspace
         "press back space": "press backspace",
         "hit back space": "press backspace",
@@ -47,11 +56,35 @@ enum CommandNearMiss {
         "undo hat": "scratch that",
         "scratched that": "scratch that",
         "scratched it": "scratch that",
-        // bold that (TTS→Parakeet: "Ball Dad.")
+        // bold that (TTS→Parakeet: Ball Dad / Bulldog / Build that)
         "ball dad": "bold that",
         "ball that": "bold that",
         "bold dad": "bold that",
         "bald that": "bold that",
+        "bulldog": "bold that",
+        "build that": "bold that",
+        "built that": "bold that",
+        "ball t": "bold that",
+        "bold touch": "bold that",
+        // undo that (ASR near-misses; "undo hat" already → scratch that above)
+        "until that": "undo that",
+        "under that": "undo that",
+        // redo that
+        "we do that": "redo that",
+        "reed that": "redo that",
+        // scratch that
+        "scratch badge": "scratch that",
+        "scratch batch": "scratch that",
+        // press escape / enter (ASR inserts "Chris" on some accents)
+        "chris escape": "press escape",
+        "press chris escape": "press escape",
+        "chris enter": "press enter",
+        "press chris enter": "press enter",
+        // select last word
+        "select lost word": "select last word",
+        "select lost words": "select last word",
+        "select last words": "select last word",
+        // Bare "escape" stays non-command (content / unclear intent).
     ]
 
     /// First-token gate for fuzzy match — free dictation rarely starts with these.

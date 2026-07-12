@@ -737,7 +737,7 @@ struct AudioCorpusPipelineTests {
         }
 
         let phrase = "please send the report by friday"
-        let candidates = ["Samantha", "Alex", "Daniel", "Victoria", "Karen"]
+        let candidates = Self.workingVoices(limit: 5)
         var pairs: [(id: String, reference: String, hypothesis: String)] = []
 
         for voice in candidates {
@@ -1162,11 +1162,13 @@ struct AudioCorpusPipelineTests {
             print("SKIP: model not found")
             return
         }
-        let voices = Self.workingVoices(limit: 4)
+        // Prefer several accents (US/UK/AU/…) when installed; cap for wall time.
+        let voices = Self.workingVoices(limit: 6)
         guard voices.count >= CommandPhraseEval.multiVoiceMinVoices else {
             print("SKIP: need ≥\(CommandPhraseEval.multiVoiceMinVoices) TTS voices, got \(voices.count)")
             return
         }
+        print("multi-voice using: \(voices.joined(separator: ", "))")
         FormatSettings.resetTestOverrides()
         TextPostProcessor.resetSessionFormatState()
 

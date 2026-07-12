@@ -18,6 +18,21 @@ struct CommandNearMissTests {
         #expect(CommandNearMiss.repair("Hap that.") == "cap that")
         #expect(DictationCommand.parse("Hap that.") == .capThat)
         #expect(DictationCommand.parse("hap that") == .capThat)
+        #expect(DictationCommand.parse("Have that.") == .capThat)
+    }
+
+    @Test("multi-voice accent dumps repair to commands")
+    func multiVoiceAccentDumps() {
+        #expect(DictationCommand.parse("Bulldog.") == .boldThat)
+        #expect(DictationCommand.parse("Build that.") == .boldThat)
+        #expect(DictationCommand.parse("Face that") == .pasteThat)
+        #expect(DictationCommand.parse("Until that.") == .scratchThat(count: 1))
+        #expect(DictationCommand.parse("We do that.") == .redoThat(count: 1))
+        #expect(DictationCommand.parse("Select lost words.") == .selectLastWord)
+        // Free dictation must not steal
+        #expect(DictationCommand.parse("we do that every day") == .none)
+        #expect(DictationCommand.parse("have that ready") == .none)
+        #expect(DictationCommand.parse("escape") == .none)
     }
 
     @Test("paste and backspace soak dumps repair")

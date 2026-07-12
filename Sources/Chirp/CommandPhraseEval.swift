@@ -78,6 +78,16 @@ enum CommandPhraseEval {
         Trial(hyp: "capthat", expected: .capThat),
         Trial(hyp: "Hap that.", expected: .capThat), // multi-voice Daniel
         Trial(hyp: "hap that", expected: .capThat),
+        Trial(hyp: "Have that.", expected: .capThat),
+        Trial(hyp: "Bulldog.", expected: .boldThat),
+        Trial(hyp: "Build that.", expected: .boldThat),
+        Trial(hyp: "Face that", expected: .pasteThat),
+        Trial(hyp: "Until that.", expected: .scratchThat(count: 1)), // → undo that
+        Trial(hyp: "We do that.", expected: .redoThat(count: 1)),
+        Trial(hyp: "Select lost words.", expected: .selectLastWord),
+        Trial(hyp: "Scratch badge.", expected: .scratchThat(count: 1)),
+        Trial(hyp: "Hey Dad.", expected: .pasteThat),
+        Trial(hyp: "Chris Escape", expected: .pressEscape(count: 1)),
         Trial(hyp: "all caps that", expected: .allCapsThat),
         Trial(hyp: "spell that", expected: .spellThat),
         Trial(hyp: "spell mode", expected: .setSpellMode(.on)),
@@ -129,21 +139,34 @@ enum CommandPhraseEval {
     /// Raised after fuzzy full-utterance repair (was 0.80).
     static let soakMinHitRate: Double = 0.90
 
-    /// Core subset for multi-voice soak (latency × voices). High-frequency Dragon.
+    /// Core subset for multi-voice soak (latency × voices). High-frequency +
+    /// weaker commands that often fail under accent variance.
     static let multiVoiceSoakPhrases: [(id: String, spoken: String, expected: DictationCommand)] = [
         ("mv_scratch", "scratch that", .scratchThat(count: 1)),
         ("mv_select", "select that", .selectThat),
         ("mv_again", "select again", .selectAgain),
+        ("mv_word", "select last word", .selectLastWord),
         ("mv_escape", "press escape", .pressEscape(count: 1)),
+        ("mv_enter", "press enter", .pressEnter(count: 1)),
         ("mv_cap", "cap that", .capThat),
         ("mv_copy", "copy that", .copyThat),
         ("mv_paste", "paste that", .pasteThat),
+        ("mv_bold", "bold that", .boldThat),
         ("mv_undo", "undo that", .scratchThat(count: 1)),
+        ("mv_redo", "redo that", .redoThat(count: 1)),
     ]
 
-    /// Candidate macOS `say` voices for multi-voice soak (order = preference).
+    /// Candidate macOS `say` voices for multi-voice soak (regional English).
+    /// Prefer natural dictation-like voices; skip novelty (Fred/Bells/…) and
+    /// weak neural variants that are not representative of user speech.
+    /// Unavailable voices are skipped by the harness probe.
     static let multiVoiceCandidates: [String] = [
-        "Samantha", "Alex", "Daniel", "Victoria", "Karen",
+        // US
+        "Samantha", "Alex",
+        // UK
+        "Daniel",
+        // AU / IE / ZA / IN
+        "Karen", "Moira", "Tessa", "Rishi",
     ]
 
     /// Overall multi-voice command hit budget (pooled trials). Slightly below
