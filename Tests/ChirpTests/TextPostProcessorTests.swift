@@ -635,10 +635,34 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("times are hard") == "times are hard")
     }
 
+    @Test("Light ITN powers squared cubed and to the power of")
+    func lightITNPowers() {
+        #expect(TextPostProcessor.process("three squared") == "3²")
+        #expect(TextPostProcessor.process("ten squared") == "10²")
+        #expect(TextPostProcessor.process("four cubed") == "4³")
+        #expect(TextPostProcessor.process("two cubed") == "2³")
+        #expect(TextPostProcessor.process("two to the power of three") == "2³")
+        #expect(TextPostProcessor.process("ten to the power of two") == "10²")
+        #expect(TextPostProcessor.process("two to the power of ten") == "2¹⁰")
+        #expect(TextPostProcessor.process("3 to the power of 4") == "3⁴")
+        #expect(TextPostProcessor.process("two to the third power") == "2³")
+        #expect(TextPostProcessor.process("ten to the fourth power") == "10⁴")
+        // Guards
+        #expect(TextPostProcessor.process("squared away") == "squared away")
+        #expect(TextPostProcessor.process("back to the power of love")
+            == "back to the power of love"
+            || TextPostProcessor.process("back to the power of love").contains("power of"))
+        #expect(TextPostProcessor.process("go to the store") == "go to the store")
+    }
+
     @Test("Light ITN formats percent and dollars")
     func lightITNPercentCurrency() {
         #expect(TextPostProcessor.process("about 50 percent done") == "about 50% done")
         #expect(TextPostProcessor.process("fifty percent complete") == "50% complete")
+        #expect(TextPostProcessor.process("one hundred percent ready") == "100% ready")
+        #expect(TextPostProcessor.process("twenty five percent off") == "25% off")
+        #expect(TextPostProcessor.process("50 per cent done") == "50% done")
+        #expect(TextPostProcessor.process("twenty percent of fifteen") == "20% of 15")
         #expect(TextPostProcessor.process("costs 20 dollars") == "costs $20")
         #expect(TextPostProcessor.process("pay twenty dollars now") == "pay $20 now")
         #expect(TextPostProcessor.process("one dollar please").contains("$1"))

@@ -902,6 +902,8 @@ enum TextPostProcessor {
         // Infix math: plus / minus / times / multiplied by / equals.
         // Times is N×M only (not "N times a day" — right side must be a number).
         result = applyMathOpsITN(result)
+        // Powers after binary ops: "three squared" / "two to the power of three".
+        result = applyPowerITN(result)
         // Sterling/quid before units so "20 pounds sterling" → "£20" not "20 lb sterling".
         // Bare "pounds" stays weight via units; currency needs "sterling" or "quid".
         result = applySterlingCurrencyITN(result)
@@ -1392,13 +1394,65 @@ enum TextPostProcessor {
         return result
     }
 
-    /// "50 percent" / "fifty percent" / "100 percent" → "50%" / "100%".
+    /// "50 percent" / "fifty percent" / "100 percent" / "50 per cent" → "50%" / "100%".
+    /// Uses shared cardinal token so multi-digit after SpokenNumberITN always hits.
     private static let percentITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(\d{1,6}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\s+percent\b"#,
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+per\s*cents?\b"#,
             options: .caseInsensitive
         )
     }()
+
+    /// "three squared" / "4 cubed" — base is cardinal token (digits preferred post-ITN).
+    private static let squaredITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken + #"\s+squared\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let cubedITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken + #"\s+cubed\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "two to the power of three" / "2 to the power of 10".
+    private static let powerOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+to\s+the\s+power\s+of\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "two to the third power" / "ten to the fourth power".
+    private static let toTheNthPowerITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + cardinalRangeNumberToken
+                + #"\s+to\s+the\s+"#
+                + #"(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|"#
+                + #"1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|\d{1,2})"#
+                + #"\s+power\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let ordinalPowerWords: [String: Int] = [
+        "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3,
+        "fourth": 4, "4th": 4, "fifth": 5, "5th": 5, "sixth": 6, "6th": 6,
+        "seventh": 7, "7th": 7, "eighth": 8, "8th": 8, "ninth": 9, "9th": 9,
+        "tenth": 10, "10th": 10,
+    ]
+
+    private static let superscriptDigits: [Character: Character] = [
+        "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
+        "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+    ]
 
     private static let extendedSpokenNumbers: [String: String] = {
         var m = spokenNumbers
@@ -1507,6 +1561,94 @@ enum TextPostProcessor {
             result.replaceSubrange(fullRange, with: "\(digits)%")
         }
         return result
+    }
+
+    /// Powers: squared / cubed / to the power of N / to the Nth power.
+    private static func applyPowerITN(_ text: String) -> String {
+        var result = text
+        result = applyUnaryPowerITN(result, pattern: squaredITNPattern, exponent: 2)
+        result = applyUnaryPowerITN(result, pattern: cubedITNPattern, exponent: 3)
+        result = applyPowerOfITN(result)
+        result = applyToTheNthPowerITN(result)
+        return result
+    }
+
+    private static func applyUnaryPowerITN(
+        _ text: String,
+        pattern: NSRegularExpression,
+        exponent: Int
+    ) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let baseRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let base = rangeDigits(from: String(result[baseRange]))
+            result.replaceSubrange(fullRange, with: base + superscriptString(exponent))
+        }
+        return result
+    }
+
+    private static func applyPowerOfITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = powerOfITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let baseRange = Range(match.range(at: 1), in: result),
+                  let expRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let base = rangeDigits(from: String(result[baseRange]))
+            let expDigits = rangeDigits(from: String(result[expRange]))
+            result.replaceSubrange(fullRange, with: base + superscriptFromDigits(expDigits))
+        }
+        return result
+    }
+
+    private static func applyToTheNthPowerITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = toTheNthPowerITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let baseRange = Range(match.range(at: 1), in: result),
+                  let ordRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let base = rangeDigits(from: String(result[baseRange]))
+            let ordRaw = String(result[ordRange]).lowercased()
+            let exp: Int
+            if let w = ordinalPowerWords[ordRaw] {
+                exp = w
+            } else if let n = Int(ordRaw.filter(\.isNumber)) {
+                exp = n
+            } else {
+                continue
+            }
+            result.replaceSubrange(fullRange, with: base + superscriptString(exp))
+        }
+        return result
+    }
+
+    private static func superscriptString(_ n: Int) -> String {
+        superscriptFromDigits(String(n))
+    }
+
+    private static func superscriptFromDigits(_ digits: String) -> String {
+        var out = ""
+        for ch in digits {
+            if let s = superscriptDigits[ch] {
+                out.append(s)
+            } else if ch.isNumber {
+                // Fallback caret form if unmapped
+                return "^" + digits
+            }
+        }
+        return out.isEmpty ? "^" + digits : out
     }
 
     /// Number token shared by currency patterns (digits preferred after SpokenNumberITN).
