@@ -1,6 +1,7 @@
 // CommandHotwords.swift — Dictation-command phrases for ASR contextual bias.
-// SOTA offline STT (sherpa-onnx / Riva / Google adaptation) boosts domain phrases.
-// Pure list + file/stream format — Transcriber wires them into the decoder.
+// SOTA offline STT (sherpa-onnx) boosts domain phrases via hotwords_file.
+// Parakeet tokens use SentencePiece ▁word forms; bare "that" fails EncodeBase.
+// We rewrite encodable phrases to vocab token strings (or drop them).
 
 import Foundation
 
@@ -12,9 +13,11 @@ enum CommandHotwords {
     /// Max active paths when using modified_beam_search with hotwords.
     static let maxActivePaths: Int32 = 4
 
+    /// SentencePiece word-boundary marker used in Parakeet tokens.txt.
+    static let spWordMark: Character = "\u{2581}" // ▁
+
     /// High-value spoken commands to bias. Keep short multi-word phrases only
     /// (single common words like "undo" steal free dictation).
-    /// Order does not matter; dedupe is applied in `phrases`.
     static let seedPhrases: [String] = [
         // Undo / redo / replace
         "scratch that",
@@ -68,7 +71,6 @@ enum CommandHotwords {
     ]
 
     /// Deduped, trimmed, lowercased phrases (non-empty, ≥2 tokens preferred).
-    /// Single-token seeds are dropped (too steal-y for free dictation).
     static var phrases: [String] {
         var seen = Set<String>()
         var out: [String] = []
@@ -78,6 +80,58 @@ enum CommandHotwords {
             guard p.split(separator: " ").count >= 2 else { continue }
             guard seen.insert(p).inserted else { continue }
             out.append(p)
+        }
+        return out
+    }
+
+    /// Parse sherpa tokens.txt: first column is the token string.
+    static func loadTokenSet(from path: String) -> Set<String>? {
+        guard let data = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return nil
+        }
+        var tokens = Set<String>()
+        for line in data.split(whereSeparator: \.isNewline) {
+            let cols = line.split(whereSeparator: { $0.isWhitespace || $0 == "\t" })
+            guard let first = cols.first, !first.isEmpty else { continue }
+            tokens.insert(String(first))
+        }
+        return tokens.isEmpty ? nil : tokens
+    }
+
+    /// Map a spoken word to a tokens.txt entry (bare or ▁word).
+    static func tokenForm(word: String, tokens: Set<String>) -> String? {
+        let w = word.lowercased()
+        if tokens.contains(w) { return w }
+        let marked = String(spWordMark) + w
+        if tokens.contains(marked) { return marked }
+        return nil
+    }
+
+    /// Encode a multi-word phrase for hotwords_file, or nil if any word missing.
+    /// Dual of sherpa EncodeBase: each space-separated piece must be a token ID.
+    static func encodePhrase(_ phrase: String, tokens: Set<String>) -> String? {
+        let words = normalize(phrase).split(separator: " ").map(String.init)
+        guard words.count >= 2 else { return nil }
+        var parts: [String] = []
+        parts.reserveCapacity(words.count)
+        for w in words {
+            guard let t = tokenForm(word: w, tokens: tokens) else { return nil }
+            parts.append(t)
+        }
+        return parts.joined(separator: " ")
+    }
+
+    /// Phrases rewritten for tokens.txt (drops unencodable seeds).
+    static func encodablePhrases(
+        from list: [String] = phrases,
+        tokens: Set<String>
+    ) -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for p in list {
+            guard let enc = encodePhrase(p, tokens: tokens) else { continue }
+            guard seen.insert(enc).inserted else { continue }
+            out.append(enc)
         }
         return out
     }
@@ -101,12 +155,19 @@ enum CommandHotwords {
             .joined(separator: " ")
     }
 
-    /// Write hotwords file under Application Support; returns path or nil.
+    /// Write hotwords file. When `tokensPath` is set, only encodable phrases
+    /// (SentencePiece-aware) are written — avoids EncodeBase skip spam.
     static func ensureFileOnDisk(
         fileManager: FileManager = .default,
-        directory: URL? = nil
+        directory: URL? = nil,
+        tokensPath: String? = nil
     ) -> String? {
-        let list = phrases
+        let list: [String]
+        if let tokensPath, let tokens = loadTokenSet(from: tokensPath) {
+            list = encodablePhrases(tokens: tokens)
+        } else {
+            list = phrases
+        }
         guard !list.isEmpty else { return nil }
         let dir: URL
         if let directory {

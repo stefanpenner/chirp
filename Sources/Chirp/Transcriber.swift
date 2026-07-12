@@ -112,10 +112,15 @@ actor Transcriber: TranscriberProtocol {
             useHotwords ? "modified_beam_search" : "greedy_search"
         )
         let hotwordsPathStr: UnsafeMutablePointer<CChar>?
-        if useHotwords, let path = CommandHotwords.ensureFileOnDisk() {
+        // Pass model tokens.txt so phrases encode as ▁word forms (EncodeBase).
+        if useHotwords,
+           let path = CommandHotwords.ensureFileOnDisk(
+             tokensPath: "\(modelDir)/tokens.txt"
+           )
+        {
             hotwordsPathStr = toCString(path)
         } else if useHotwords {
-            // No file → do not claim hotwords path; caller will try greedy.
+            // No encodable hotwords → greedy path (CommandNearMiss still repairs).
             free(tokensPath); free(providerStr); free(modelTypeStr)
             free(emptyStr); free(decodingMethodStr)
             return nil
