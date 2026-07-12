@@ -98,38 +98,53 @@ enum CommandHotwords {
         return tokens.isEmpty ? nil : tokens
     }
 
-    /// Map a spoken word to a tokens.txt entry (bare or ▁word).
-    static func tokenForm(word: String, tokens: Set<String>) -> String? {
+    /// Map a spoken word to a tokens.txt entry.
+    /// Prefer **bare** forms only: without bpe_vocab, sherpa EncodeBase does not
+    /// reliably accept SentencePiece `▁word` (logs "Cannot find ID for token that"
+    /// even when `▁that` exists). Marked forms are kept for tests / future BPE.
+    static func tokenForm(word: String, tokens: Set<String>, allowMarked: Bool = false) -> String? {
         let w = word.lowercased()
         if tokens.contains(w) { return w }
-        let marked = String(spWordMark) + w
-        if tokens.contains(marked) { return marked }
+        if allowMarked {
+            let marked = String(spWordMark) + w
+            if tokens.contains(marked) { return marked }
+        }
         return nil
     }
 
     /// Encode a multi-word phrase for hotwords_file, or nil if any word missing.
     /// Dual of sherpa EncodeBase: each space-separated piece must be a token ID.
-    static func encodePhrase(_ phrase: String, tokens: Set<String>) -> String? {
+    static func encodePhrase(
+        _ phrase: String,
+        tokens: Set<String>,
+        allowMarked: Bool = false
+    ) -> String? {
         let words = normalize(phrase).split(separator: " ").map(String.init)
         guard words.count >= 2 else { return nil }
         var parts: [String] = []
         parts.reserveCapacity(words.count)
         for w in words {
-            guard let t = tokenForm(word: w, tokens: tokens) else { return nil }
+            guard let t = tokenForm(word: w, tokens: tokens, allowMarked: allowMarked) else {
+                return nil
+            }
             parts.append(t)
         }
         return parts.joined(separator: " ")
     }
 
     /// Phrases rewritten for tokens.txt (drops unencodable seeds).
+    /// Uses bare tokens only (see `tokenForm`) so InitHotwords does not spam skips.
     static func encodablePhrases(
         from list: [String] = phrases,
-        tokens: Set<String>
+        tokens: Set<String>,
+        allowMarked: Bool = false
     ) -> [String] {
         var seen = Set<String>()
         var out: [String] = []
         for p in list {
-            guard let enc = encodePhrase(p, tokens: tokens) else { continue }
+            guard let enc = encodePhrase(p, tokens: tokens, allowMarked: allowMarked) else {
+                continue
+            }
             guard seen.insert(enc).inserted else { continue }
             out.append(enc)
         }

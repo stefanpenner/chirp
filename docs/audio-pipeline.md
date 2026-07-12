@@ -142,11 +142,10 @@ Spoken `new line` / `new paragraph` rewrite in `TextPostProcessor`;
 newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
 (built-in tech ASR seeds + UserDefaults `chirp.dictationDictionary`).
 Command ASR bias: `CommandHotwords` writes multi-word command phrases to
-`~/Library/Application Support/Chirp/command-hotwords.txt`. Phrases are
-**token-encoded** against the model `tokens.txt` (SentencePiece `▁word` forms)
-so sherpa EncodeBase does not skip them. Recognizer prefers
-**modified_beam_search** + `hotwords_score` (falls back to greedy if create
-fails or no phrase encodes).
+`~/Library/Application Support/Chirp/command-hotwords.txt`. Against Parakeet
+`tokens.txt`, only phrases whose **every word is a bare vocab token** are kept
+(EncodeBase without `bpe_vocab` rejects `▁word` forms). If none encode → skip
+hotwords and use greedy; `CommandNearMiss` still repairs commands.
 Command recognition eval: `CommandPhraseEval` (pure hit rate on golden +
 near-miss hyps; always-on). Full-utterance ASR repair: `CommandNearMiss`
 (exact dumps, glue expand, starter-gated Levenshtein ≤1) before parse —

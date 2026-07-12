@@ -68,57 +68,61 @@ struct CommandHotwordsTests {
         #expect(text.hasSuffix("\n"))
     }
 
-    @Test("tokenForm prefers bare then SentencePiece ▁word")
+    @Test("tokenForm prefers bare; marked only when allowMarked")
     func tokenForm() {
         let mark = String(CommandHotwords.spWordMark)
-        let tokens: Set<String> = [mark + "that", mark + "cap", "go"]
-        #expect(CommandHotwords.tokenForm(word: "that", tokens: tokens) == mark + "that")
-        #expect(CommandHotwords.tokenForm(word: "cap", tokens: tokens) == mark + "cap")
+        let tokens: Set<String> = [mark + "that", mark + "cap", "go", "to", "end"]
         #expect(CommandHotwords.tokenForm(word: "go", tokens: tokens) == "go")
+        #expect(CommandHotwords.tokenForm(word: "that", tokens: tokens) == nil) // bare only
+        #expect(
+            CommandHotwords.tokenForm(word: "that", tokens: tokens, allowMarked: true)
+                == mark + "that"
+        )
         #expect(CommandHotwords.tokenForm(word: "missing", tokens: tokens) == nil)
     }
 
-    @Test("encodePhrase maps to ▁ forms or drops unencodable")
+    @Test("encodePhrase bare-only for sherpa without bpe_vocab")
     func encodePhrase() {
         let mark = String(CommandHotwords.spWordMark)
-        let tokens: Set<String> = [mark + "cap", mark + "that", mark + "select"]
+        let tokens: Set<String> = ["go", "to", "end", "press", "enter", mark + "that"]
+        #expect(CommandHotwords.encodePhrase("go to end", tokens: tokens) == "go to end")
+        #expect(CommandHotwords.encodePhrase("press enter", tokens: tokens) == "press enter")
+        // ▁that alone is not used unless allowMarked
+        #expect(CommandHotwords.encodePhrase("cut that", tokens: tokens) == nil)
         #expect(
-            CommandHotwords.encodePhrase("cap that", tokens: tokens)
-                == "\(mark)cap \(mark)that"
+            CommandHotwords.encodePhrase("cut that", tokens: tokens.union(["cut"]), allowMarked: true)
+                == "cut \(mark)that"
         )
-        #expect(CommandHotwords.encodePhrase("select that", tokens: tokens)
-            == "\(mark)select \(mark)that")
-        #expect(CommandHotwords.encodePhrase("spell that", tokens: tokens) == nil)
         #expect(CommandHotwords.encodePhrase("cap", tokens: tokens) == nil) // single word
     }
 
     @Test("encodablePhrases filters and dedupes encoded lines")
     func encodablePhrases() {
-        let mark = String(CommandHotwords.spWordMark)
-        let tokens: Set<String> = [mark + "cap", mark + "that", mark + "select"]
+        let tokens: Set<String> = ["go", "to", "end", "press", "enter", "tab"]
         let enc = CommandHotwords.encodablePhrases(
-            from: ["cap that", "spell mode", "select that", "cap that"],
+            from: ["go to end", "spell mode", "press enter", "go to end"],
             tokens: tokens
         )
         #expect(enc.count == 2)
-        #expect(enc.contains("\(mark)cap \(mark)that"))
-        #expect(enc.contains("\(mark)select \(mark)that"))
+        #expect(enc.contains("go to end"))
+        #expect(enc.contains("press enter"))
         #expect(!enc.contains { $0.contains("spell") })
     }
 
-    @Test("ensureFileOnDisk with tokens writes only encodable lines")
+    @Test("ensureFileOnDisk with tokens writes only bare-encodable lines")
     func ensureFileOnDiskTokenFiltered() throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("chirp-hotwords-tok-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
-        let mark = String(CommandHotwords.spWordMark)
         let tokensFile = tmp.appendingPathComponent("tokens.txt")
-        // Minimal vocab like Parakeet: ▁word id
+        // Bare tokens only (what EncodeBase accepts without bpe_vocab)
         try """
-        \(mark)cap 1
-        \(mark)that 2
-        \(mark)select 3
+        go 1
+        to 2
+        end 3
+        press 4
+        enter 5
         """.write(to: tokensFile, atomically: true, encoding: .utf8)
 
         let path = CommandHotwords.ensureFileOnDisk(
@@ -127,10 +131,10 @@ struct CommandHotwordsTests {
         )
         #expect(path != nil)
         let text = try String(contentsOfFile: path!, encoding: .utf8)
-        #expect(text.contains("\(mark)cap \(mark)that"))
-        #expect(text.contains("\(mark)select \(mark)that"))
+        #expect(text.contains("go to end"))
+        #expect(text.contains("press enter"))
         #expect(!text.contains("spell"))
-        #expect(!text.contains("\nscratch ")) // unencodable without ▁scratch
+        #expect(!text.contains("scratch"))
     }
 
     @Test("loadTokenSet reads first column of tokens.txt")
