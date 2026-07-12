@@ -43,6 +43,7 @@ enum CommandHotwords {
         // Keys
         "press escape",
         "press backspace",
+        "press back space", // ASR split of backspace
         "press enter",
         "press tab",
         "press space",

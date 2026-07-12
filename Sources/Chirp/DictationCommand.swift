@@ -592,12 +592,13 @@ enum DictationCommand: Equatable, Sendable {
                 { c in inRange(c) ? .redoThat(count: c) : nil }
             ),
             // Dragon "Backspace <n>" / "press backspace N times" (N ≥ 1 including single).
+            // "back space" = ASR split of "backspace".
             (
-                #"^(?:press |hit )?(?:backspace|delete key) "# + num + #"(?: times?)?$"#,
+                #"^(?:press |hit )?(?:backspace|back space|delete key) "# + num + #"(?: times?)?$"#,
                 { c in (1...100).contains(c) ? .pressBackspace(count: c) : nil }
             ),
             (
-                #"^backspace "# + num + #"(?: times?)?$"#,
+                #"^(?:backspace|back space) "# + num + #"(?: times?)?$"#,
                 { c in (1...100).contains(c) ? .pressBackspace(count: c) : nil }
             ),
             // Dragon "press escape N times" / "escape key 3". Bare "escape" is not a command.
@@ -1014,9 +1015,13 @@ enum DictationCommand: Equatable, Sendable {
         // (those remain scratchThat) or "delete last" (deleteLastWord).
         // Forward delete phrases are matched separately below.
         case "press backspace", "hit backspace", "backspace",
-             "press delete", "hit delete", "delete key":
+             "press delete", "hit delete", "delete key",
+             // ASR often splits "backspace" → "back space"
+             "press back space", "hit back space", "back space",
+             "press the back space", "hit the back space":
             return .pressBackspace(count: 1)
-        case "backspace twice", "press backspace twice", "hit backspace twice":
+        case "backspace twice", "press backspace twice", "hit backspace twice",
+             "back space twice", "press back space twice":
             return .pressBackspace(count: 2)
         // Single character (also covered by counted forms with "one")
         case "delete previous character", "delete last character",
@@ -1061,7 +1066,9 @@ enum DictationCommand: Equatable, Sendable {
             return .insertTime
         case "copy that", "copy all", "copy it", "copy this", "copy the text":
             return .copyThat
-        case "paste that", "paste it", "paste this", "paste here":
+        case "paste that", "paste it", "paste this", "paste here",
+             // ASR: paste → taste / paced (common confusions)
+             "taste that", "taste it", "paced that":
             return .pasteThat
         case "duplicate that", "duplicate it", "dupe that", "copy paste that",
              "repeat that", "repeat it", "say that again", "again that":

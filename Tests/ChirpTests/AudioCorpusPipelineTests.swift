@@ -1084,4 +1084,56 @@ struct AudioCorpusPipelineTests {
             "too many catastrophic phrases (\(catastrophic)/\(pairs.count))\n\(ranking.leaderboard)"
         )
     }
+
+    /// Dragon command phrases: TTS → Parakeet → DictationCommand.parse hit rate.
+    /// Short commands are ASR-hard (SOTA voice-agent short-utterance gap); soft
+    /// budget via `CommandPhraseEval.soakMinHitRate`.
+    @Test("Command phrase soak: TTS → ASR → parse hit rate")
+    func commandPhraseSoak() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+        let voice = Self.workingVoice()
+        FormatSettings.resetTestOverrides()
+        TextPostProcessor.resetSessionFormatState()
+
+        var trials: [CommandPhraseEval.Trial] = []
+        for item in CommandPhraseEval.soakPhrases {
+            guard let run = try await Self.runPhrase(
+                id: item.id,
+                spoken: item.spoken,
+                reference: item.spoken,
+                paths: paths,
+                voice: voice
+            ) else { continue }
+            let trial = CommandPhraseEval.Trial(hyp: run.hypothesis, expected: item.expected)
+            let ok = CommandPhraseEval.hit(trial)
+            print(String(
+                format: "cmd[%@] spoken=\"%@\" hyp=\"%@\" parse=%@ hit=%@",
+                item.id,
+                item.spoken,
+                run.hypothesis,
+                String(describing: DictationCommand.parse(run.hypothesis)),
+                ok ? "yes" : "no"
+            ))
+            trials.append(trial)
+        }
+
+        #expect(trials.count >= 6, "too few command phrases transcribed (\(trials.count))")
+        let rate = CommandPhraseEval.hitRate(trials)
+        print(String(
+            format: "command soak hitRate=%.0f%% (budget ≥ %.0f%%) n=%d",
+            rate * 100,
+            CommandPhraseEval.soakMinHitRate * 100,
+            trials.count
+        ))
+        let detail = trials.map { t in
+            "  hyp=\"\(t.hyp)\" expect=\(t.expected) got=\(DictationCommand.parse(t.hyp))"
+        }.joined(separator: "\n")
+        #expect(
+            rate >= CommandPhraseEval.soakMinHitRate,
+            "command parse hitRate \(rate) below \(CommandPhraseEval.soakMinHitRate)\n\(detail)"
+        )
+    }
 }
