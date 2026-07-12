@@ -710,6 +710,25 @@ enum TextPostProcessor {
         )
     }()
 
+    /// Spoken minutes used in "N past H" / "N to H" (safe set; not full 1–59).
+    private static let clockMinutePhrase = #"(?:twenty[\s-]+five|twenty|fifteen|ten|five)"#
+
+    /// "ten past three" / "twenty five past three pm" → 3:10 / 3:25 p.m.
+    private static let minutesPastPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(\#(clockMinutePhrase))\s+past\s+(\#(hourToken))(?:\s*([ap])\.?\s*m\.?)?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "ten to three" / "five to one" → 2:50 / 12:55 (not cardinal "10-3").
+    private static let minutesToPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(\#(clockMinutePhrase))\s+to\s+(\#(hourToken))(?:\s*([ap])\.?\s*m\.?)?\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     /// Bare hour + am/pm: "three pm" → "3 p.m."
     private static let timeITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
@@ -980,34 +999,97 @@ enum TextPostProcessor {
         return result
     }
 
-    /// half past / quarter past / quarter to — British-style clock phrases.
+    /// half past / quarter past / quarter to / N past / N to — British clock.
     private static func applyHalfQuarterITN(_ text: String) -> String {
         var result = applyClockPhrase(
-            text, pattern: halfPastPattern, minutes: 30, hourDelta: 0
+            text, pattern: halfPastPattern, minutes: 30, hourDelta: 0,
+            hourGroup: 1, meridiemGroup: 2
         )
         result = applyClockPhrase(
-            result, pattern: quarterPastPattern, minutes: 15, hourDelta: 0
+            result, pattern: quarterPastPattern, minutes: 15, hourDelta: 0,
+            hourGroup: 1, meridiemGroup: 2
         )
         result = applyClockPhrase(
-            result, pattern: quarterToPattern, minutes: 45, hourDelta: -1
+            result, pattern: quarterToPattern, minutes: 45, hourDelta: -1,
+            hourGroup: 1, meridiemGroup: 2
         )
+        // Variable minutes: "ten past three", "twenty five to five"
+        result = applyMinutesPastToITN(result, pattern: minutesPastPattern, toForm: false)
+        result = applyMinutesPastToITN(result, pattern: minutesToPattern, toForm: true)
         return result
     }
 
-    /// Shared rewriter for half/quarter patterns: group1 = hour, group2 = optional a/p.
-    private static func applyClockPhrase(
+    /// "ten past three" / "ten to three" with spoken minute phrase in group 1.
+    private static func applyMinutesPastToITN(
         _ text: String,
         pattern: NSRegularExpression,
-        minutes: Int,
-        hourDelta: Int
+        toForm: Bool
     ) -> String {
         let range = NSRange(text.startIndex..., in: text)
         let matches = pattern.matches(in: text, range: range)
         guard !matches.isEmpty else { return text }
         var result = text
         for match in matches.reversed() {
-            guard match.numberOfRanges >= 2,
-                  let hourRange = Range(match.range(at: 1), in: result),
+            guard match.numberOfRanges >= 3,
+                  let minRange = Range(match.range(at: 1), in: result),
+                  let hourRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            guard let minVal = clockMinuteValue(String(result[minRange])) else { continue }
+            // Only 1…12 face hours — avoid "ten to 20" as clock (cardinal range)
+            guard let h = hourAsClockInt(String(result[hourRange])),
+                  (1...12).contains(h) else { continue }
+            let minutes: Int
+            let hourDelta: Int
+            if toForm {
+                minutes = 60 - minVal
+                hourDelta = -1
+            } else {
+                minutes = minVal
+                hourDelta = 0
+            }
+            guard (0...59).contains(minutes) else { continue }
+            var hour = h + hourDelta
+            if hour < 1 { hour = 12 }
+            let mins = String(format: "%02d", minutes)
+            var out = "\(hour):\(mins)"
+            if match.numberOfRanges >= 4,
+               match.range(at: 3).location != NSNotFound,
+               let apRange = Range(match.range(at: 3), in: result)
+            {
+                out += " \(formatMeridiem(result[apRange]))"
+            }
+            result.replaceSubrange(fullRange, with: out)
+        }
+        return result
+    }
+
+    private static func clockMinuteValue(_ raw: String) -> Int? {
+        let key = raw.lowercased()
+            .replacingOccurrences(of: "-", with: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        let map: [String: Int] = [
+            "five": 5, "ten": 10, "fifteen": 15, "twenty": 20, "twenty five": 25,
+        ]
+        return map[key]
+    }
+
+    /// Shared rewriter for fixed-minute half/quarter: hourGroup + optional meridiem.
+    private static func applyClockPhrase(
+        _ text: String,
+        pattern: NSRegularExpression,
+        minutes: Int,
+        hourDelta: Int,
+        hourGroup: Int,
+        meridiemGroup: Int
+    ) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges > hourGroup,
+                  let hourRange = Range(match.range(at: hourGroup), in: result),
                   let fullRange = Range(match.range, in: result) else { continue }
             guard let h = hourAsClockInt(String(result[hourRange])) else { continue }
             var hour = h + hourDelta
@@ -1022,9 +1104,9 @@ enum TextPostProcessor {
             let hourStr = String(hour)
             let mins = String(format: "%02d", minutes)
             var out = "\(hourStr):\(mins)"
-            if match.numberOfRanges >= 3,
-               match.range(at: 2).location != NSNotFound,
-               let apRange = Range(match.range(at: 2), in: result)
+            if match.numberOfRanges > meridiemGroup,
+               match.range(at: meridiemGroup).location != NSNotFound,
+               let apRange = Range(match.range(at: meridiemGroup), in: result)
             {
                 out += " \(formatMeridiem(result[apRange]))"
             }

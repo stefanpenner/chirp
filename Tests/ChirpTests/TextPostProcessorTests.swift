@@ -483,6 +483,25 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("three o'clock") == "3:00")
     }
 
+    @Test("Light ITN minutes past/to (British clock)")
+    func lightITNMinutesPastTo() {
+        // Must not be stolen by cardinal range ("ten to three" was "10-3")
+        #expect(TextPostProcessor.process("ten to three") == "2:50")
+        #expect(TextPostProcessor.process("ten to three pm") == "2:50 p.m.")
+        #expect(TextPostProcessor.process("five past three") == "3:05")
+        #expect(TextPostProcessor.process("five past three am") == "3:05 a.m.")
+        #expect(TextPostProcessor.process("twenty past three") == "3:20")
+        #expect(TextPostProcessor.process("twenty five to five") == "4:35")
+        #expect(TextPostProcessor.process("twenty-five to five") == "4:35")
+        #expect(TextPostProcessor.process("five to one") == "12:55")
+        #expect(TextPostProcessor.process("ten to twelve pm") == "11:50 p.m.")
+        // Cardinal ranges stay
+        #expect(TextPostProcessor.process("from ten to twenty") == "from 10-20")
+        #expect(TextPostProcessor.process("from three to five pm") == "from 3-5 p.m.")
+        #expect(TextPostProcessor.process("half past three") == "3:30")
+        #expect(TextPostProcessor.process("quarter to four") == "3:45")
+    }
+
     @Test("Light ITN formats time ranges with shared meridiem")
     func lightITNTimeRanges() {
         // Optional "from" kept; range compact with ASCII hyphen; shared pm/am

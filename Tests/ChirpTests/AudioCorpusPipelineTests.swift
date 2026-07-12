@@ -866,6 +866,7 @@ struct AudioCorpusPipelineTests {
         // (id, TTS spoken form, expected after ASR + ITN — content words for WER)
         let items: [(id: String, spoken: String, reference: String)] = [
             ("itn_time", "meeting at three pm", "meeting at 3 pm"),
+            ("itn_half_past", "meeting at half past three", "meeting at 3:30"),
             ("itn_percent", "increase by fifty percent", "increase by 50 percent"),
             ("itn_money", "costs twenty dollars", "costs 20 dollars"),
             ("itn_cardinal", "send one hundred emails", "send 100 emails"),
