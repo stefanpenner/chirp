@@ -750,6 +750,42 @@ struct TextPostProcessorTests {
             || TextPostProcessor.process("approaches infinity") == "approaches infinity")
     }
 
+    @Test("Light ITN math relations and letter accents")
+    func lightITNRelationsAndAccents() {
+        #expect(TextPostProcessor.process("not equal to") == "≠")
+        #expect(TextPostProcessor.process("does not equal") == "≠")
+        #expect(TextPostProcessor.process("approximately equal") == "≈")
+        #expect(TextPostProcessor.process("approx equal to") == "≈")
+        #expect(TextPostProcessor.process("less than or equal to") == "≤")
+        #expect(TextPostProcessor.process("greater than or equal to") == "≥")
+        #expect(TextPostProcessor.process("much greater than") == "≫")
+        #expect(TextPostProcessor.process("much less than") == "≪")
+        #expect(TextPostProcessor.process("proportional to") == "∝")
+        #expect(TextPostProcessor.process("element of") == "∈")
+        #expect(TextPostProcessor.process("not element of") == "∉")
+        #expect(TextPostProcessor.process("symbol therefore") == "∴")
+        #expect(TextPostProcessor.process("therefore sign") == "∴")
+        #expect(TextPostProcessor.process("symbol because") == "∵")
+        #expect(TextPostProcessor.process("double right arrow") == "⇒")
+        #expect(TextPostProcessor.process("if and only if") == "⇔")
+        #expect(TextPostProcessor.process("symbol for all") == "∀")
+        #expect(TextPostProcessor.process("symbol there exists") == "∃")
+        // Accents (single letter)
+        #expect(TextPostProcessor.process("x hat") == "x̂")
+        #expect(TextPostProcessor.process("v hat") == "v̂")
+        #expect(TextPostProcessor.process("hat x") == "x̂")
+        #expect(TextPostProcessor.process("x bar") == "x̄")
+        #expect(TextPostProcessor.process("x vector") == "x⃗")
+        #expect(TextPostProcessor.process("vector v") == "v⃗")
+        #expect(TextPostProcessor.process("x tilde") == "x̃")
+        // Guards
+        #expect(TextPostProcessor.process("therefore I agree") == "therefore I agree")
+        #expect(TextPostProcessor.process("because it works") == "because it works")
+        #expect(TextPostProcessor.process("for all people") == "for all people")
+        #expect(TextPostProcessor.process("hat check") == "hat check")
+        #expect(TextPostProcessor.process("bar exam") == "bar exam")
+    }
+
     @Test("Light ITN nabla partial gradient curl infinity")
     func lightITNCalcOperators() {
         #expect(TextPostProcessor.process("nabla") == "∇")

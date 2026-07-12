@@ -28,6 +28,8 @@ enum TextPostProcessor {
         // Pack spoken URL tokens before repetition collapse ("w w w"→"w",
         // "slash slash"→"slash") can destroy them.
         result = packSpokenURL(result)
+        // Letter accents before path tilde packing so "x tilde" → x̃ not "x~".
+        result = applyLetterAccentITN(result)
         // Path prefixes before stutter collapse and generic slash phrase-fixes
         // so "tilde slash" → "~/" (not "tilde/" then bare tilde).
         result = packSpokenPath(result)
@@ -169,11 +171,18 @@ enum TextPostProcessor {
             (#"\s+minus sign\b"#, "-"),
             (#"\s+equals sign\b"#, "="),
             (#"\s+equal sign\b"#, "="),
+            // Multi-word comparisons before bare greater/less than.
+            (#"\bmuch\s+greater\s+than\b"#, "≫"),
+            (#"\bmuch\s+less\s+than\b"#, "≪"),
+            (#"\bless\s+than\s+or\s+equal(?:\s+to)?\b"#, "≤"),
+            (#"\bgreater\s+than\s+or\s+equal(?:\s+to)?\b"#, "≥"),
             (#"\s+greater than\b"#, ">"),
             (#"\s+less than\b"#, "<"),
             (#"\s+pipe\b"#, "|"),
             (#"\s+vertical bar\b"#, "|"),
-            (#"(?:^|\s+)tilde\b"#, "~"),
+            // Bare ~ / ^ via "sign" cue — "x tilde" / "x hat" are letter accents in light ITN.
+            (#"\b(?:tilde\s+sign|symbol\s+tilde)\b"#, "~"),
+            (#"\b(?:caret\s+sign|symbol\s+caret)\b"#, "^"),
             (#"(?:^|\s+)caret\b"#, "^"),
             (#"\s+degree sign\b"#, "°"),
             // Degrees after numbers: handled in applyUnitsITN (after SpokenNumberITN)
@@ -275,7 +284,7 @@ enum TextPostProcessor {
             (#"\bhome\s+(?:forward\s+)?slash\b\s*"#, "~/"),
             // "dot slash" only — word boundary after slash keeps "dot com" alone
             (#"\bdot\s+(?:forward\s+)?slash\b\s*"#, "./"),
-            // Bare tilde at start or after whitespace (path prefix)
+            // Bare tilde path prefix (after letter accents already rewrote "x tilde").
             (#"(?:^|\s+)tilde\b"#, "~"),
         ]
         return pairs.map { (try! NSRegularExpression(pattern: $0.0, options: .caseInsensitive), $0.1) }
@@ -904,6 +913,9 @@ enum TextPostProcessor {
         result = applyLimitAsITN(result)
         // Calc ops: nabla, partial, gradient/divergence/curl, bare infinity
         result = applyCalcOperatorITN(result)
+        // Letter accents before remaining bare-tilde/caret fallout; relations next.
+        result = applyLetterAccentITN(result)
+        result = applyMathRelationITN(result)
         // Cued Greek letters + "N pi" (after numbers so "two pi" → "2π")
         result = applyGreekLetterITN(result)
         // Cardinal ranges after time ranges so "from 3 to 5 pm" is already
@@ -2004,6 +2016,92 @@ enum TextPostProcessor {
             let a = String(result[aRange])
             let b = String(result[bRange])
             result.replaceSubrange(fullRange, with: wrap(a, b))
+        }
+        return result
+    }
+
+    // MARK: - Math relations + letter accents
+
+    /// Phrase → symbol. Multi-word only (safe in free dictation).
+    private static let mathRelationPhrases: [(NSRegularExpression, String)] = {
+        let pairs: [(String, String)] = [
+            (#"\bnot\s+equal(?:s)?\s+to\b"#, "≠"),
+            (#"\bdoes\s+not\s+equal\b"#, "≠"),
+            (#"\bapproximately\s+equal(?:\s+to)?\b"#, "≈"),
+            (#"\bapprox(?:imate(?:ly)?)?\s+equal(?:\s+to)?\b"#, "≈"),
+            (#"\bless\s+than\s+or\s+equal(?:\s+to)?\b"#, "≤"),
+            (#"\bgreater\s+than\s+or\s+equal(?:\s+to)?\b"#, "≥"),
+            (#"\bmuch\s+greater\s+than\b"#, "≫"),
+            (#"\bmuch\s+less\s+than\b"#, "≪"),
+            (#"\bproportional\s+to\b"#, "∝"),
+            (#"\bnot\s+element\s+of\b"#, "∉"),
+            (#"\belement\s+of\b"#, "∈"),
+            (#"\bmember\s+of\b"#, "∈"),
+            (#"\bif\s+and\s+only\s+if\b"#, "⇔"),
+            (#"\bdouble\s+right\s+arrow\b"#, "⇒"),
+            (#"\bright\s+double\s+arrow\b"#, "⇒"),
+            (#"\bleft\s+right\s+double\s+arrow\b"#, "⇔"),
+            // Cued logic words (bare "therefore"/"because" stay prose)
+            (#"\b(?:symbol\s+therefore|therefore\s+sign)\b"#, "∴"),
+            (#"\b(?:symbol\s+because|because\s+sign)\b"#, "∵"),
+            (#"\bsymbol\s+for\s+all\b"#, "∀"),
+            (#"\bsymbol\s+there\s+exists\b"#, "∃"),
+            (#"\bfor\s+all\s+symbol\b"#, "∀"),
+            (#"\bthere\s+exists\s+symbol\b"#, "∃"),
+        ]
+        return pairs.map { pat, rep in
+            (try! NSRegularExpression(pattern: pat, options: .caseInsensitive), rep)
+        }
+    }()
+
+    private static func applyMathRelationITN(_ text: String) -> String {
+        var result = text
+        for (re, rep) in mathRelationPhrases {
+            let range = NSRange(result.startIndex..., in: result)
+            result = re.stringByReplacingMatches(
+                in: result,
+                options: [],
+                range: range,
+                withTemplate: rep
+            )
+        }
+        return result
+    }
+
+    /// Combining accents (Unicode): hat U+0302, bar U+0304, tilde U+0303, vector U+20D7.
+    private static let combiningHat = "\u{0302}"
+    private static let combiningBar = "\u{0304}"
+    private static let combiningTilde = "\u{0303}"
+    private static let combiningVector = "\u{20D7}"
+
+    private static let letterAccentSpecs: [(pattern: NSRegularExpression, mark: String)] = {
+        let specs: [(String, String)] = [
+            (#"\b([A-Za-z])\s+hat\b"#, combiningHat),
+            (#"\bhat\s+([A-Za-z])\b"#, combiningHat),
+            (#"\b([A-Za-z])\s+bar\b"#, combiningBar),
+            (#"\bbar\s+([A-Za-z])\b"#, combiningBar),
+            (#"\b([A-Za-z])\s+tilde\b"#, combiningTilde),
+            (#"\btilde\s+([A-Za-z])\b"#, combiningTilde),
+            (#"\b([A-Za-z])\s+vector\b"#, combiningVector),
+            (#"\bvector\s+([A-Za-z])\b"#, combiningVector),
+        ]
+        return specs.map { pat, mark in
+            (try! NSRegularExpression(pattern: pat, options: .caseInsensitive), mark)
+        }
+    }()
+
+    private static func applyLetterAccentITN(_ text: String) -> String {
+        var result = text
+        for (re, mark) in letterAccentSpecs {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = re.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let letterRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let letter = String(result[letterRange])
+                result.replaceSubrange(fullRange, with: letter + mark)
+            }
         }
         return result
     }
