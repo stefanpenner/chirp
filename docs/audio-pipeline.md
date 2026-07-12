@@ -47,6 +47,7 @@ Coverage:
 - **Ratios** — `N out of M` / `N over M` / `N divided by M` → `N/M` (numeric bounds only)
 - **Math ops** — `N plus/minus/times/equals M` → spaced operators; frequency `N times a day` kept
 - **Powers** — `N squared/cubed`, `N to the power of M`, `N to the Nth power` → unicode superscripts
+- **Roots / abs** — `square root of N` → `√N`; `cube root of N` → `∛N`; `absolute value of N` → `|N|`
 - **Percent** — `N percent` / `N per cent` → `N%`; multi-digit after cardinal ITN
 - **Couple/pair** — `a couple of` / `a pair of` → `2`
 - **Jargon dict seeds** — DevOps, frontend/backend, Terraform, C#, README, …

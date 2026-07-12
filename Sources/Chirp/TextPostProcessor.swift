@@ -904,6 +904,8 @@ enum TextPostProcessor {
         result = applyMathOpsITN(result)
         // Powers after binary ops: "three squared" / "two to the power of three".
         result = applyPowerITN(result)
+        // Roots / abs: "square root of nine" / "absolute value of five".
+        result = applyRootAndAbsoluteITN(result)
         // Sterling/quid before units so "20 pounds sterling" → "£20" not "20 lb sterling".
         // Bare "pounds" stays weight via units; currency needs "sterling" or "quid".
         result = applySterlingCurrencyITN(result)
@@ -1649,6 +1651,76 @@ enum TextPostProcessor {
             }
         }
         return out.isEmpty ? "^" + digits : out
+    }
+
+    /// "(the )?square root of N" / "cube root of N" / "absolute value of N".
+    private static let squareRootITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?square\s+root\s+of\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let cubeRootITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?cube\s+root\s+of\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Absolute value may wrap a signed digit form after SpokenNumberITN ("-20").
+    private static let absoluteValueITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?absolute\s+value\s+of\s+(-?\d{1,9}|"#
+                + #"one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"#
+                + #"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"#
+                + #"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static func applyRootAndAbsoluteITN(_ text: String) -> String {
+        var result = text
+        result = applyPrefixedNumberITN(
+            result,
+            pattern: squareRootITNPattern,
+            wrap: { "√\($0)" }
+        )
+        result = applyPrefixedNumberITN(
+            result,
+            pattern: cubeRootITNPattern,
+            wrap: { "∛\($0)" }
+        )
+        result = applyPrefixedNumberITN(
+            result,
+            pattern: absoluteValueITNPattern,
+            wrap: { "|\($0)|" }
+        )
+        return result
+    }
+
+    /// Shared "… of N" → wrap(digits) for root / absolute.
+    private static func applyPrefixedNumberITN(
+        _ text: String,
+        pattern: NSRegularExpression,
+        wrap: (String) -> String
+    ) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let numRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let digits = rangeDigits(from: String(result[numRange]))
+            result.replaceSubrange(fullRange, with: wrap(digits))
+        }
+        return result
     }
 
     /// Number token shared by currency patterns (digits preferred after SpokenNumberITN).

@@ -655,6 +655,26 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("go to the store") == "go to the store")
     }
 
+    @Test("Light ITN square root cube root absolute value")
+    func lightITNRootsAndAbsolute() {
+        #expect(TextPostProcessor.process("square root of nine") == "√9")
+        #expect(TextPostProcessor.process("the square root of sixteen") == "√16")
+        #expect(TextPostProcessor.process("square root of 25") == "√25")
+        #expect(TextPostProcessor.process("square root of one hundred") == "√100")
+        #expect(TextPostProcessor.process("cube root of eight") == "∛8")
+        #expect(TextPostProcessor.process("the cube root of 27") == "∛27")
+        #expect(TextPostProcessor.process("absolute value of five") == "|5|")
+        #expect(TextPostProcessor.process("the absolute value of minus twenty") == "|-20|"
+            || TextPostProcessor.process("the absolute value of minus twenty") == "|-20|")
+        #expect(TextPostProcessor.process("absolute value of 10") == "|10|")
+        // Guards — prose without a numeric bound
+        #expect(TextPostProcessor.process("root of the problem") == "root of the problem")
+        #expect(TextPostProcessor.process("absolute value of freedom")
+            == "absolute value of freedom")
+        #expect(TextPostProcessor.process("square root beer") == "square root beer"
+            || TextPostProcessor.process("square root beer").contains("root"))
+    }
+
     @Test("Light ITN formats percent and dollars")
     func lightITNPercentCurrency() {
         #expect(TextPostProcessor.process("about 50 percent done") == "about 50% done")
