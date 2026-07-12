@@ -123,7 +123,7 @@ struct SegmentJoinerTests {
         #expect(SegmentJoiner.looksLikeProperContinuation("SwiftUI") == true)
     }
 
-    @Test("discourse openers still sentence-break; mid-clause verbs do not")
+    @Test("discourse openers still sentence-break; open-cue mid-clause verbs do not")
     func realSentenceStillBreaks() {
         // Not a mid-clause continuation verb → sentence break
         #expect(SegmentJoiner.needsSentenceBreak(
@@ -131,12 +131,35 @@ struct SegmentJoinerTests {
             next: "Fortunately this works"
         ))
         #expect(SegmentJoiner.separator(between: "Hello world", and: "Fortunately this works") == ". ")
-        // Mid-clause verb re-capped by ASR after VAD pause → space (not period)
-        #expect(!SegmentJoiner.needsSentenceBreak(
+        // Complete clause + re-capped imperative → sentence break (was wrong: space)
+        #expect(SegmentJoiner.needsSentenceBreak(
             existing: "Hello world",
             next: "Create a new note"
         ))
+        #expect(SegmentJoiner.separator(between: "Hello world", and: "Create a new note") == ". ")
+        // Open cue ("to") + re-capped verb → space (not period)
         #expect(SegmentJoiner.separator(between: "I want to", and: "Create a branch") == " ")
+    }
+
+    @Test("complete clause then re-capped imperative sentence-breaks")
+    func completeClauseThenImperative() {
+        let j = SegmentJoiner.append(existing: "Hello world", next: "Create a new note")
+        #expect(j.full == "Hello world. Create a new note")
+        #expect(j.delta == ". Create a new note")
+        #expect(SegmentJoiner.needsSentenceBreak(existing: "Hello world", next: "Create a new note"))
+        // Short complete answer + new clause
+        let j2 = SegmentJoiner.append(existing: "yes", next: "Create a note")
+        #expect(j2.full == "yes. Create a note")
+    }
+
+    @Test("continuation cue last word still allows mid-clause space")
+    func continuationCueKeepsSpace() {
+        #expect(SegmentJoiner.endsWithContinuationCue("I want to"))
+        #expect(SegmentJoiner.endsWithContinuationCue("please open the"))
+        #expect(!SegmentJoiner.endsWithContinuationCue("Hello world"))
+        #expect(!SegmentJoiner.endsWithContinuationCue("yes"))
+        let j = SegmentJoiner.append(existing: "I need to", next: "Send the report")
+        #expect(j.full == "I need to send the report")
     }
 
     @Test("empty next is a no-op")

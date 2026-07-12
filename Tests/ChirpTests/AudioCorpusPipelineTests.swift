@@ -728,45 +728,73 @@ struct AudioCorpusPipelineTests {
 
     // MARK: - Ranked multi-voice robustness
 
-    /// Same phrase across a few system voices — rank per-voice, budget mean majorWER.
-    @Test("Multi-voice same phrase ranks under budget")
+    /// Free-dictation multi-voice: several short phrases × regional voices.
+    /// Independent phrase×voice pairs (not multi-utterance join). Caps wall
+    /// time vs full corpus×voices while catching free-text accent variance
+    /// that command multi-voice soak never sees.
+    @Test("Multi-voice free dictation phrases rank under budget")
     func multiVoiceRanked() async throws {
         guard let paths = Self.findModelPaths() else {
             print("SKIP: model not found")
             return
         }
 
-        let phrase = "please send the report by friday"
-        let candidates = Self.workingVoices(limit: 5)
+        // Already-green clean-corpus lines only; 4 phrases × ≤4 voices.
+        let phrases: [(id: String, text: String)] = [
+            ("mv_report", "please send the report by friday"),
+            ("mv_hello", "hello world"),
+            ("mv_note", "create a new note"),
+            ("mv_meet", "schedule a meeting for three pm"),
+        ]
+        let candidates = Self.workingVoices(limit: 4)
         var pairs: [(id: String, reference: String, hypothesis: String)] = []
 
         for voice in candidates {
-            let speech: [Float]
-            do {
-                speech = try SpeechAudioGenerator.synthesize(text: phrase, voice: voice)
-            } catch {
-                print("voice \(voice) unavailable, skip")
-                continue
+            for p in phrases {
+                guard let run = try await Self.runPhrase(
+                    id: "\(p.id)_\(voice)",
+                    spoken: p.text,
+                    reference: p.text,
+                    paths: paths,
+                    voice: voice
+                ) else {
+                    print("voice \(voice) phrase \(p.id) skip")
+                    continue
+                }
+                pairs.append((id: run.id, reference: run.reference, hypothesis: run.hypothesis))
+                let sc = TranscriptionScoring.score(
+                    id: run.id,
+                    reference: run.reference,
+                    hypothesis: run.hypothesis
+                )
+                print(String(
+                    format: "free-mv[%@/%@] hyp=\"%@\" majorWER=%.2f",
+                    voice,
+                    p.id,
+                    run.hypothesis,
+                    sc.majorWER
+                ))
             }
-            let samples = SpeechAudioGenerator.withTrailingSilence(speech, seconds: 0.8)
-            let (hyp, _) = try await Self.transcribe(samples: samples, paths: paths)
-            pairs.append((id: "voice_\(voice)", reference: phrase, hypothesis: hyp))
-            print("voice[\(voice)] hyp=\"\(hyp)\"")
         }
 
-        #expect(pairs.count >= 2, "need at least 2 working TTS voices")
+        #expect(pairs.count >= 6, "need ≥6 voice×phrase free-dict runs (got \(pairs.count))")
         let ranking = TranscriptionScoring.rank(pairs)
         print(ranking.leaderboard)
 
         #expect(
             ranking.meanMajorWER <= 0.20,
-            "multi-voice mean majorWER \(ranking.meanMajorWER) exceeds 0.20\n\(ranking.leaderboard)"
+            "free multi-voice mean majorWER \(ranking.meanMajorWER) exceeds 0.20\n\(ranking.leaderboard)"
         )
-        // Best voice should be near-perfect on this clean phrase
+        // Catastrophic misses should be rare on clean TTS
+        let bad = ranking.scores.filter { $0.majorWER > 0.50 }.count
+        #expect(
+            bad <= max(1, pairs.count / 3),
+            "too many free multi-voice misses: \(bad)/\(pairs.count)\n\(ranking.leaderboard)"
+        )
         if let best = ranking.best {
             #expect(
                 best.majorWER <= 0.20,
-                "best voice still majorWER \(best.majorWER): \"\(best.hypothesis)\""
+                "best free multi-voice still majorWER \(best.majorWER): \"\(best.hypothesis)\""
             )
         }
     }

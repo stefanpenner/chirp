@@ -71,21 +71,39 @@ enum SegmentJoiner {
 
     /// True when `next` looks like a new sentence and `existing` does not end with punct.
     /// Dual-tested against specs/SegmentJoin.tla (`nextUpper ∧ ¬nextProper`).
+    /// `nextProper` in product = looksLikeProperContinuation(next, existing:).
     static func needsSentenceBreak(existing: String, next: String) -> Bool {
         guard let first = next.first else { return false }
         // New segment starts with uppercase letter → candidate new sentence
         guard first.isLetter, first.isUppercase else { return false }
         // Existing should end with a letter/digit (not already punct)
         guard let last = existing.last, last.isLetter || last.isNumber else { return false }
-        // Suppress false periods before proper nouns / product names
-        if looksLikeProperContinuation(next) {
+        // Suppress false periods before proper nouns / open mid-clause
+        if looksLikeProperContinuation(next, existing: existing) {
             return false
         }
         return true
     }
 
-    /// Proper-noun / product continuation after mid-clause text (space, not ". ").
-    static func looksLikeProperContinuation(_ next: String) -> Bool {
+    /// Last word of `existing` is a closed-class cue that leaves a clause open
+    /// ("I want **to**", "please open **the**"). Full mid-clause *verb* list is
+    /// not used here — "Hello world" + "Create…" must still sentence-break.
+    static func endsWithContinuationCue(_ existing: String) -> Bool {
+        let trimmed = existing.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let raw = trimmed.split(whereSeparator: \.isWhitespace).last else {
+            return false
+        }
+        let word = raw
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".!?,;:\"'"))
+            .lowercased()
+        return continuationCues.contains(word)
+    }
+
+    /// Proper-noun / product / open mid-clause continuation (space, not ". ").
+    /// When `existing` is provided, mid-clause verbs only continue if the prior
+    /// text ends in a continuation cue ("to", "the", …). Complete clauses get
+    /// a real sentence break before a re-capped imperative.
+    static func looksLikeProperContinuation(_ next: String, existing: String = "") -> Bool {
         let trimmed = next.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
 
@@ -102,23 +120,36 @@ enum SegmentJoiner {
 
         // Single Capitalized / CamelCase token — "Alice", "GitHub", "Xcode".
         // Mid-clause verbs/function words re-capped by ASR after a VAD pause
-        // prefer space join (then downcased in append), not a false period.
+        // prefer space join (then downcased in append) only if clause still open.
         if tokens.count == 1 {
             if midClauseContinuations.contains(first.lowercased()) {
-                return true
+                return endsWithContinuationCue(existing)
             }
             return isProperNameToken(first)
         }
 
         // Multi-word: continuation if first token is a mid-clause starter
-        // ("Create a branch" after "I want to" → space, not ". ").
-        // Discourse openers not in the set still get sentence breaks
-        // ("Fortunately this works" after bare text).
+        // AND existing ends with an open cue ("I want to" + "Create a branch").
+        // Complete clause + re-capped imperative → sentence break
+        // ("Hello world" + "Create a new note" → ". ").
         if midClauseContinuations.contains(first.lowercased()) {
-            return true
+            return endsWithContinuationCue(existing)
         }
         return false
     }
+
+    /// Closed-class last words that leave a clause open (not full verb list).
+    private static let continuationCues: Set<String> = [
+        "the", "a", "an", "my", "our", "your", "their", "his", "her", "its",
+        "this", "that", "these", "those", "and", "or", "but", "so", "if",
+        "when", "while", "because", "with", "without", "for", "to", "from",
+        "into", "about", "after", "before", "as", "than", "then",
+        "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "will", "would", "could", "should", "can", "may",
+        "might", "must",
+        // Light verbs that often open an object / infinitive clause
+        "want", "need", "let", "lets", "please",
+    ]
 
     /// First words that usually continue a clause after a short VAD pause
     /// (ASR often re-capitalizes them). Prefer space join + downcase.

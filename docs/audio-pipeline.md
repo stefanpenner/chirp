@@ -39,6 +39,7 @@ Coverage:
 - **Clean corpus** — 16 golden phrases, mean majorWER ≤ 8%, WER ≤ 12%, CER ≤ 8%, median ≤ 5%, RTF ≤ 0.5
 - **Command soak** — Dragon phrases TTS → parse hit rate ≥ 90% (`CommandPhraseEval.soakMinHitRate`)
 - **Multi-voice command soak** — expanded Dragon subset × US/UK/AU/IE/ZA/IN TTS voices; pooled ≥ 90%, worst voice ≥ 80%
+- **Free multi-voice dictation** — 4 short phrases × ≤4 regional voices; mean majorWER ≤ 20%
 - **Phone digit ITN** — `double`/`triple` + bare `o` expand inside digit runs (`SpokenNumberITN`)
 - **Email ASR near-miss ITN** — `dat`/`period`+TLD, `at the`, `under score` → email/URL packing
 - **Counted command near-miss** — `scratch hat 3 times` → `scratch that 3 times` (template)
