@@ -8,6 +8,7 @@
 // - Digit runs: ≥3 consecutive single-digit units → concatenate ("five five five" → "555")
 //   Short pure runs ("one two") stay words; "oh"/"o" → 0 (leading zeros kept)
 //   "double five" / "triple oh" expand inside a run (phone dictation)
+//   Bare phone-length digit tokens from ASR ("5551212") get dash formatting
 //   Exception: after suite/room/floor/apt/unit/extension/version cues, digit runs of ≥1 convert
 // - Negatives: "minus"/"negative" + number phrase → "-N" (not bare "minus" / "minus sign")
 // - Ordinals: "first" blocked before of/all/class; "twenty first" → 21st always
@@ -204,10 +205,27 @@ enum SpokenNumberITN {
                 }
             }
 
+            // ASR often emits a phone-length digit blob ("5551212") without dashes.
+            if let phone = formatBarePhoneToken(core) {
+                out.append(phone + trailingPunctuation(token))
+                i += 1
+                continue
+            }
+
             out.append(token)
             i += 1
         }
         return out.joined(separator: " ")
+    }
+
+    /// Format a single token of pure digits when it looks like a phone number.
+    /// 7 / 10 / 11-with-leading-1 only — years (4) and short codes stay plain.
+    static func formatBarePhoneToken(_ core: String) -> String? {
+        guard !core.isEmpty, core.allSatisfy(\.isNumber) else { return nil }
+        let formatted = formatPhoneDigits(core)
+        // Only rewrite when dashes were actually added.
+        guard formatted != core else { return nil }
+        return formatted
     }
 
     /// Consume a number phrase after "minus"/"negative"; bare units convert when signed.

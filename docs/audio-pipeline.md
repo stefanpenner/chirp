@@ -40,7 +40,7 @@ Coverage:
 - **Command soak** — Dragon phrases TTS → parse hit rate ≥ 90% (`CommandPhraseEval.soakMinHitRate`)
 - **Multi-voice command soak** — expanded Dragon subset × US/UK/AU/IE/ZA/IN TTS voices; pooled ≥ 90%, worst voice ≥ 80%
 - **Free multi-voice dictation** — 4 short phrases × ≤4 regional voices; mean majorWER ≤ 20%
-- **Phone digit ITN** — `double`/`triple` + bare `o` expand inside digit runs (`SpokenNumberITN`)
+- **Phone digit ITN** — `double`/`triple` + bare `o` expand inside digit runs; ASR digit blobs `5551212` → `555-1212`
 - **Day-first date ITN** — `the fifth of march` → `March 5` (`SpokenDateITN`)
 - **19xx years** — `nineteen ninety nine` → `1999` (standalone + after dates)
 - **Email ASR near-miss ITN** — `dat`/`period`+TLD, `at the`, `under score` → email/URL packing

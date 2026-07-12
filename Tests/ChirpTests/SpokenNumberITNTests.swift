@@ -191,6 +191,21 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("two zero two four") == "2024")
     }
 
+    /// Live ASR often emits a plain digit blob ("Call 5551212.") without dashes.
+    @Test("formats bare phone-length digit tokens from ASR")
+    func barePhoneDigitTokens() {
+        #expect(SpokenNumberITN.apply("call 5551212") == "call 555-1212")
+        #expect(SpokenNumberITN.apply("Call 5551212.") == "Call 555-1212.")
+        #expect(SpokenNumberITN.apply("5551234567") == "555-123-4567")
+        #expect(SpokenNumberITN.apply("18005551212") == "1-800-555-1212")
+        // Already dashed stays
+        #expect(SpokenNumberITN.apply("call 555-1212") == "call 555-1212")
+        // Non-phone lengths untouched
+        #expect(SpokenNumberITN.apply("room 101") == "room 101")
+        #expect(SpokenNumberITN.apply("2024") == "2024")
+        #expect(SpokenNumberITN.apply("55512121") == "55512121") // 8 digits
+    }
+
     @Test("double/triple digit repeats expand in phone-style runs")
     func doubleTripleDigitRuns() {
         // "double five" → two fives inside a run
@@ -232,6 +247,13 @@ struct SpokenNumberITNTests {
 
 @Suite("TextPostProcessor number ITN")
 struct TextPostProcessorNumberITNTests {
+
+    @Test("integrates bare ASR phone digit blobs with dashes")
+    func barePhoneThroughPipeline() {
+        let r = TextPostProcessor.process("Call 5551212.")
+        #expect(r.contains("555-1212"), "got \(r)")
+        #expect(!r.contains("5551212"), "got \(r)")
+    }
 
     @Test("integrates cardinals with dollars and percent")
     func integrated() {
