@@ -49,7 +49,7 @@ Coverage:
 - **Powers** — `N squared/cubed`, `N to the power of M` (incl. negative exp), `N to the Nth power`
 - **Scientific notation** — `N times ten to the power of M` → `N×10ᴹ`; `N e M` → `NeM`
 - **Euler powers** — `e to the power of N` → `eᴺ`
-- **Sum range** — `sum from A to B` → `∑(A…B)` (numeric bounds)
+- **Aggregate ranges** — `sum/product/integral from A to B` → `∑/∏/∫(A…B)` (numeric bounds)
 - **Roots / abs** — `square root of N` → `√N`; `cube root of N` → `∛N`; `absolute value of N` → `|N|`
 - **Factorial / log** — `N factorial` → `N!`; `log of N` / `ln of N` / `log base B of N`
 - **Percent** — `N percent` / `N per cent` → `N%`; multi-digit after cardinal ITN

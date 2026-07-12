@@ -710,14 +710,22 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("give me the e") == "give me the e")
     }
 
-    @Test("Light ITN sum from A to B")
-    func lightITNSumFromTo() {
+    @Test("Light ITN sum product integral from A to B")
+    func lightITNAggregateFromTo() {
         #expect(TextPostProcessor.process("sum from one to ten") == "∑(1…10)")
         #expect(TextPostProcessor.process("sum from 1 to 100") == "∑(1…100)")
         #expect(TextPostProcessor.process("the sum from three to five") == "∑(3…5)")
         #expect(TextPostProcessor.process("sum from twenty to thirty") == "∑(20…30)")
+        #expect(TextPostProcessor.process("product from one to ten") == "∏(1…10)")
+        #expect(TextPostProcessor.process("the product from 2 to 5") == "∏(2…5)")
+        #expect(TextPostProcessor.process("product from three to seven") == "∏(3…7)")
+        #expect(TextPostProcessor.process("integral from zero to one") == "∫(0…1)")
+        #expect(TextPostProcessor.process("the integral from 0 to 10") == "∫(0…10)")
+        #expect(TextPostProcessor.process("integral from one to one hundred") == "∫(1…100)")
         // Guards
         #expect(TextPostProcessor.process("sum from here to there") == "sum from here to there")
+        #expect(TextPostProcessor.process("product from design to ship")
+            == "product from design to ship")
         #expect(TextPostProcessor.process("from one to ten") == "from 1-10"
             || TextPostProcessor.process("from one to ten").contains("1"))
     }

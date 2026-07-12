@@ -764,7 +764,7 @@ enum TextPostProcessor {
     /// Digit or bare spoken unit/decade for cardinal ranges (after SpokenNumberITN
     /// most multi-word numbers are already digits; bare "ten" may remain).
     private static let cardinalRangeNumberToken =
-        #"(\d{1,6}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"#
+        #"(\d{1,6}|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"#
 
     /// Mantissa for scientific notation (allows decimals after SpokenNumberITN).
     private static let sciMantissaToken =
@@ -897,9 +897,9 @@ enum TextPostProcessor {
         result = SpokenDateITN.apply(result)
         // Digit clock form after numbers: "3 30 pm" → "3:30 p.m."
         result = applyTimeITN(result)
-        // Sum ranges before bare "from A to B" so "sum from 1 to 10" is not
-        // collapsed to "sum from 1-10" by cardinal-range ITN.
-        result = applySumFromToITN(result)
+        // Aggregate ranges before bare "from A to B" so "sum/product/integral
+        // from 1 to 10" is not collapsed to "from 1-10" by cardinal-range ITN.
+        result = applyAggregateFromToITN(result)
         // Cardinal ranges after time ranges so "from 3 to 5 pm" is already
         // "from 3-5 p.m." and not stolen as "from 3-5" + leftover "pm".
         // "from ten to twenty" / "from 10 to 20" → "from 10-20".
@@ -1588,6 +1588,7 @@ enum TextPostProcessor {
 
     private static func rangeDigits(from raw: String) -> String {
         let key = raw.lowercased()
+        if key == "zero" { return "0" }
         return extendedSpokenNumbers[key] ?? raw
     }
 
@@ -1696,10 +1697,10 @@ enum TextPostProcessor {
         )
     }()
 
-    /// "sum from one to ten" / "the sum from 1 to 100" → "∑(1…10)".
-    private static let sumFromToITNPattern: NSRegularExpression = {
+    /// "sum/product/integral from A to B" → ∑/∏/∫(A…B).
+    private static let aggregateFromToITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(?:the\s+)?sum\s+from\s+"#
+            pattern: #"\b(?:the\s+)?(sum|product|integral)\s+from\s+"#
                 + cardinalRangeNumberToken
                 + #"\s+to\s+"#
                 + cardinalRangeNumberToken
@@ -1707,6 +1708,12 @@ enum TextPostProcessor {
             options: .caseInsensitive
         )
     }()
+
+    private static let aggregateFromToSymbols: [String: String] = [
+        "sum": "∑",
+        "product": "∏",
+        "integral": "∫",
+    ]
 
     private static func applyENotationITN(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
@@ -1725,19 +1732,23 @@ enum TextPostProcessor {
         return result
     }
 
-    private static func applySumFromToITN(_ text: String) -> String {
+    private static func applyAggregateFromToITN(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
-        let matches = sumFromToITNPattern.matches(in: text, range: range)
+        let matches = aggregateFromToITNPattern.matches(in: text, range: range)
         guard !matches.isEmpty else { return text }
         var result = text
         for match in matches.reversed() {
-            guard match.numberOfRanges >= 3,
-                  let loRange = Range(match.range(at: 1), in: result),
-                  let hiRange = Range(match.range(at: 2), in: result),
+            // Groups: 1=kind, 2=lo, 3=hi (cardinal tokens each capture)
+            guard match.numberOfRanges >= 4,
+                  let kindRange = Range(match.range(at: 1), in: result),
+                  let loRange = Range(match.range(at: 2), in: result),
+                  let hiRange = Range(match.range(at: 3), in: result),
                   let fullRange = Range(match.range, in: result) else { continue }
+            let kind = String(result[kindRange]).lowercased()
+            guard let sym = aggregateFromToSymbols[kind] else { continue }
             let lo = rangeDigits(from: String(result[loRange]))
             let hi = rangeDigits(from: String(result[hiRange]))
-            result.replaceSubrange(fullRange, with: "∑(\(lo)…\(hi))")
+            result.replaceSubrange(fullRange, with: "\(sym)(\(lo)…\(hi))")
         }
         return result
     }
