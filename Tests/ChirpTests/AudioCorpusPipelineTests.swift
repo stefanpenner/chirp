@@ -171,16 +171,33 @@ struct AudioCorpusPipelineTests {
 
     /// Pick a working system TTS voice (US English preferred).
     private static func workingVoice() -> String? {
-        let voices: [String?] = ["Samantha", "Alex", "Daniel", nil]
-        for v in voices {
+        workingVoices(limit: 1).first
+    }
+
+    /// Probe candidate `say` voices; return up to `limit` that synthesize.
+    private static func workingVoices(
+        candidates: [String] = CommandPhraseEval.multiVoiceCandidates,
+        limit: Int = 8
+    ) -> [String] {
+        var out: [String] = []
+        for v in candidates {
+            guard out.count < limit else { break }
             do {
                 _ = try SpeechAudioGenerator.synthesize(text: "test", voice: v)
-                return v
+                out.append(v)
             } catch {
                 continue
             }
         }
-        return nil
+        if out.isEmpty {
+            // System default
+            do {
+                _ = try SpeechAudioGenerator.synthesize(text: "test", voice: nil)
+            } catch {
+                return []
+            }
+        }
+        return out
     }
 
     /// Generate speech → trailing silence → transcribe → scored tuple + timing.
@@ -1134,6 +1151,85 @@ struct AudioCorpusPipelineTests {
         #expect(
             rate >= CommandPhraseEval.soakMinHitRate,
             "command parse hitRate \(rate) below \(CommandPhraseEval.soakMinHitRate)\n\(detail)"
+        )
+    }
+
+    /// Multi-voice command soak: same Dragon subset across TTS voices.
+    /// SOTA voice-agent eval: command hit rate under speaker/voice variance.
+    @Test("Command phrase multi-voice soak: TTS voices → ASR → parse")
+    func commandPhraseMultiVoiceSoak() async throws {
+        guard let paths = Self.findModelPaths() else {
+            print("SKIP: model not found")
+            return
+        }
+        let voices = Self.workingVoices(limit: 4)
+        guard voices.count >= CommandPhraseEval.multiVoiceMinVoices else {
+            print("SKIP: need ≥\(CommandPhraseEval.multiVoiceMinVoices) TTS voices, got \(voices.count)")
+            return
+        }
+        FormatSettings.resetTestOverrides()
+        TextPostProcessor.resetSessionFormatState()
+
+        var trialsByVoice: [String: [CommandPhraseEval.Trial]] = [:]
+        var allTrials: [CommandPhraseEval.Trial] = []
+
+        for voice in voices {
+            var voiceTrials: [CommandPhraseEval.Trial] = []
+            for item in CommandPhraseEval.multiVoiceSoakPhrases {
+                guard let run = try await Self.runPhrase(
+                    id: "\(item.id)_\(voice)",
+                    spoken: item.spoken,
+                    reference: item.spoken,
+                    paths: paths,
+                    voice: voice
+                ) else { continue }
+                let trial = CommandPhraseEval.Trial(hyp: run.hypothesis, expected: item.expected)
+                let ok = CommandPhraseEval.hit(trial)
+                print(String(
+                    format: "mv[%@/%@] spoken=\"%@\" hyp=\"%@\" hit=%@",
+                    voice,
+                    item.id,
+                    item.spoken,
+                    run.hypothesis,
+                    ok ? "yes" : "no"
+                ))
+                voiceTrials.append(trial)
+                allTrials.append(trial)
+            }
+            if !voiceTrials.isEmpty {
+                trialsByVoice[voice] = voiceTrials
+            }
+        }
+
+        #expect(
+            trialsByVoice.count >= CommandPhraseEval.multiVoiceMinVoices,
+            "need trials from ≥\(CommandPhraseEval.multiVoiceMinVoices) voices"
+        )
+        #expect(allTrials.count >= 8, "too few multi-voice trials (\(allTrials.count))")
+
+        let pooled = CommandPhraseEval.multiVoicePooledHitRate(allTrials)
+        let worst = CommandPhraseEval.minPerVoiceHitRate(trialsByVoice: trialsByVoice)
+        for (voice, trials) in trialsByVoice.sorted(by: { $0.key < $1.key }) {
+            let r = CommandPhraseEval.hitRate(trials)
+            print(String(format: "multi-voice[%@] hitRate=%.0f%% n=%d", voice, r * 100, trials.count))
+        }
+        print(String(
+            format: "multi-voice pooled=%.0f%% (budget ≥ %.0f%%) worstVoice=%.0f%% (floor ≥ %.0f%%) voices=%d n=%d",
+            pooled * 100,
+            CommandPhraseEval.multiVoiceSoakMinHitRate * 100,
+            worst * 100,
+            CommandPhraseEval.multiVoiceMinPerVoiceHitRate * 100,
+            trialsByVoice.count,
+            allTrials.count
+        ))
+
+        #expect(
+            pooled >= CommandPhraseEval.multiVoiceSoakMinHitRate,
+            "multi-voice pooled hitRate \(pooled) below \(CommandPhraseEval.multiVoiceSoakMinHitRate)"
+        )
+        #expect(
+            worst >= CommandPhraseEval.multiVoiceMinPerVoiceHitRate,
+            "worst voice hitRate \(worst) below \(CommandPhraseEval.multiVoiceMinPerVoiceHitRate)"
         )
     }
 }

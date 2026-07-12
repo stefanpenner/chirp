@@ -66,4 +66,35 @@ struct CommandPhraseEvalTests {
         #expect(CommandPhraseEval.soakMinHitRate >= 0.5)
         #expect(CommandPhraseEval.soakMinHitRate <= 1.0)
     }
+
+    @Test("multi-voice soak subset is consistent and budgets ordered")
+    func multiVoiceSoakConfig() {
+        #expect(CommandPhraseEval.multiVoiceSoakPhrases.count >= 6)
+        #expect(CommandPhraseEval.multiVoiceCandidates.count >= 2)
+        #expect(CommandPhraseEval.multiVoiceMinVoices >= 2)
+        #expect(
+            CommandPhraseEval.multiVoiceSoakMinHitRate
+                <= CommandPhraseEval.soakMinHitRate
+        )
+        #expect(
+            CommandPhraseEval.multiVoiceMinPerVoiceHitRate
+                <= CommandPhraseEval.multiVoiceSoakMinHitRate
+        )
+        for item in CommandPhraseEval.multiVoiceSoakPhrases {
+            #expect(DictationCommand.parse(item.spoken) == item.expected)
+        }
+    }
+
+    @Test("minPerVoiceHitRate takes the worst voice")
+    func minPerVoiceHitRate() {
+        let good = CommandPhraseEval.Trial(hyp: "scratch that", expected: .scratchThat(count: 1))
+        let bad = CommandPhraseEval.Trial(hyp: "hello", expected: .scratchThat(count: 1))
+        let byVoice = [
+            "A": [good, good],
+            "B": [good, bad],
+        ]
+        #expect(CommandPhraseEval.multiVoicePooledHitRate(byVoice.values.flatMap { $0 }) == 0.75)
+        #expect(abs(CommandPhraseEval.minPerVoiceHitRate(trialsByVoice: byVoice) - 0.5) < 1e-9)
+        #expect(CommandPhraseEval.minPerVoiceHitRate(trialsByVoice: [:]) == 1.0)
+    }
 }

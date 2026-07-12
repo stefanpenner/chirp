@@ -127,6 +127,46 @@ enum CommandPhraseEval {
     /// Raised after fuzzy full-utterance repair (was 0.80).
     static let soakMinHitRate: Double = 0.90
 
+    /// Core subset for multi-voice soak (latency × voices). High-frequency Dragon.
+    static let multiVoiceSoakPhrases: [(id: String, spoken: String, expected: DictationCommand)] = [
+        ("mv_scratch", "scratch that", .scratchThat(count: 1)),
+        ("mv_select", "select that", .selectThat),
+        ("mv_again", "select again", .selectAgain),
+        ("mv_escape", "press escape", .pressEscape(count: 1)),
+        ("mv_cap", "cap that", .capThat),
+        ("mv_copy", "copy that", .copyThat),
+        ("mv_paste", "paste that", .pasteThat),
+        ("mv_undo", "undo that", .scratchThat(count: 1)),
+    ]
+
+    /// Candidate macOS `say` voices for multi-voice soak (order = preference).
+    static let multiVoiceCandidates: [String] = [
+        "Samantha", "Alex", "Daniel", "Victoria", "Karen",
+    ]
+
+    /// Overall multi-voice command hit budget (pooled trials). Slightly below
+    /// single-voice soak — acoustic variance across TTS voices.
+    static let multiVoiceSoakMinHitRate: Double = 0.85
+
+    /// Worst single voice must still clear this floor.
+    static let multiVoiceMinPerVoiceHitRate: Double = 0.70
+
+    /// Minimum distinct TTS voices required for a multi-voice soak to count.
+    static let multiVoiceMinVoices = 2
+
+    /// Pooled hit rate (same as `hitRate` on flattened trials).
+    static func multiVoicePooledHitRate(_ trials: [Trial]) -> Double {
+        hitRate(trials)
+    }
+
+    /// Minimum hit rate among voice groups. Empty → 1.0.
+    static func minPerVoiceHitRate(
+        trialsByVoice: [String: [Trial]]
+    ) -> Double {
+        guard !trialsByVoice.isEmpty else { return 1.0 }
+        return trialsByVoice.values.map { hitRate($0) }.min() ?? 1.0
+    }
+
     /// Command-bias hotwords that must parse as commands (excludes content/open).
     static func commandBiasPhrases(
         from hotwords: [String] = CommandHotwords.phrases

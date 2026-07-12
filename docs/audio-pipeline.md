@@ -38,6 +38,7 @@ Coverage:
 
 - **Clean corpus** — 16 golden phrases, mean majorWER ≤ 8%, WER ≤ 12%, CER ≤ 8%, median ≤ 5%, RTF ≤ 0.5
 - **Command soak** — Dragon phrases TTS → parse hit rate ≥ 90% (`CommandPhraseEval.soakMinHitRate`)
+- **Multi-voice command soak** — core Dragon subset × TTS voices; pooled ≥ 85%, worst voice ≥ 70%
 - **AppState E2E** — MockAudioRecorder → typed text, ranked subset
 - **Silence** — no hallucination (WER 0 against empty ref)
 - **Noisy** — 15 dB SNR, 6 phrases, mean majorWER ≤ 40%, WER ≤ 55%
@@ -152,6 +153,7 @@ near-miss hyps; always-on). Full-utterance ASR repair: `CommandNearMiss`
 (exact dumps, glue expand, starter-gated Levenshtein ≤1) before parse —
 fuzzy unique-winner dual `FuzzyCommand.tla`. Live soak:
 `AudioCorpusPipelineTests` `commandPhraseSoak` (TTS → ASR → parse; budget ≥ 90%).
+Multi-voice: `commandPhraseMultiVoiceSoak` (core subset × voices; pooled ≥ 85%).
 Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** / **correct that** — multi-level undo (`EditStack`)
 - **scratch that N times** / **undo that N times** — undo last N phrases in one utterance (`ScratchThatN.tla`)
