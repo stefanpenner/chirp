@@ -41,6 +41,7 @@ Coverage:
 - **Multi-voice command soak** — expanded Dragon subset × US/UK/AU/IE/ZA/IN TTS voices; pooled ≥ 90%, worst voice ≥ 80%
 - **Free multi-voice dictation** — 4 short phrases × ≤4 regional voices; mean majorWER ≤ 20%
 - **Phone digit ITN** — `double`/`triple` + bare `o` expand inside digit runs (`SpokenNumberITN`)
+- **Day-first date ITN** — `the fifth of march` → `March 5` (`SpokenDateITN`)
 - **Email ASR near-miss ITN** — `dat`/`period`+TLD, `at the`, `under score` → email/URL packing
 - **Counted command near-miss** — `scratch hat 3 times` → `scratch that 3 times` (template)
 - **DecodeReject** — multi-word near-silence dumps without log-probs rejected (Parakeet often nil scores)

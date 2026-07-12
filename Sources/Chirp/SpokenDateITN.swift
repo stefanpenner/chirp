@@ -3,11 +3,13 @@
 //
 // Examples:
 //   "march fifth" → "March 5"
+//   "the fifth of march" → "March 5" (day-first)
 //   "july 15th twenty twenty four" → "July 15, 2024"
 //   "in twenty twenty six" → "in 2026"
 //   "tomorrow" / "next monday" → absolute dates (clock injectable for tests)
 //
 // Safe: month alone ("march on") is not rewritten; needs a day or year span.
+// Day-first requires "of" + month ("the end of march" stays).
 
 import Foundation
 
@@ -88,6 +90,13 @@ enum SpokenDateITN {
         var i = 0
         while i < parts.count {
             let core = normalize(parts[i])
+
+            // Day-first: "(the)? fifth of march [year]" (common free dictation)
+            if let (formatted, consumed) = parseDayFirstDate(parts: parts, start: i) {
+                out.append(formatted)
+                i += consumed
+                continue
+            }
 
             // Month + optional "the" + day + optional year
             if let monthName = months[core] {
@@ -203,7 +212,49 @@ enum SpokenDateITN {
         }
     }
 
-    // MARK: - Month + day (+ year)
+    // MARK: - Day-first + Month + day (+ year)
+
+    /// "(the)? <day> of <month> [year]" → "March 5" / "March 5, 2024".
+    /// Requires a real day token and a month after "of" so "the end of march"
+    /// and "the first of all" stay conversational.
+    private static func parseDayFirstDate(
+        parts: [String],
+        start: Int
+    ) -> (String, Int)? {
+        var j = start
+        guard j < parts.count else { return nil }
+
+        // Optional leading "the"
+        if normalize(parts[j]) == "the" {
+            j += 1
+            guard j < parts.count else { return nil }
+        }
+
+        guard let (day, dayConsumed) = parseDay(parts: parts, start: j) else {
+            return nil
+        }
+        j += dayConsumed
+        guard j < parts.count, normalize(parts[j]) == "of" else { return nil }
+        j += 1
+        guard j < parts.count, let monthName = months[normalize(parts[j])] else {
+            return nil
+        }
+        j += 1
+
+        var year: Int?
+        if j < parts.count, let (y, yc) = parseYear(parts: parts, start: j) {
+            year = y
+            j += yc
+        }
+
+        let trailing = trailingPunct(parts[j - 1])
+        var formatted = "\(monthName) \(day)"
+        if let y = year {
+            formatted += ", \(y)"
+        }
+        formatted += trailing
+        return (formatted, j - start)
+    }
 
     private static func parseMonthDate(
         parts: [String],

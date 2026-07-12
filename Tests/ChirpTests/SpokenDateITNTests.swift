@@ -15,6 +15,28 @@ struct SpokenDateITNTests {
         #expect(SpokenDateITN.apply("on april third we meet") == "on April 3 we meet")
     }
 
+    /// Day-first spoken form: "the fifth of march" (common free dictation).
+    @Test("day of month (day-first)")
+    func dayOfMonth() {
+        #expect(SpokenDateITN.apply("the fifth of march") == "March 5")
+        #expect(SpokenDateITN.apply("fifth of march") == "March 5")
+        #expect(SpokenDateITN.apply("the fifteenth of july") == "July 15")
+        #expect(SpokenDateITN.apply("the 15th of july") == "July 15")
+        #expect(SpokenDateITN.apply("twenty first of march") == "March 21")
+        #expect(
+            SpokenDateITN.apply("the fifth of march twenty twenty four")
+                == "March 5, 2024"
+        )
+        #expect(
+            SpokenDateITN.apply("meeting on the fifteenth of july twenty twenty six")
+                == "meeting on July 15, 2026"
+        )
+        // Guards: not a date
+        #expect(SpokenDateITN.apply("the end of march") == "the end of march")
+        #expect(SpokenDateITN.apply("the first of all") == "the first of all")
+        #expect(SpokenDateITN.apply("a lot of may") == "a lot of may")
+    }
+
     @Test("month day after ordinal ITN digit form")
     func monthDayDigit() {
         #expect(SpokenDateITN.apply("march 15th") == "March 15")
@@ -111,6 +133,9 @@ struct TextPostProcessorDateITNTests {
         let r = TextPostProcessor.process("meeting on march fifteenth twenty twenty four")
         #expect(r.contains("March 15"), "got \(r)")
         #expect(r.contains("2024"), "got \(r)")
+        let dayFirst = TextPostProcessor.process("due the fifth of march twenty twenty four")
+        #expect(dayFirst.contains("March 5"), "got \(dayFirst)")
+        #expect(dayFirst.contains("2024"), "got \(dayFirst)")
     }
 
     @Test("keeps twenty twenty for year (no stutter collapse)")
