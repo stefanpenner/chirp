@@ -50,6 +50,8 @@ enum CommandPhraseEval {
         Trial(hyp: "scratched that", expected: .scratchThat(count: 1)),
         Trial(hyp: "correct that", expected: .scratchThat(count: 1)),
         Trial(hyp: "scratch that 3 times", expected: .scratchThat(count: 3)),
+        Trial(hyp: "scratch hat 3 times", expected: .scratchThat(count: 3)), // counted that-slot
+        Trial(hyp: "scrap hat two times", expected: .scratchThat(count: 2)),
         // Select
         Trial(hyp: "select that", expected: .selectThat),
         Trial(hyp: "selected that", expected: .selectThat),

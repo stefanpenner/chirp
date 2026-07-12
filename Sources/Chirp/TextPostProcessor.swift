@@ -202,6 +202,16 @@ enum TextPostProcessor {
             (#"\bone and a half\b"#, "1½"),
             // Spoken web/domain fragments (email "local at host dots" handled in applySpokenEmail)
             (#"\s+dot com\b"#, ".com"),
+            // ASR: "dat" ≈ "dot" for common TLDs (Parakeet dump)
+            (#"\s+dat com\b"#, ".com"),
+            (#"\s+dat org\b"#, ".org"),
+            (#"\s+dat net\b"#, ".net"),
+            (#"\s+dat io\b"#, ".io"),
+            // "period com" only with known TLD (not mid-sentence content "period")
+            (#"\s+period com\b"#, ".com"),
+            (#"\s+period org\b"#, ".org"),
+            (#"\s+period net\b"#, ".net"),
+            (#"\s+period io\b"#, ".io"),
             (#"\s+dot org\b"#, ".org"),
             (#"\s+dot net\b"#, ".net"),
             (#"\s+dot io\b"#, ".io"),
@@ -311,14 +321,24 @@ enum TextPostProcessor {
         return result
     }
 
+    /// Known TLDs for spoken "period <tld>" host connectors (ASR ≈ "dot").
+    private static let spokenEmailTlds = "com|org|net|io|edu|gov|co|uk|us|me|app|dev|ai|info"
+
     /// "john at example dot com" / "john underscore smith at …" → email.
-    /// Local may include spoken connectors (dot / underscore / plus).
-    /// Requires ≥1 spoken "dot" in host so "meet at noon" stays conversational.
+    /// Local connectors: dot|dat|underscore|under score|plus.
+    /// Host: spoken dot/dat chains, or "period <tld>" (TLD-gated).
+    /// Optional "at the" (ASR often inserts the). Requires a host connector so
+    /// "meet at noon" stays conversational.
     private static let spokenEmailPattern: NSRegularExpression = {
-        try! NSRegularExpression(
-            pattern: #"\b(\w+(?:\s+(?:dot|underscore|plus)\s+\w+)*)\s+at\s+((?:\w+\s+dot\s+)+\w+)\b"#,
-            options: .caseInsensitive
-        )
+        let tld = spokenEmailTlds
+        // Host: (word (dot|dat) )+ word  OR  word period <tld>
+        let host =
+            #"(?:(?:\w+\s+(?:dot|dat)\s+)+\w+|\w+\s+period\s+(?:"# + tld + #"))"#
+        let local =
+            #"\w+(?:\s+(?:dot|dat|underscore|under\s+score|plus)\s+\w+)*"#
+        let pattern =
+            #"\b("# + local + #")\s+at(?:\s+the)?\s+("# + host + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }()
 
     /// Utterances Parakeet/Whisper-class models often emit from silence/noise alone.
@@ -433,7 +453,7 @@ enum TextPostProcessor {
             let local = joinSpokenLocalPart(localSpoken)
             let hostSpoken = String(result[hostRange])
             let host = hostSpoken.replacingOccurrences(
-                of: #"\s+dot\s+"#,
+                of: #"\s+(?:dot|dat|period)\s+"#,
                 with: ".",
                 options: [.regularExpression, .caseInsensitive]
             )
@@ -446,8 +466,9 @@ enum TextPostProcessor {
     private static func joinSpokenLocalPart(_ spoken: String) -> String {
         var s = spoken
         let connectors: [(String, String)] = [
+            (#"\s+under\s+score\s+"#, "_"),
             (#"\s+underscore\s+"#, "_"),
-            (#"\s+dot\s+"#, "."),
+            (#"\s+(?:dot|dat)\s+"#, "."),
             (#"\s+plus\s+"#, "+"),
         ]
         for (pattern, replacement) in connectors {

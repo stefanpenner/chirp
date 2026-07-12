@@ -137,6 +137,10 @@ enum CommandNearMiss {
         if let fixed = fullUtteranceRepairs[key] {
             return fixed
         }
+        // Counted-N: "scratch hat 3 times" → "scratch that 3 times" (template, not map).
+        if let counted = repairCountedThatSlot(key) {
+            return counted
+        }
         // Collapse glued multi-word commands: "selectthat" → "select that"
         if let expanded = expandGlued(key) {
             return expanded
@@ -146,6 +150,48 @@ enum CommandNearMiss {
             return fuzzy
         }
         return text
+    }
+
+    /// Verbs that take "that" and support Dragon "… N times" (scratch/undo/redo).
+    private static let countedThatVerbs: Set<String> = [
+        "scratch", "scrap", "undo", "correct", "fix", "redo",
+    ]
+
+    /// Second-token ASR aliases for "that" on counted commands only.
+    private static let thatSlotAliases: Set<String> = [
+        "hat", "dat", "it",
+    ]
+
+    /// Spoken / digit counts accepted before "times" (aligned with matchCounted).
+    private static let countedNTokens: Set<String> = [
+        "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+        "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        "eleven", "twelve", "twice", "thrice",
+    ]
+
+    /// Full-utterance only: `VERB (hat|dat|it) N times` → `VERB that N times`.
+    /// Leaves free dictation mid-sentence alone (repair only sees whole hyp).
+    static func repairCountedThatSlot(_ key: String) -> String? {
+        let words = key.split(separator: " ").map(String.init)
+        guard words.count == 4,
+              countedThatVerbs.contains(words[0]),
+              thatSlotAliases.contains(words[1]),
+              words[3] == "times" || words[3] == "time"
+        else { return nil }
+        let n = words[2]
+        let nOk =
+            countedNTokens.contains(n)
+            || (n.allSatisfy(\.isNumber) && (Int(n) ?? 0) >= 2)
+        guard nOk else { return nil }
+        // Canonical heads that matchCounted / matchExact already accept.
+        let head: String
+        switch words[0] {
+        case "redo": head = "redo"
+        case "undo": head = "undo"
+        case "scrap", "correct", "fix", "scratch": head = "scratch"
+        default: head = words[0]
+        }
+        return "\(head) that \(n) times"
     }
 
     /// Known command surfaces without spaces (for glue repair).

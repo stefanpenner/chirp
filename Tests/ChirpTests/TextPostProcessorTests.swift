@@ -259,6 +259,21 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("look at this") == "look at this")
     }
 
+    /// ASR dumps: dat≈dot, period+TLD, "at the", "under score".
+    @Test("Spoken email ASR near-misses")
+    func spokenEmailNearMisses() {
+        #expect(TextPostProcessor.process("john at example dat com") == "john@example.com")
+        #expect(TextPostProcessor.process("visit example dat com") == "visit example.com")
+        #expect(TextPostProcessor.process("john at example period com") == "john@example.com")
+        #expect(TextPostProcessor.process("john at the example dot com") == "john@example.com")
+        #expect(TextPostProcessor.process("john under score smith at example dot com")
+                == "john_smith@example.com")
+        // Conversational "at" / content "period" must not steal
+        #expect(TextPostProcessor.process("meet at noon") == "meet at noon")
+        #expect(TextPostProcessor.process("look at this") == "look at this")
+        #expect(TextPostProcessor.process("the period is over") == "the period is over")
+    }
+
     @Test("Expanded spoken punctuation")
     func expandedPunctuation() {
         #expect(TextPostProcessor.process("items colon one") == "items: one")

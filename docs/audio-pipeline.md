@@ -40,6 +40,8 @@ Coverage:
 - **Command soak** — Dragon phrases TTS → parse hit rate ≥ 90% (`CommandPhraseEval.soakMinHitRate`)
 - **Multi-voice command soak** — expanded Dragon subset × US/UK/AU/IE/ZA/IN TTS voices; pooled ≥ 90%, worst voice ≥ 80%
 - **Phone digit ITN** — `double`/`triple` + bare `o` expand inside digit runs (`SpokenNumberITN`)
+- **Email ASR near-miss ITN** — `dat`/`period`+TLD, `at the`, `under score` → email/URL packing
+- **Counted command near-miss** — `scratch hat 3 times` → `scratch that 3 times` (template)
 - **DecodeReject** — multi-word near-silence dumps without log-probs rejected (Parakeet often nil scores)
 - **AppState E2E** — MockAudioRecorder → typed text, ranked subset
 - **Silence** — no hallucination (WER 0 against empty ref)

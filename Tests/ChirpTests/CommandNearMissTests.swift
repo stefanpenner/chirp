@@ -68,6 +68,20 @@ struct CommandNearMissTests {
         #expect(DictationCommand.parse("selectagain") == .selectAgain)
     }
 
+    /// Counted-N ASR: "hat"/"dat" for "that" before N times (not only bare dumps).
+    @Test("counted that-slot near-misses repair")
+    func countedThatSlot() {
+        #expect(CommandNearMiss.repair("scratch hat 3 times") == "scratch that 3 times")
+        #expect(DictationCommand.parse("scratch hat 3 times") == .scratchThat(count: 3))
+        #expect(DictationCommand.parse("scrap hat two times") == .scratchThat(count: 2))
+        #expect(DictationCommand.parse("undo hat 3 times") == .scratchThat(count: 3))
+        #expect(DictationCommand.parse("redo hat 2 times") == .redoThat(count: 2))
+        #expect(DictationCommand.parse("press escape 3 times") == .pressEscape(count: 3))
+        // Free dictation multi-clause stays out of full-utterance repair
+        #expect(CommandNearMiss.repair("please scratch hat 3 times") == "please scratch hat 3 times")
+        #expect(DictationCommand.parse("scratch hat 3 times then save") == .none)
+    }
+
     @Test("free dictation mid-phrase is not repaired")
     func freeDictationUntouched() {
         let free = "please cap that bottle for me"
