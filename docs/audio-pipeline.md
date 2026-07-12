@@ -41,6 +41,7 @@ Coverage:
 - **Multi-voice command soak** — expanded Dragon subset × US/UK/AU/IE/ZA/IN TTS voices; pooled ≥ 90%, worst voice ≥ 80%
 - **Free multi-voice dictation** — 4 short phrases × ≤4 regional voices; mean majorWER ≤ 20%
 - **Phone digit ITN** — `double`/`triple` + bare `o` expand inside digit runs; ASR digit blobs `5551212` → `555-1212`
+- **Dozen ITN** — `two dozen` → `24`, `half a dozen` → `6`; chapter/gate/pin force bare units
 - **Clock half/quarter/minutes** — `half past three` / `ten to three` → `3:30` / `2:50`
 - **Dict tech/social seeds** — `you tube`, `wi fi`, `linked in`, `face book`, …
 - **Day-first date ITN** — `the fifth of march` → `March 5` (`SpokenDateITN`)

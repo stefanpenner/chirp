@@ -9,7 +9,8 @@
 //   Short pure runs ("one two") stay words; "oh"/"o" → 0 (leading zeros kept)
 //   "double five" / "triple oh" expand inside a run (phone dictation)
 //   Bare phone-length digit tokens from ASR ("5551212") get dash formatting
-//   Exception: after suite/room/floor/apt/unit/extension/version cues, digit runs of ≥1 convert
+//   "N dozen" → N×12; "a dozen" / "half (a) dozen" → 12 / 6
+//   Exception: after suite/room/floor/chapter/gate/… cues, digit runs of ≥1 convert
 // - Negatives: "minus"/"negative" + number phrase → "-N" (not bare "minus" / "minus sign")
 // - Ordinals: "first" blocked before of/all/class; "twenty first" → 21st always
 // Dual-tested via SpokenNumberITNTests (no TLA — pure String→String).
@@ -17,10 +18,13 @@
 import Foundation
 
 enum SpokenNumberITN {
-    /// Cues that force bare-unit + short digit-run conversion (address / version).
+    /// Cues that force bare-unit + short digit-run conversion (address / version / media).
     private static let forceNumberCues: Set<String> = [
         "suite", "apartment", "apt", "unit", "room", "floor", "extension", "ext",
         "version",
+        // Free-dict labels: "chapter five", "gate twelve", "pin four five six seven"
+        "chapter", "page", "gate", "aisle", "channel", "episode", "season",
+        "pin", "code",
     ]
 
     /// Count nouns after a number force bare-unit conversion ("ten items" → "10 items").
@@ -187,6 +191,22 @@ enum SpokenNumberITN {
                 }
             }
 
+            // half (a) dozen → 6; a dozen → 12 (not numberWords openers)
+            if core == "half" {
+                if let rewritten = tryConsumeHalfDozen(parts: parts, start: i) {
+                    out.append(rewritten.text)
+                    i = rewritten.nextIndex
+                    continue
+                }
+            }
+            if core == "a" {
+                if let rewritten = tryConsumeADozen(parts: parts, start: i) {
+                    out.append(rewritten.text)
+                    i = rewritten.nextIndex
+                    continue
+                }
+            }
+
             // Cardinal multi-token / teen / decade / digit-run
             // "double"/"triple" start phone-style runs (not bare numberWords).
             if numberWords.contains(core) || digitRepeaters[core] != nil {
@@ -282,12 +302,18 @@ enum SpokenNumberITN {
         let afterQuantity = !nextCore.isEmpty && quantityNouns.contains(nextCore)
         // Frequency: "three times a day" / "five times an hour" — not bare "three times".
         let afterFrequency = isFrequencyTimesAPeriod(parts: parts, afterNumber: j)
-        let allowBare = forceConvert || afterQuantity || afterFrequency
+        // "two dozen" → 24 (multiplier, not "2 dozen")
+        let afterDozen = nextCore == "dozen"
+        let allowBare = forceConvert || afterQuantity || afterFrequency || afterDozen
 
         // Phone-style: consecutive single-digit units → concatenate
         // "five five five one two one two" → "5551212", "oh five five five" → "0555"
         // Short runs ("one two") stay conversational words unless min length lowered.
         if isDigitRun(words) {
+            if afterDozen, let n = digitRunInt(words) {
+                let trailing = trailingPunctuation(parts[j])
+                return (formatValue(Double(n * 12)) + trailing, j + 1)
+            }
             if words.count >= digitRunMinLength, let digits = formatDigitRun(words) {
                 let lastRaw = parts[j - 1]
                 let trailing = trailingPunctuation(lastRaw)
@@ -301,11 +327,57 @@ enum SpokenNumberITN {
             }
             return nil
         } else if let value = parsePhrase(words), allowBare || shouldConvert(words) {
+            if afterDozen {
+                let trailing = trailingPunctuation(parts[j])
+                let n = Int(value.rounded())
+                return (formatValue(Double(n * 12)) + trailing, j + 1)
+            }
             let lastRaw = parts[j - 1]
             let trailing = trailingPunctuation(lastRaw)
             return (formatValue(value) + trailing, j)
         }
         return nil
+    }
+
+    /// Integer from a pure single-digit unit run (for dozen multiplier).
+    private static func digitRunInt(_ words: [String]) -> Int? {
+        guard isDigitRun(words) else { return nil }
+        var n = 0
+        for w in words {
+            guard let u = units[w], u < 10 else { return nil }
+            n = n * 10 + u
+        }
+        return n
+    }
+
+    /// "half a dozen" / "half dozen" → 6.
+    private static func tryConsumeHalfDozen(
+        parts: [String], start: Int
+    ) -> (text: String, nextIndex: Int)? {
+        guard start < parts.count, normalizeToken(parts[start]) == "half" else {
+            return nil
+        }
+        var j = start + 1
+        guard j < parts.count else { return nil }
+        if normalizeToken(parts[j]) == "a" {
+            j += 1
+            guard j < parts.count else { return nil }
+        }
+        guard normalizeToken(parts[j]) == "dozen" else { return nil }
+        let trailing = trailingPunctuation(parts[j])
+        return ("6" + trailing, j + 1)
+    }
+
+    /// "a dozen" → 12 (not "the dozen" / "by the dozen").
+    private static func tryConsumeADozen(
+        parts: [String], start: Int
+    ) -> (text: String, nextIndex: Int)? {
+        guard start + 1 < parts.count,
+              normalizeToken(parts[start]) == "a",
+              normalizeToken(parts[start + 1]) == "dozen"
+        else { return nil }
+        let trailing = trailingPunctuation(parts[start + 1])
+        return ("12" + trailing, start + 2)
     }
 
     /// True when tokens at `afterNumber` form `times a/an/per <period>` (e.g. "times a day").

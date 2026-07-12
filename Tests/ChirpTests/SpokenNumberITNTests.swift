@@ -206,6 +206,41 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("55512121") == "55512121") // 8 digits
     }
 
+    @Test("dozen multiplies spoken counts by twelve")
+    func dozenMultiplier() {
+        #expect(SpokenNumberITN.apply("two dozen") == "24")
+        #expect(SpokenNumberITN.apply("five dozen") == "60")
+        #expect(SpokenNumberITN.apply("five dozen eggs") == "60 eggs")
+        #expect(SpokenNumberITN.apply("a dozen") == "12")
+        #expect(SpokenNumberITN.apply("one dozen") == "12")
+        #expect(SpokenNumberITN.apply("half a dozen") == "6")
+        #expect(SpokenNumberITN.apply("half dozen") == "6")
+        #expect(SpokenNumberITN.apply("twenty five dozen") == "300")
+        #expect(SpokenNumberITN.apply("I bought two dozen") == "I bought 24")
+        #expect(SpokenNumberITN.apply("minus two dozen") == "-24")
+        // Guards
+        #expect(SpokenNumberITN.apply("dozen") == "dozen")
+        #expect(SpokenNumberITN.apply("dozens of people") == "dozens of people")
+        #expect(SpokenNumberITN.apply("by the dozen") == "by the dozen")
+        #expect(SpokenNumberITN.apply("the dozen") == "the dozen")
+        #expect(SpokenNumberITN.apply("one more thing") == "one more thing")
+    }
+
+    @Test("force-number cues include chapter gate aisle page")
+    func expandedForceNumberCues() {
+        #expect(SpokenNumberITN.apply("chapter five") == "chapter 5")
+        #expect(SpokenNumberITN.apply("page twelve") == "page 12")
+        #expect(SpokenNumberITN.apply("gate twelve") == "gate 12")
+        #expect(SpokenNumberITN.apply("aisle three") == "aisle 3")
+        #expect(SpokenNumberITN.apply("channel four") == "channel 4")
+        #expect(SpokenNumberITN.apply("episode two") == "episode 2")
+        #expect(SpokenNumberITN.apply("season three") == "season 3")
+        #expect(SpokenNumberITN.apply("pin four five six seven") == "pin 4567")
+        #expect(SpokenNumberITN.apply("code nine nine") == "code 99")
+        // Uncued short runs still words
+        #expect(SpokenNumberITN.apply("five five") == "five five")
+    }
+
     @Test("double/triple digit repeats expand in phone-style runs")
     func doubleTripleDigitRuns() {
         // "double five" → two fives inside a run
