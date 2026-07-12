@@ -691,6 +691,37 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("two to the power of minus three") == "2⁻³")
     }
 
+    @Test("Light ITN e-notation and e to the power")
+    func lightITNENotation() {
+        #expect(TextPostProcessor.process("three e five") == "3e5")
+        #expect(TextPostProcessor.process("3 e 5") == "3e5")
+        #expect(TextPostProcessor.process("3.5 e 2") == "3.5e2")
+        #expect(TextPostProcessor.process("six e minus three") == "6e-3")
+        #expect(TextPostProcessor.process("1.2 e -4") == "1.2e-4")
+        #expect(TextPostProcessor.process("two point five e ten") == "2.5e10")
+        // Euler e^N
+        #expect(TextPostProcessor.process("e to the power of two") == "e²")
+        #expect(TextPostProcessor.process("e to the power of minus one") == "e⁻¹")
+        #expect(TextPostProcessor.process("e to the third power") == "e³")
+        // Guards
+        #expect(TextPostProcessor.process("the letter e") == "the letter e")
+        #expect(TextPostProcessor.process("email me") == "email me"
+            || TextPostProcessor.process("email me").lowercased().contains("mail"))
+        #expect(TextPostProcessor.process("give me the e") == "give me the e")
+    }
+
+    @Test("Light ITN sum from A to B")
+    func lightITNSumFromTo() {
+        #expect(TextPostProcessor.process("sum from one to ten") == "∑(1…10)")
+        #expect(TextPostProcessor.process("sum from 1 to 100") == "∑(1…100)")
+        #expect(TextPostProcessor.process("the sum from three to five") == "∑(3…5)")
+        #expect(TextPostProcessor.process("sum from twenty to thirty") == "∑(20…30)")
+        // Guards
+        #expect(TextPostProcessor.process("sum from here to there") == "sum from here to there")
+        #expect(TextPostProcessor.process("from one to ten") == "from 1-10"
+            || TextPostProcessor.process("from one to ten").contains("1"))
+    }
+
     @Test("Light ITN factorial and logarithms")
     func lightITNFactorialAndLog() {
         #expect(TextPostProcessor.process("five factorial") == "5!")

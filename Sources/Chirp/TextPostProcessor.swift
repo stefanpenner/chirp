@@ -897,6 +897,9 @@ enum TextPostProcessor {
         result = SpokenDateITN.apply(result)
         // Digit clock form after numbers: "3 30 pm" → "3:30 p.m."
         result = applyTimeITN(result)
+        // Sum ranges before bare "from A to B" so "sum from 1 to 10" is not
+        // collapsed to "sum from 1-10" by cardinal-range ITN.
+        result = applySumFromToITN(result)
         // Cardinal ranges after time ranges so "from 3 to 5 pm" is already
         // "from 3-5 p.m." and not stolen as "from 3-5" + leftover "pm".
         // "from ten to twenty" / "from 10 to 20" → "from 10-20".
@@ -909,10 +912,13 @@ enum TextPostProcessor {
         result = applyDividedByRatioITN(result)
         // Scientific notation before bare "times" product: "3 times ten to the power of 5".
         result = applyScientificNotationITN(result)
+        // E-notation "3 e 5" / "6 e minus 3" (numeric bounds both sides).
+        result = applyENotationITN(result)
         // Infix math: plus / minus / times / multiplied by / equals.
         // Times is N×M only (not "N times a day" — right side must be a number).
         result = applyMathOpsITN(result)
         // Powers after binary ops: "three squared" / "two to the power of three".
+        // Includes "e to the power of N" (Euler).
         result = applyPowerITN(result)
         // Roots / abs: "square root of nine" / "absolute value of five".
         result = applyRootAndAbsoluteITN(result)
@@ -1606,8 +1612,47 @@ enum TextPostProcessor {
         var result = text
         result = applyUnaryPowerITN(result, pattern: squaredITNPattern, exponent: 2)
         result = applyUnaryPowerITN(result, pattern: cubedITNPattern, exponent: 3)
+        result = applyEPowerITN(result)
         result = applyPowerOfITN(result)
         result = applyToTheNthPowerITN(result)
+        return result
+    }
+
+    /// Euler base powers: "e to the power of two" → "e²".
+    private static func applyEPowerITN(_ text: String) -> String {
+        var result = text
+        // power of N
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = ePowerOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let expRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let expDigits = rangeDigits(from: String(result[expRange]))
+                result.replaceSubrange(fullRange, with: "e" + superscriptFromDigits(expDigits))
+            }
+        }
+        // to the Nth power
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = eNthPowerITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let ordRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let ordRaw = String(result[ordRange]).lowercased()
+                let exp: Int
+                if let w = ordinalPowerWords[ordRaw] {
+                    exp = w
+                } else if let n = Int(ordRaw.filter(\.isNumber)) {
+                    exp = n
+                } else {
+                    continue
+                }
+                result.replaceSubrange(fullRange, with: "e" + superscriptString(exp))
+            }
+        }
         return result
     }
 
@@ -1616,6 +1661,84 @@ enum TextPostProcessor {
         var result = text
         result = applySciPowerOfITN(result)
         result = applySciNthPowerITN(result)
+        return result
+    }
+
+    /// Calculator E-notation: "three e five" / "3.5 e -2" → "3e5" / "3.5e-2".
+    /// Requires numeric mantissa and exponent so "the letter e" stays prose.
+    private static let eNotationITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + sciMantissaToken
+                + #"\s+e\s+"#
+                + signedExpToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "e to the power of two" / "e to the power of -1" (Euler base).
+    private static let ePowerOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\be\s+to\s+the\s+power\s+of\s+"#
+                + signedExpToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let eNthPowerITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\be\s+to\s+the\s+"#
+                + #"(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|"#
+                + #"1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|\d{1,2})"#
+                + #"\s+power\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "sum from one to ten" / "the sum from 1 to 100" → "∑(1…10)".
+    private static let sumFromToITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?sum\s+from\s+"#
+                + cardinalRangeNumberToken
+                + #"\s+to\s+"#
+                + cardinalRangeNumberToken
+                + #"\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static func applyENotationITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = eNotationITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let mantRange = Range(match.range(at: 1), in: result),
+                  let expRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let mant = rangeDigits(from: String(result[mantRange]))
+            let exp = rangeDigits(from: String(result[expRange]))
+            result.replaceSubrange(fullRange, with: "\(mant)e\(exp)")
+        }
+        return result
+    }
+
+    private static func applySumFromToITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = sumFromToITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let loRange = Range(match.range(at: 1), in: result),
+                  let hiRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let lo = rangeDigits(from: String(result[loRange]))
+            let hi = rangeDigits(from: String(result[hiRange]))
+            result.replaceSubrange(fullRange, with: "∑(\(lo)…\(hi))")
+        }
         return result
     }
 
