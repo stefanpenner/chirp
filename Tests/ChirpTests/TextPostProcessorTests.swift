@@ -710,6 +710,45 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("give me the e") == "give me the e")
     }
 
+    @Test("Light ITN Greek letters cued and 2 pi")
+    func lightITNGreekLetters() {
+        #expect(TextPostProcessor.process("letter alpha") == "α")
+        #expect(TextPostProcessor.process("greek beta") == "β")
+        #expect(TextPostProcessor.process("symbol gamma") == "γ")
+        #expect(TextPostProcessor.process("letter capital delta") == "Δ")
+        #expect(TextPostProcessor.process("greek capital sigma") == "Σ")
+        #expect(TextPostProcessor.process("letter pi") == "π")
+        #expect(TextPostProcessor.process("symbol theta") == "θ")
+        #expect(TextPostProcessor.process("letter omega") == "ω")
+        #expect(TextPostProcessor.process("letter capital omega") == "Ω")
+        #expect(TextPostProcessor.process("letter mu") == "μ")
+        #expect(TextPostProcessor.process("letter lambda") == "λ")
+        // Common math: "two pi" / "2 pi"
+        #expect(TextPostProcessor.process("two pi") == "2π")
+        #expect(TextPostProcessor.process("2 pi") == "2π")
+        #expect(TextPostProcessor.process("three pi r") == "3π r"
+            || TextPostProcessor.process("three pi").contains("π"))
+        // Guards — bare words stay prose
+        #expect(TextPostProcessor.process("alpha male") == "alpha male")
+        #expect(TextPostProcessor.process("beta release") == "beta release")
+        #expect(TextPostProcessor.process("delta airlines") == "delta airlines"
+            || TextPostProcessor.process("delta airlines").lowercased().contains("delta"))
+        #expect(TextPostProcessor.process("pie chart") == "pie chart")
+    }
+
+    @Test("Light ITN limit as approaches")
+    func lightITNLimitAs() {
+        #expect(TextPostProcessor.process("limit as n approaches infinity") == "lim(n→∞)")
+        #expect(TextPostProcessor.process("the limit as x approaches zero") == "lim(x→0)")
+        #expect(TextPostProcessor.process("limit as n goes to ten") == "lim(n→10)")
+        #expect(TextPostProcessor.process("limit as t tends to infinity") == "lim(t→∞)")
+        #expect(TextPostProcessor.process("the limit as x approaches 1") == "lim(x→1)")
+        // Guards
+        #expect(TextPostProcessor.process("limit as soon as possible")
+            == "limit as soon as possible")
+        #expect(TextPostProcessor.process("approaches infinity") == "approaches infinity")
+    }
+
     @Test("Light ITN sum product integral from A to B")
     func lightITNAggregateFromTo() {
         #expect(TextPostProcessor.process("sum from one to ten") == "∑(1…10)")

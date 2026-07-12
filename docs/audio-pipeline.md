@@ -50,6 +50,8 @@ Coverage:
 - **Scientific notation** — `N times ten to the power of M` → `N×10ᴹ`; `N e M` → `NeM`
 - **Euler powers** — `e to the power of N` → `eᴺ`
 - **Aggregate ranges** — `sum/product/integral from A to B` → `∑/∏/∫(A…B)` (numeric bounds)
+- **Greek letters** — cued `letter/greek/symbol [capital] name` → α…Ω; `N pi` → `Nπ`
+- **Limits** — `limit as x approaches infinity` → `lim(x→∞)`
 - **Roots / abs** — `square root of N` → `√N`; `cube root of N` → `∛N`; `absolute value of N` → `|N|`
 - **Factorial / log** — `N factorial` → `N!`; `log of N` / `ln of N` / `log base B of N`
 - **Percent** — `N percent` / `N per cent` → `N%`; multi-digit after cardinal ITN

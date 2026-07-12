@@ -900,6 +900,10 @@ enum TextPostProcessor {
         // Aggregate ranges before bare "from A to B" so "sum/product/integral
         // from 1 to 10" is not collapsed to "from 1-10" by cardinal-range ITN.
         result = applyAggregateFromToITN(result)
+        // Limits: "limit as n approaches infinity" → lim(n→∞)
+        result = applyLimitAsITN(result)
+        // Cued Greek letters + "N pi" (after numbers so "two pi" → "2π")
+        result = applyGreekLetterITN(result)
         // Cardinal ranges after time ranges so "from 3 to 5 pm" is already
         // "from 3-5 p.m." and not stolen as "from 3-5" + leftover "pm".
         // "from ten to twenty" / "from 10 to 20" → "from 10-20".
@@ -1749,6 +1753,103 @@ enum TextPostProcessor {
             let lo = rangeDigits(from: String(result[loRange]))
             let hi = rangeDigits(from: String(result[hiRange]))
             result.replaceSubrange(fullRange, with: "\(sym)(\(lo)…\(hi))")
+        }
+        return result
+    }
+
+    // MARK: - Greek letters + limits
+
+    /// Spoken Greek names → lowercase / capital unicode (cued only, except Nπ).
+    private static let greekLetterMap: [String: (lower: String, upper: String)] = [
+        "alpha": ("α", "Α"), "beta": ("β", "Β"), "gamma": ("γ", "Γ"),
+        "delta": ("δ", "Δ"), "epsilon": ("ε", "Ε"), "zeta": ("ζ", "Ζ"),
+        "eta": ("η", "Η"), "theta": ("θ", "Θ"), "iota": ("ι", "Ι"),
+        "kappa": ("κ", "Κ"), "lambda": ("λ", "Λ"), "mu": ("μ", "Μ"),
+        "nu": ("ν", "Ν"), "xi": ("ξ", "Ξ"), "omicron": ("ο", "Ο"),
+        "pi": ("π", "Π"), "rho": ("ρ", "Ρ"), "sigma": ("σ", "Σ"),
+        "tau": ("τ", "Τ"), "upsilon": ("υ", "Υ"), "phi": ("φ", "Φ"),
+        "chi": ("χ", "Χ"), "psi": ("ψ", "Ψ"), "omega": ("ω", "Ω"),
+    ]
+
+    /// "letter alpha" / "greek capital sigma" / "symbol pi"
+    private static let cuedGreekITNPattern: NSRegularExpression = {
+        let names = greekLetterMap.keys.sorted { $0.count > $1.count }.joined(separator: "|")
+        let pattern =
+            #"\b(?:letter|greek|symbol)\s+(capital\s+)?("# + names + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// "two pi" / "2 pi" / "3.14 pi" after SpokenNumberITN (not "pie").
+    private static let nPiITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b"# + sciMantissaToken + #"\s+pi\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "limit as n approaches infinity" / "goes to" / "tends to"
+    private static let limitAsITNPattern: NSRegularExpression = {
+        let bound =
+            #"infinity|\d{1,6}|zero|one|two|three|four|five|six|seven|eight|nine|ten|"#
+            + #"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"#
+            + #"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety"#
+        let pattern =
+            #"\b(?:the\s+)?limit\s+as\s+([A-Za-z])\s+"#
+            + #"(?:approaches|goes\s+to|tends\s+to)\s+"#
+            + #"("# + bound + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    private static func applyGreekLetterITN(_ text: String) -> String {
+        var result = text
+        // Cued forms first
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = cuedGreekITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let nameRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let capital = match.range(at: 1).location != NSNotFound
+                let name = String(result[nameRange]).lowercased()
+                guard let pair = greekLetterMap[name] else { continue }
+                result.replaceSubrange(fullRange, with: capital ? pair.upper : pair.lower)
+            }
+        }
+        // N π
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = nPiITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let nRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let n = rangeDigits(from: String(result[nRange]))
+                result.replaceSubrange(fullRange, with: "\(n)π")
+            }
+        }
+        return result
+    }
+
+    private static func applyLimitAsITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = limitAsITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let varRange = Range(match.range(at: 1), in: result),
+                  let boundRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let v = String(result[varRange]).lowercased()
+            let boundRaw = String(result[boundRange]).lowercased()
+            let bound: String
+            if boundRaw == "infinity" {
+                bound = "∞"
+            } else {
+                bound = rangeDigits(from: boundRaw)
+            }
+            result.replaceSubrange(fullRange, with: "lim(\(v)→\(bound))")
         }
         return result
     }
