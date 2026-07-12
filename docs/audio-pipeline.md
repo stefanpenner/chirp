@@ -153,7 +153,7 @@ near-miss hyps; always-on). Full-utterance ASR repair: `CommandNearMiss`
 (exact dumps, glue expand, starter-gated Levenshtein ≤1) before parse —
 fuzzy unique-winner dual `FuzzyCommand.tla`. Live soak:
 `AudioCorpusPipelineTests` `commandPhraseSoak` (TTS → ASR → parse; budget ≥ 90%).
-Multi-voice: `commandPhraseMultiVoiceSoak` (core subset × voices; pooled ≥ 85%).
+Multi-voice: `commandPhraseMultiVoiceSoak` (expanded subset × voices; pooled ≥ 90%, worst ≥ 80%).
 Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** / **correct that** — multi-level undo (`EditStack`)
 - **scratch that N times** / **undo that N times** — undo last N phrases in one utterance (`ScratchThatN.tla`)
