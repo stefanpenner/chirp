@@ -253,6 +253,33 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("three point five") == "3.5")
     }
 
+    @Test("general N and a quarter / three quarters")
+    func generalAndQuarters() {
+        #expect(SpokenNumberITN.apply("six and a quarter") == "6¼")
+        #expect(SpokenNumberITN.apply("seven and a quarter") == "7¼")
+        #expect(SpokenNumberITN.apply("ten and a quarter cups") == "10¼ cups")
+        #expect(SpokenNumberITN.apply("twenty and a quarter") == "20¼")
+        #expect(SpokenNumberITN.apply("twenty two and a quarter") == "22¼")
+        #expect(SpokenNumberITN.apply("6 and a quarter") == "6¼")
+        #expect(SpokenNumberITN.apply("two and quarter") == "2¼")
+        #expect(SpokenNumberITN.apply("one and a quarter") == "1¼")
+        #expect(SpokenNumberITN.apply("six and three quarters") == "6¾")
+        #expect(SpokenNumberITN.apply("ten and three quarters") == "10¾")
+        #expect(SpokenNumberITN.apply("twenty two and three quarters") == "22¾")
+        #expect(SpokenNumberITN.apply("6 and three quarters") == "6¾")
+        // ASR often drops plural
+        #expect(SpokenNumberITN.apply("six and three quarter") == "6¾")
+        // Bare unit without compound must still convert via fraction cue
+        #expect(SpokenNumberITN.apply("nine and a quarter") == "9¼")
+        #expect(SpokenNumberITN.apply("nine and three quarters") == "9¾")
+        // Half still works; dozen half still multiplies
+        #expect(SpokenNumberITN.apply("six and a half") == "6½")
+        #expect(SpokenNumberITN.apply("two and a half dozen") == "30")
+        // Guards: bare quarter words stay for phraseFixes / clock ITN
+        #expect(SpokenNumberITN.apply("quarter past three") == "quarter past three")
+        #expect(SpokenNumberITN.apply("and a quarter") == "and a quarter")
+    }
+
     @Test("a couple of / a pair of force two")
     func coupleAndPairOf() {
         #expect(SpokenNumberITN.apply("a couple of minutes") == "2 minutes")

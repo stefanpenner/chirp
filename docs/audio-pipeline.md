@@ -42,7 +42,8 @@ Coverage:
 - **Free multi-voice dictation** — 4 short phrases × ≤4 regional voices; mean majorWER ≤ 20%
 - **Phone digit ITN** — `double`/`triple` + bare `o` expand inside digit runs; ASR digit blobs `5551212` → `555-1212`
 - **Dozen ITN** — `two dozen` → `24`, `half a dozen` → `6`, `two and a half dozen` → `30`
-- **N and a half** — general mixed fractions (`six and a half` → `6½`, not only 1–5)
+- **N and a half / quarter** — general mixed fractions (`six and a half` → `6½`, `six and a quarter` → `6¼`, `ten and three quarters` → `10¾`)
+- **Spoken list compounds** — `number twenty one` → `21.` (tens+unit, not leftover “one”)
 - **Couple/pair** — `a couple of` / `a pair of` → `2`
 - **Jargon dict seeds** — DevOps, frontend/backend, Terraform, C#, README, …
 - **Clock half/quarter/minutes** — `half past three` / `ten to three` → `3:30` / `2:50`

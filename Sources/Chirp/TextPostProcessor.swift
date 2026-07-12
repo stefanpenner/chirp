@@ -178,10 +178,12 @@ enum TextPostProcessor {
             (#"\s+degree sign\b"#, "°"),
             // Degrees after numbers: handled in applyUnitsITN (after SpokenNumberITN)
             // so multi-word compounds ("seventy two degrees") become digits first.
-            // Common fractions (unicode glyphs)
-            (#"\bone half\b"#, "½"),
-            (#"\bone quarter\b"#, "¼"),
-            (#"\bthree quarters\b"#, "¾"),
+            // Common fractions (unicode glyphs).
+            // Do not rewrite after "and " — SpokenNumberITN owns mixed forms
+            // ("ten and three quarters" → "10¾", not "ten and ¾").
+            (#"(?<!and )\bone half\b"#, "½"),
+            (#"(?<!and )\bone quarter\b"#, "¼"),
+            (#"(?<!and )\bthree quarters\b"#, "¾"),
             (#"\bone third\b"#, "⅓"),
             (#"\btwo thirds\b"#, "⅔"),
             (#"\bone fifth\b"#, "⅕"),

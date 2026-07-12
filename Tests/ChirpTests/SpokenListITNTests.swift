@@ -76,4 +76,27 @@ struct SpokenListITNTests {
         #expect(r.contains("1. Milk") || r.contains("1. milk") == false)
         #expect(r.contains("1. "))
     }
+
+    @Test("number twenty one compounds (tens + unit)")
+    func compoundTensUnits() {
+        var c = 1
+        let r = SpokenListITN.apply(
+            "number twenty one milk next number twenty two eggs number thirty bread",
+            counter: &c
+        )
+        #expect(r.contains("21. "), "got \(r)")
+        #expect(r.contains("22. "), "got \(r)")
+        #expect(r.contains("30. "), "got \(r)")
+        #expect(r.lowercased().contains("milk"))
+        #expect(r.lowercased().contains("eggs"))
+        #expect(c == 31)
+        // Hyphenated ASR form
+        #expect(SpokenListITN.apply("number twenty-one alpha").contains("21. "))
+        // Teens still single-token
+        #expect(SpokenListITN.apply("number fifteen beta").contains("15. "))
+        // Must not leave residual "one" after tens-only match of "twenty one"
+        let alone = SpokenListITN.apply("number twenty one item")
+        #expect(!alone.lowercased().contains("one item"), "got \(alone)")
+        #expect(alone.contains("21. "))
+    }
 }
