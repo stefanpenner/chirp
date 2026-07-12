@@ -56,6 +56,9 @@ enum CommandPhraseEval {
         Trial(hyp: "select dat", expected: .selectThat),
         Trial(hyp: "select again", expected: .selectAgain),
         Trial(hyp: "select a gain", expected: .selectAgain),
+        Trial(hyp: "select tht", expected: .selectThat), // fuzzy edit-1
+        Trial(hyp: "press esape", expected: .pressEscape(count: 1)),
+        Trial(hyp: "Ball Dad.", expected: .boldThat), // live soak dump
         Trial(hyp: "select last word", expected: .selectLastWord),
         Trial(hyp: "select last sentence", expected: .selectLastSentence),
         Trial(hyp: "select all", expected: .selectAll),
@@ -99,20 +102,26 @@ enum CommandPhraseEval {
         ("cmd_select_that", "select that", .selectThat),
         ("cmd_select_again", "select again", .selectAgain),
         ("cmd_select_word", "select last word", .selectLastWord),
+        ("cmd_select_sentence", "select last sentence", .selectLastSentence),
         ("cmd_escape", "press escape", .pressEscape(count: 1)),
         ("cmd_backspace", "press backspace", .pressBackspace(count: 1)),
         ("cmd_enter", "press enter", .pressEnter(count: 1)),
+        ("cmd_tab", "press tab", .pressTab(count: 1)),
+        ("cmd_space", "press space", .pressSpace(count: 1)),
         ("cmd_cap", "cap that", .capThat),
         ("cmd_copy", "copy that", .copyThat),
         ("cmd_paste", "paste that", .pasteThat),
+        ("cmd_cut", "cut that", .cutThat),
+        ("cmd_bold", "bold that", .boldThat),
         ("cmd_undo_that", "undo that", .scratchThat(count: 1)),
         ("cmd_redo", "redo that", .redoThat(count: 1)),
+        ("cmd_replace", "replace that", .replaceThat),
     ]
 
     /// Soft budget for live soak: at least this fraction of commands must parse
     /// correctly after TTS → Parakeet (short commands are ASR-hard).
-    /// Raised after full-utterance near-miss repair (was 0.70).
-    static let soakMinHitRate: Double = 0.80
+    /// Raised after fuzzy full-utterance repair (was 0.80).
+    static let soakMinHitRate: Double = 0.90
 
     /// Command-bias hotwords that must parse as commands (excludes content/open).
     static func commandBiasPhrases(

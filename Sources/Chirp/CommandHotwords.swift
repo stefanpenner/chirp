@@ -62,6 +62,9 @@ enum CommandHotwords {
         "paste that",
         "cut that",
         "duplicate that",
+        "bold that",
+        "italic that",
+        "underline that",
     ]
 
     /// Deduped, trimmed, lowercased phrases (non-empty, ≥2 tokens preferred).
