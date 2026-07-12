@@ -68,6 +68,30 @@ struct CommandNearMissTests {
         #expect(DictationCommand.parse("press esape") == .pressEscape(count: 1))
     }
 
+    /// Dual of FuzzyCommand.tla Decide (abstract gates + dist summary).
+    @Test("fuzzy decision table matches FuzzyCommand.tla")
+    func fuzzyDecisionDual() {
+        // decide(starter, short, multi, nInRange, minDist, ties) — product gate summary
+        func decide(
+            starter: Bool, short: Bool, multi: Bool,
+            n: Int, minDist: Int, ties: Int
+        ) -> String {
+            if !starter || !short || !multi || n == 0 || minDist < 0 { return "none" }
+            if minDist == 0 { return ties == 1 ? "exact" : "ambiguous" }
+            if minDist >= 1 && minDist <= CommandNearMiss.maxFuzzyDistance {
+                return ties == 1 ? "match" : "ambiguous"
+            }
+            return "none"
+        }
+        #expect(decide(starter: true, short: true, multi: true, n: 1, minDist: 1, ties: 1) == "match")
+        #expect(decide(starter: true, short: true, multi: true, n: 2, minDist: 1, ties: 2) == "ambiguous")
+        #expect(decide(starter: true, short: true, multi: true, n: 1, minDist: 0, ties: 1) == "exact")
+        #expect(decide(starter: false, short: true, multi: true, n: 1, minDist: 1, ties: 1) == "none")
+        #expect(decide(starter: true, short: false, multi: true, n: 1, minDist: 1, ties: 1) == "none")
+        #expect(decide(starter: true, short: true, multi: false, n: 1, minDist: 1, ties: 1) == "none")
+        #expect(decide(starter: true, short: true, multi: true, n: 0, minDist: -1, ties: 0) == "none")
+    }
+
     @Test("fuzzyMatch refuses free dictation and non-starters")
     func fuzzySafe() {
         #expect(CommandNearMiss.fuzzyMatch("hello world") == nil)

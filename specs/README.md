@@ -38,6 +38,7 @@ tlc specs/PipelineRebuild.tla
 | `PageScroll` | page up/down leaves session bufferLen unchanged | `DictationCommand.pageUp/pageDown` + `performScrollPage` |
 | `KeyCommand` | press backspace/escape/undo/redo/forward-delete leave session bufferLen unchanged | `DictationCommand.pressBackspace/pressEscape/pressUndo/pressRedo/pressForwardDelete` + performPress* |
 | `EscapeN` | press escape N times posts N host Escapes; session buffer unchanged | `DictationCommand.pressEscape(count)` + `performPressEscape` |
+| `FuzzyCommand` | unique min dist in 1..MaxDist + starter/short/multi gates → match; ties → none | `CommandNearMiss.fuzzyMatch` |
 | `WordSelect` | select next/prev word leaves session bufferLen unchanged | `DictationCommand.selectNextWord/selectPreviousWord` + `performSelectWord` |
 | `SentenceSelect` | select first/last/next sentence leaves session bufferLen unchanged | `DictationCommand.selectLastSentence` + `performSelectLastSentence` (+ first/next sentence select contract) |
 | `MoveSentence` | previous/next sentence move leaves session bufferLen unchanged | `DictationCommand.moveToPreviousSentence/moveToNextSentence` + `performMoveTo*Sentence` |

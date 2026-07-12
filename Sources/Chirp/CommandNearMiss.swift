@@ -5,6 +5,7 @@
 //
 // Repair order:
 //   1) exact dump map  2) glued expand  3) bounded Levenshtein (unique, starter-gated)
+// Fuzzy decision dual: specs/FuzzyCommand.tla (unique min dist → match).
 
 import Foundation
 

@@ -147,9 +147,9 @@ recognizer uses **modified_beam_search** + `hotwords_score` (falls back to
 greedy if create fails). SOTA contextual biasing for dictation commands.
 Command recognition eval: `CommandPhraseEval` (pure hit rate on golden +
 near-miss hyps; always-on). Full-utterance ASR repair: `CommandNearMiss`
-(exact dumps, glue expand, starter-gated Levenshtein ≤1) before parse.
-Live soak: `AudioCorpusPipelineTests` `commandPhraseSoak` (TTS → ASR → parse;
-budget ≥ 90% hit rate).
+(exact dumps, glue expand, starter-gated Levenshtein ≤1) before parse —
+fuzzy unique-winner dual `FuzzyCommand.tla`. Live soak:
+`AudioCorpusPipelineTests` `commandPhraseSoak` (TTS → ASR → parse; budget ≥ 90%).
 Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** / **correct that** — multi-level undo (`EditStack`)
 - **scratch that N times** / **undo that N times** — undo last N phrases in one utterance (`ScratchThatN.tla`)
