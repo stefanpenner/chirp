@@ -271,10 +271,33 @@ struct TextPostProcessorTests {
         // Live ASR often glues TLD first: "john at example.com" (ITN audio dump)
         #expect(TextPostProcessor.process("john at example.com") == "john@example.com")
         #expect(TextPostProcessor.process("Jane_smith at example.org") == "Jane_smith@example.org")
+        // ASR drops "dot": "john at example com"
+        #expect(TextPostProcessor.process("john at example com") == "john@example.com")
+        #expect(TextPostProcessor.process("jane at the gmail com") == "jane@gmail.com")
+        #expect(TextPostProcessor.process("dev at foo io") == "dev@foo.io")
+        #expect(TextPostProcessor.process("john underscore smith at example com")
+                == "john_smith@example.com")
+        #expect(TextPostProcessor.process("john at mail google com") == "john@mail.google.com")
         // Conversational "at" / content "period" must not steal
         #expect(TextPostProcessor.process("meet at noon") == "meet at noon")
         #expect(TextPostProcessor.process("look at this") == "look at this")
+        #expect(TextPostProcessor.process("look at me") == "look at me")
         #expect(TextPostProcessor.process("the period is over") == "the period is over")
+    }
+
+    @Test("Bare domain TLD glue without spoken dot")
+    func bareDomainMissingDot() {
+        #expect(TextPostProcessor.process("visit example com") == "visit example.com")
+        // Avoid relative-date word "today" (expandRelativeDates)
+        #expect(TextPostProcessor.process("see acme org please") == "see acme.org please")
+        #expect(TextPostProcessor.process("www example com") == "www.example.com")
+        // Short ambiguous TLDs stay prose
+        #expect(TextPostProcessor.process("look at me") == "look at me")
+        #expect(TextPostProcessor.process("new app") == "new app")
+        #expect(TextPostProcessor.process("dot company").contains("company"))
+        // Spoken connector path must still work (not "dot.org")
+        #expect(TextPostProcessor.process("site dot edu") == "site.edu")
+        #expect(TextPostProcessor.process("visit example dat com") == "visit example.com")
     }
 
     @Test("Expanded spoken punctuation")

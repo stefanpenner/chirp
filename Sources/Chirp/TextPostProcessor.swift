@@ -212,6 +212,17 @@ enum TextPostProcessor {
             (#"\s+period org\b"#, ".org"),
             (#"\s+period net\b"#, ".net"),
             (#"\s+period io\b"#, ".io"),
+            // Bare space + long TLD (ASR drops "dot"): "example com" → "example.com"
+            // Long TLDs only — never me/us/app/ai. Never glue after spoken connectors
+            // (dot/dat/period) — those use the explicit "dot com" rules above.
+            (#"\b(?!(?:dot|dat|period)\b)(\w{3,})\s+com\b"#, "$1.com"),
+            (#"\b(?!(?:dot|dat|period)\b)(\w{3,})\s+org\b"#, "$1.org"),
+            (#"\b(?!(?:dot|dat|period)\b)(\w{3,})\s+net\b"#, "$1.net"),
+            (#"\b(?!(?:dot|dat|period)\b)(\w{3,})\s+edu\b"#, "$1.edu"),
+            (#"\b(?!(?:dot|dat|period)\b)(\w{3,})\s+gov\b"#, "$1.gov"),
+            // "www example com" → after host.tld glue: "www example.com" → "www.example.com"
+            (#"\bwww\s+(\w{3,}\.(?:com|org|net|edu|gov))\b"#, "www.$1"),
+            (#"\bwww\s+(\w{3,})\s+(com|org|net|edu|gov)\b"#, "www.$1.$2"),
             (#"\s+dot org\b"#, ".org"),
             (#"\s+dot net\b"#, ".net"),
             (#"\s+dot io\b"#, ".io"),
@@ -326,14 +337,18 @@ enum TextPostProcessor {
 
     /// "john at example dot com" / "john underscore smith at …" → email.
     /// Local connectors: dot|dat|underscore|under score|plus.
-    /// Host: spoken dot/dat chains, or "period <tld>" (TLD-gated).
-    /// Optional "at the" (ASR often inserts the). Requires a host connector so
-    /// "meet at noon" stays conversational.
+    /// Host: spoken dot/dat chains, "period <tld>", or space+TLD (ASR drops "dot").
+    /// Optional "at the" (ASR often inserts the).
+    /// "meet at noon" stays conversational (no known TLD token).
     private static let spokenEmailPattern: NSRegularExpression = {
         let tld = spokenEmailTlds
-        // Host: (word (dot|dat) )+ word  OR  word period <tld>
+        // Host:
+        //   (word (dot|dat) )+ word
+        //   | word period <tld>
+        //   | word+ <tld>  (ASR omitted "dot": "example com", "mail google com")
         let host =
-            #"(?:(?:\w+\s+(?:dot|dat)\s+)+\w+|\w+\s+period\s+(?:"# + tld + #"))"#
+            #"(?:(?:\w+\s+(?:dot|dat)\s+)+\w+|\w+\s+period\s+(?:"# + tld
+            + #")|(?:\w+\s+)+(?:"# + tld + #"))"#
         let local =
             #"\w+(?:\s+(?:dot|dat|underscore|under\s+score|plus)\s+\w+)*"#
         let pattern =
@@ -454,11 +469,20 @@ enum TextPostProcessor {
             let localSpoken = String(result[localRange])
             let local = joinSpokenLocalPart(localSpoken)
             let hostSpoken = String(result[hostRange])
-            let host = hostSpoken.replacingOccurrences(
+            // Spoken connectors → "."; bare space between labels → "." (missing-dot ASR)
+            var host = hostSpoken.replacingOccurrences(
                 of: #"\s+(?:dot|dat|period)\s+"#,
                 with: ".",
                 options: [.regularExpression, .caseInsensitive]
             )
+            // Remaining spaces are label separators when last token is a TLD
+            if host.contains(" ") {
+                host = host.replacingOccurrences(
+                    of: #"\s+"#,
+                    with: ".",
+                    options: .regularExpression
+                )
+            }
             result.replaceSubrange(fullRange, with: "\(local)@\(host)")
         }
         return result

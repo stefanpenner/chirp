@@ -43,7 +43,7 @@ Coverage:
 - **Phone digit ITN** — `double`/`triple` + bare `o` expand inside digit runs; ASR digit blobs `5551212` → `555-1212`
 - **Day-first date ITN** — `the fifth of march` → `March 5` (`SpokenDateITN`)
 - **19xx years** — `nineteen ninety nine` → `1999` (standalone + after dates)
-- **Email ASR near-miss ITN** — `dat`/`period`+TLD, `at the`, `under score` → email/URL packing
+- **Email ASR near-miss ITN** — `dat`/`period`+TLD, missing `dot` (`example com`), `at the`, `under score` → email/URL packing
 - **Counted command near-miss** — `scratch hat 3 times` → `scratch that 3 times` (template)
 - **DecodeReject** — multi-word near-silence dumps without log-probs rejected (Parakeet often nil scores)
 - **AppState E2E** — MockAudioRecorder → typed text, ranked subset
