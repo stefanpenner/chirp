@@ -10,7 +10,7 @@
 //   "double five" / "triple oh" expand inside a run (phone dictation)
 //   Bare phone-length digit tokens from ASR ("5551212") get dash formatting
 //   "N dozen" → N×12; "a dozen" / "half (a) dozen" → 12 / 6
-//   Mixed fractions: "N and a half/quarter" → N½/N¼; "N and three quarters" → N¾
+//   Mixed fractions: "N and a half/quarter/third/eighth" → unicode; thirds/eighths compounds
 //   Exception: after suite/room/floor/chapter/gate/… cues, digit runs of ≥1 convert
 // - Negatives: "minus"/"negative" + number phrase → "-N" (not bare "minus" / "minus sign")
 // - Ordinals: "first" blocked before of/all/class; "twenty first" → 21st always
@@ -355,13 +355,11 @@ enum SpokenNumberITN {
         let afterDozen = nextCore == "dozen"
         // "two and a half dozen" → 30; "six and a half" → 6½
         let halfDozen = matchAndAHalf(parts: parts, start: j, requireDozen: true)
-        let andAHalf = matchAndAHalf(parts: parts, start: j, requireDozen: false)
-        let andAQuarter = matchAndAQuarter(parts: parts, start: j)
-        let andThreeQuarters = matchAndThreeQuarters(parts: parts, start: j)
+        // Half/quarter/thirds/eighths (not half-dozen — that is halfDozen above).
+        let mixedFrac = matchAndMixedFraction(parts: parts, start: j)
         let allowBare =
             forceConvert || afterQuantity || afterFrequency || afterDozen
-            || halfDozen != nil || andAHalf != nil
-            || andAQuarter != nil || andThreeQuarters != nil
+            || halfDozen != nil || mixedFrac != nil
 
         // Phone-style: consecutive single-digit units → concatenate
         // "five five five one two one two" → "5551212", "oh five five five" → "0555"
@@ -371,17 +369,9 @@ enum SpokenNumberITN {
                 let trailing = trailingPunctuation(parts[end - 1])
                 return (formatValue(Double(n * 12 + 6)) + trailing, end)
             }
-            if let end = andAHalf, let n = digitRunInt(words) {
+            if let (end, glyph) = mixedFrac, let n = digitRunInt(words) {
                 let trailing = trailingPunctuation(parts[end - 1])
-                return (formatHalfMixed(n) + trailing, end)
-            }
-            if let end = andThreeQuarters, let n = digitRunInt(words) {
-                let trailing = trailingPunctuation(parts[end - 1])
-                return (formatThreeQuartersMixed(n) + trailing, end)
-            }
-            if let end = andAQuarter, let n = digitRunInt(words) {
-                let trailing = trailingPunctuation(parts[end - 1])
-                return (formatQuarterMixed(n) + trailing, end)
+                return (formatMixedFraction(n, glyph) + trailing, end)
             }
             if afterDozen, let n = digitRunInt(words) {
                 let trailing = trailingPunctuation(parts[j])
@@ -405,20 +395,10 @@ enum SpokenNumberITN {
                 let n = Int(value.rounded())
                 return (formatValue(Double(n * 12 + 6)) + trailing, end)
             }
-            if let end = andAHalf {
+            if let (end, glyph) = mixedFrac {
                 let trailing = trailingPunctuation(parts[end - 1])
                 let n = Int(value.rounded())
-                return (formatHalfMixed(n) + trailing, end)
-            }
-            if let end = andThreeQuarters {
-                let trailing = trailingPunctuation(parts[end - 1])
-                let n = Int(value.rounded())
-                return (formatThreeQuartersMixed(n) + trailing, end)
-            }
-            if let end = andAQuarter {
-                let trailing = trailingPunctuation(parts[end - 1])
-                let n = Int(value.rounded())
-                return (formatQuarterMixed(n) + trailing, end)
+                return (formatMixedFraction(n, glyph) + trailing, end)
             }
             if afterDozen {
                 let trailing = trailingPunctuation(parts[j])
@@ -429,18 +409,10 @@ enum SpokenNumberITN {
             let trailing = trailingPunctuation(lastRaw)
             return (formatValue(value) + trailing, j)
         }
-        // Bare unit + mixed fraction: "six and a half/quarter" (shouldConvert refuses bare six)
-        if let end = andAHalf, let n = integerFromWords(words) {
+        // Bare unit + mixed fraction: "six and a half" (shouldConvert refuses bare six)
+        if let (end, glyph) = mixedFrac, let n = integerFromWords(words) {
             let trailing = trailingPunctuation(parts[end - 1])
-            return (formatHalfMixed(n) + trailing, end)
-        }
-        if let end = andThreeQuarters, let n = integerFromWords(words) {
-            let trailing = trailingPunctuation(parts[end - 1])
-            return (formatThreeQuartersMixed(n) + trailing, end)
-        }
-        if let end = andAQuarter, let n = integerFromWords(words) {
-            let trailing = trailingPunctuation(parts[end - 1])
-            return (formatQuarterMixed(n) + trailing, end)
+            return (formatMixedFraction(n, glyph) + trailing, end)
         }
         if let end = halfDozen, let n = integerFromWords(words) {
             let trailing = trailingPunctuation(parts[end - 1])
@@ -449,22 +421,10 @@ enum SpokenNumberITN {
         return nil
     }
 
-    /// Whole number + ½ as mixed unicode fraction string.
-    private static func formatHalfMixed(_ whole: Int) -> String {
-        if whole == 0 { return "½" }
-        return "\(whole)½"
-    }
-
-    /// Whole number + ¼ as mixed unicode fraction string.
-    private static func formatQuarterMixed(_ whole: Int) -> String {
-        if whole == 0 { return "¼" }
-        return "\(whole)¼"
-    }
-
-    /// Whole number + ¾ as mixed unicode fraction string.
-    private static func formatThreeQuartersMixed(_ whole: Int) -> String {
-        if whole == 0 { return "¾" }
-        return "\(whole)¾"
+    /// Whole + unicode fraction glyph (`½` `¼` `⅓` …).
+    private static func formatMixedFraction(_ whole: Int, _ glyph: String) -> String {
+        if whole == 0 { return glyph }
+        return "\(whole)\(glyph)"
     }
 
     private static func integerFromWords(_ words: [String]) -> Int? {
@@ -474,30 +434,12 @@ enum SpokenNumberITN {
         return nil
     }
 
-    /// True when `parts[andIndex]` is "and" opening a mixed fraction
-    /// ("and a half", "and a quarter", "and three quarters") — do not fold
-    /// into the integer run (would turn "six and three quarters" into 6+3).
+    /// True when `parts[andIndex]` is "and" opening a mixed fraction — do not
+    /// fold into the integer run ("six and three quarters" must not become 6+3).
+    /// "one hundred and two" stays false (no thirds/eighths after "two").
     private static func isAndMixedFractionOpener(parts: [String], andIndex: Int) -> Bool {
-        guard andIndex < parts.count, normalizeToken(parts[andIndex]) == "and" else {
-            return false
-        }
-        var j = andIndex + 1
-        guard j < parts.count else { return false }
-        if normalizeToken(parts[j]) == "a" {
-            j += 1
-            guard j < parts.count else { return false }
-            let n = normalizeToken(parts[j])
-            return n == "half" || n == "quarter"
-        }
-        let n = normalizeToken(parts[j])
-        if n == "half" || n == "quarter" { return true }
-        if n == "three" {
-            j += 1
-            guard j < parts.count else { return false }
-            let q = normalizeToken(parts[j])
-            return q == "quarters" || q == "quarter"
-        }
-        return false
+        matchAndMixedFraction(parts: parts, start: andIndex) != nil
+            || matchAndAHalf(parts: parts, start: andIndex, requireDozen: true) != nil
     }
 
     /// If parts[start…] is "and (a)? half [dozen]?", return index after last consumed token.
@@ -529,33 +471,70 @@ enum SpokenNumberITN {
         return j
     }
 
-    /// "and (a)? quarter" → index after quarter (not clock "quarter past").
-    private static func matchAndAQuarter(parts: [String], start: Int) -> Int? {
+    /// "and …" mixed fraction after a whole number → (end index, unicode glyph).
+    /// Covers half/quarter/thirds/eighths. Half-dozen is handled separately.
+    private static func matchAndMixedFraction(
+        parts: [String],
+        start: Int
+    ) -> (end: Int, glyph: String)? {
         guard start < parts.count, normalizeToken(parts[start]) == "and" else {
             return nil
         }
         var j = start + 1
         guard j < parts.count else { return nil }
-        if normalizeToken(parts[j]) == "a" {
+
+        // Optional "a" / "an" before singular unit fractions.
+        var sawArticle = false
+        let art = normalizeToken(parts[j])
+        if art == "a" || art == "an" {
+            sawArticle = true
             j += 1
             guard j < parts.count else { return nil }
         }
-        guard normalizeToken(parts[j]) == "quarter" else { return nil }
-        return j + 1
-    }
 
-    /// "and three quarters?" → index after quarters/quarter (ASR may drop plural).
-    private static func matchAndThreeQuarters(parts: [String], start: Int) -> Int? {
-        guard start < parts.count, normalizeToken(parts[start]) == "and" else {
+        let head = normalizeToken(parts[j])
+
+        // Singular after optional article: half / quarter / third / eighth
+        if head == "half" {
+            // Bare half only (dozen path uses matchAndAHalf requireDozen).
+            if j + 1 < parts.count, normalizeToken(parts[j + 1]) == "dozen" {
+                return nil
+            }
+            return (j + 1, "½")
+        }
+        if head == "quarter" { return (j + 1, "¼") }
+        if head == "third" { return (j + 1, "⅓") }
+        if head == "eighth" { return (j + 1, "⅛") }
+
+        // No article before multi-word: "three quarters", "two thirds", "N eighths"
+        if sawArticle { return nil }
+
+        if head == "three" {
+            guard j + 1 < parts.count else { return nil }
+            let q = normalizeToken(parts[j + 1])
+            if q == "quarters" || q == "quarter" { return (j + 2, "¾") }
+            if q == "eighths" || q == "eighth" { return (j + 2, "⅜") }
             return nil
         }
-        var j = start + 1
-        guard j < parts.count, normalizeToken(parts[j]) == "three" else { return nil }
-        j += 1
-        guard j < parts.count else { return nil }
-        let q = normalizeToken(parts[j])
-        guard q == "quarters" || q == "quarter" else { return nil }
-        return j + 1
+        if head == "two" {
+            guard j + 1 < parts.count else { return nil }
+            let q = normalizeToken(parts[j + 1])
+            if q == "thirds" || q == "third" { return (j + 2, "⅔") }
+            return nil
+        }
+        if head == "five" {
+            guard j + 1 < parts.count else { return nil }
+            let q = normalizeToken(parts[j + 1])
+            if q == "eighths" || q == "eighth" { return (j + 2, "⅝") }
+            return nil
+        }
+        if head == "seven" {
+            guard j + 1 < parts.count else { return nil }
+            let q = normalizeToken(parts[j + 1])
+            if q == "eighths" || q == "eighth" { return (j + 2, "⅞") }
+            return nil
+        }
+        return nil
     }
 
     /// If parts[start…] is "and (a)? half dozen", return index after dozen.

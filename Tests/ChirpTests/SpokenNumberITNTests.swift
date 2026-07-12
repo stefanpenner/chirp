@@ -280,6 +280,30 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("and a quarter") == "and a quarter")
     }
 
+    @Test("general N and thirds / eighths mixed fractions")
+    func generalAndThirdsEighths() {
+        #expect(SpokenNumberITN.apply("six and a third") == "6⅓")
+        #expect(SpokenNumberITN.apply("ten and a third cups") == "10⅓ cups")
+        #expect(SpokenNumberITN.apply("two and third") == "2⅓")
+        #expect(SpokenNumberITN.apply("six and two thirds") == "6⅔")
+        #expect(SpokenNumberITN.apply("ten and two thirds") == "10⅔")
+        #expect(SpokenNumberITN.apply("six and two third") == "6⅔") // ASR drop plural
+        #expect(SpokenNumberITN.apply("6 and two thirds") == "6⅔")
+        #expect(SpokenNumberITN.apply("nine and a third") == "9⅓")
+        #expect(SpokenNumberITN.apply("six and an eighth") == "6⅛")
+        #expect(SpokenNumberITN.apply("six and a eighth") == "6⅛") // ASR a/an
+        #expect(SpokenNumberITN.apply("ten and three eighths") == "10⅜")
+        #expect(SpokenNumberITN.apply("two and five eighths") == "2⅝")
+        #expect(SpokenNumberITN.apply("one and seven eighths") == "1⅞")
+        #expect(SpokenNumberITN.apply("twenty two and three eighths") == "22⅜")
+        // "one hundred and two" must stay compound integer, not steal "and two"
+        #expect(SpokenNumberITN.apply("one hundred and two") == "102")
+        #expect(SpokenNumberITN.apply("one hundred and two items") == "102 items")
+        // Half / quarter still work
+        #expect(SpokenNumberITN.apply("six and a half") == "6½")
+        #expect(SpokenNumberITN.apply("six and a quarter") == "6¼")
+    }
+
     @Test("a couple of / a pair of force two")
     func coupleAndPairOf() {
         #expect(SpokenNumberITN.apply("a couple of minutes") == "2 minutes")

@@ -3,6 +3,7 @@
 //   "number one milk next number eggs next number bread"
 //     → "\n1. milk\n2. eggs\n3. bread"
 //   "number twenty one milk" → "\n21. milk"
+//   "number one hundred twenty one" → "\n121. "
 //   "end list" / "stop numbering" → resets counter (emits newline)
 //
 // Counter is session-scoped (reset on new recording). Pure apply() takes
@@ -29,24 +30,27 @@ enum SpokenListITN {
         "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
     ]
 
-    /// Pattern: "number one" … | "number twenty one" | "number 3" | "next number" | "end list"
-    /// Capture groups:
-    ///   1 = tens word, 2 = optional unit after tens, 3 = other word number,
-    ///   4 = digit, 5 = next number, 6 = end list
-    /// Leading boundary is lookbehind (not consumed) so consecutive commands still
-    /// match after an earlier match eats the trailing space. Trailing `\s*` avoids
-    /// double spaces before item text.
+    /// Pattern groups (1-based):
+    ///   1–3 hundred: one hundred [and]? [tens [unit]? | singles]
+    ///   4–5 tens [unit]
+    ///   6 singles (teens + units + ten, not tens)
+    ///   7 digit 1–3
+    ///   8 next number
+    ///   9 end list
     private static let commandPattern: NSRegularExpression = {
         let tens = tensWords.sorted { $0.count > $1.count }.joined(separator: "|")
         let units = unitWords.sorted { $0.count > $1.count }.joined(separator: "|")
-        // Single-token numbers that are not tens (tens handled with optional unit).
         let singles = wordToNumber.keys
             .filter { !tensWords.contains($0) }
             .sorted { $0.count > $1.count }
             .joined(separator: "|")
+        // After "one hundred [and]?": optional rest as tens+unit or single token.
+        let afterHundred =
+            #"(?:[\s-]+(?:("# + tens + #")(?:[\s-]+("# + units + #"))?|("# + singles + #")))?"#
         let pattern =
-            #"(?:(?<=^)|(?<=\s))(?:number\s+(?:("# + tens + #")(?:[\s-]+("# + units
-            + #"))?|("# + singles + #")|(\d{1,2}))|(next\s+number|number\s+next)|(end\s+list|stop\s+list|stop\s+numbering|end\s+numbering))\b\s*"#
+            #"(?:(?<=^)|(?<=\s))(?:number\s+(?:one\s+hundred(?:\s+and)?"# + afterHundred
+            + #"|("# + tens + #")(?:[\s-]+("# + units + #"))?|("# + singles
+            + #")|(\d{1,3}))|(next\s+number|number\s+next)|(end\s+list|stop\s+list|stop\s+numbering|end\s+numbering))\b\s*"#
         return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }()
 
@@ -68,39 +72,57 @@ enum SpokenListITN {
         for match in matches {
             guard let fullRange = Range(match.range, in: text) else { continue }
 
-            // Group 6 = end list / stop numbering
-            if match.numberOfRanges > 6, match.range(at: 6).location != NSNotFound {
+            // Group 9 = end list / stop numbering
+            if match.numberOfRanges > 9, match.range(at: 9).location != NSNotFound {
                 sim = 1
                 planned.append((fullRange, "\n"))
                 continue
             }
 
             let n: Int
-            if match.numberOfRanges > 1, match.range(at: 1).location != NSNotFound,
-               let tr = Range(match.range(at: 1), in: text) {
-                // Tens (+ optional unit): "twenty" / "twenty one" / "twenty-one"
+            // Groups 1–3: hundred form matched if the full match contains "hundred"
+            // Detect via presence of "hundred" in the matched substring (group 1–3 optional).
+            let matched = String(text[fullRange]).lowercased()
+            if matched.contains("hundred") {
+                var val = 100
+                if match.numberOfRanges > 1, match.range(at: 1).location != NSNotFound,
+                   let tr = Range(match.range(at: 1), in: text) {
+                    let tw = String(text[tr]).lowercased()
+                    val += wordToNumber[tw] ?? 0
+                    if match.numberOfRanges > 2, match.range(at: 2).location != NSNotFound,
+                       let ur = Range(match.range(at: 2), in: text) {
+                        val += wordToNumber[String(text[ur]).lowercased()] ?? 0
+                    }
+                } else if match.numberOfRanges > 3, match.range(at: 3).location != NSNotFound,
+                          let sr = Range(match.range(at: 3), in: text) {
+                    val += wordToNumber[String(text[sr]).lowercased()] ?? 0
+                }
+                n = min(val, 999)
+                sim = n + 1
+            } else if match.numberOfRanges > 4, match.range(at: 4).location != NSNotFound,
+                      let tr = Range(match.range(at: 4), in: text) {
+                // Tens (+ optional unit)
                 let tensWord = String(text[tr]).lowercased()
                 let tensVal = wordToNumber[tensWord] ?? 0
-                if match.numberOfRanges > 2, match.range(at: 2).location != NSNotFound,
-                   let ur = Range(match.range(at: 2), in: text) {
-                    let unitWord = String(text[ur]).lowercased()
-                    n = tensVal + (wordToNumber[unitWord] ?? 0)
+                if match.numberOfRanges > 5, match.range(at: 5).location != NSNotFound,
+                   let ur = Range(match.range(at: 5), in: text) {
+                    n = tensVal + (wordToNumber[String(text[ur]).lowercased()] ?? 0)
                 } else {
                     n = tensVal
                 }
                 sim = n + 1
-            } else if match.numberOfRanges > 3, match.range(at: 3).location != NSNotFound,
-                      let wr = Range(match.range(at: 3), in: text) {
+            } else if match.numberOfRanges > 6, match.range(at: 6).location != NSNotFound,
+                      let wr = Range(match.range(at: 6), in: text) {
                 let word = String(text[wr]).lowercased()
                 n = wordToNumber[word] ?? sim
                 sim = n + 1
-            } else if match.numberOfRanges > 4, match.range(at: 4).location != NSNotFound,
-                      let dr = Range(match.range(at: 4), in: text),
+            } else if match.numberOfRanges > 7, match.range(at: 7).location != NSNotFound,
+                      let dr = Range(match.range(at: 7), in: text),
                       let digit = Int(text[dr]) {
-                n = max(1, min(digit, 99))
+                n = max(1, min(digit, 999))
                 sim = n + 1
             } else {
-                // Group 5 "next number" / "number next", or fallback
+                // Group 8 "next number" / "number next"
                 n = sim
                 sim = n + 1
             }

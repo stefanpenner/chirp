@@ -365,6 +365,10 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("six and a quarter") == "6¼")
         #expect(TextPostProcessor.process("ten and three quarters") == "10¾")
         #expect(TextPostProcessor.process("twenty two and a quarter") == "22¼")
+        #expect(TextPostProcessor.process("six and a third") == "6⅓")
+        #expect(TextPostProcessor.process("ten and two thirds") == "10⅔")
+        #expect(TextPostProcessor.process("six and three eighths") == "6⅜")
+        #expect(TextPostProcessor.process("one hundred and two") == "102")
         // Dozen compound must not stop at fraction rewrite
         #expect(TextPostProcessor.process("two and a half dozen") == "30")
         #expect(TextPostProcessor.process("two and a half dozen eggs") == "30 eggs")

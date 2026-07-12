@@ -99,4 +99,26 @@ struct SpokenListITNTests {
         #expect(!alone.lowercased().contains("one item"), "got \(alone)")
         #expect(alone.contains("21. "))
     }
+
+    @Test("number one hundred compounds")
+    func compoundHundred() {
+        #expect(SpokenListITN.apply("number one hundred milk").contains("100. "))
+        #expect(SpokenListITN.apply("number one hundred one alpha").contains("101. "))
+        #expect(SpokenListITN.apply("number one hundred and five beta").contains("105. "))
+        #expect(SpokenListITN.apply("number one hundred twenty gamma").contains("120. "))
+        #expect(SpokenListITN.apply("number one hundred twenty one delta").contains("121. "))
+        // Digit form
+        #expect(SpokenListITN.apply("number 100 eggs").contains("100. "))
+        #expect(SpokenListITN.apply("number 121 flour").contains("121. "))
+        // No leftover "hundred" / "one" after rewrite
+        let r = SpokenListITN.apply("number one hundred twenty one item")
+        #expect(r.contains("121. "), "got \(r)")
+        #expect(!r.lowercased().contains("hundred"), "got \(r)")
+        #expect(!r.lowercased().contains("twenty"), "got \(r)")
+        var c = 1
+        _ = SpokenListITN.apply("number one hundred", counter: &c)
+        #expect(c == 101)
+        let next = SpokenListITN.apply("next number after", counter: &c)
+        #expect(next.contains("101. "), "got \(next)")
+    }
 }
