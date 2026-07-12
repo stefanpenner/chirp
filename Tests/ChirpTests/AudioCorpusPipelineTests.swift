@@ -1000,9 +1000,10 @@ struct AudioCorpusPipelineTests {
                 || TranscriptionScoring.normalize(h).contains("example")
         }
         #expect(shapeHit, "expected email shape or host word in hyp set")
+        // Tightened after missing-dot + dotted-host email ITN (live soak was 0%).
         #expect(
-            ranking.meanMajorWER <= 0.60,
-            "email ITN mean majorWER \(ranking.meanMajorWER) exceeds 0.60\n\(ranking.leaderboard)"
+            ranking.meanMajorWER <= 0.25,
+            "email ITN mean majorWER \(ranking.meanMajorWER) exceeds 0.25\n\(ranking.leaderboard)"
         )
     }
 

@@ -232,7 +232,12 @@ enum SpokenNumberITN {
 
             // Cardinal multi-token / teen / decade / digit-run
             // "double"/"triple" start phone-style runs (not bare numberWords).
-            if numberWords.contains(core) || digitRepeaters[core] != nil {
+            // Digit tokens ("6 and a half") also open when followed by and-a-half / dozen.
+            let digitOpensHalf =
+                core.allSatisfy(\.isNumber)
+                && i + 1 < parts.count
+                && normalizeToken(parts[i + 1]) == "and"
+            if numberWords.contains(core) || digitRepeaters[core] != nil || digitOpensHalf {
                 let prevCore = i > 0 ? normalizeToken(parts[i - 1]) : ""
                 let afterCue = forceNumberCues.contains(prevCore)
                 if let rewritten = tryConsumeCardinal(
@@ -313,13 +318,19 @@ enum SpokenNumberITN {
             }
             if c == "and" {
                 // Only consume "and" inside compounds ("one hundred and five").
-                // Stop before "two and a half dozen" so half-dozen can match.
+                // Stop before "two and a half" so and-a-half can match.
                 guard j + 1 < parts.count else { break }
                 let nxt = normalizeToken(parts[j + 1])
                 guard numberWords.contains(nxt) || units[nxt] != nil || tens[nxt] != nil
                         || magnitudes[nxt] != nil
                 else { break }
                 // Skip "and" without storing (parseIntegerPhrase also skips it)
+                j += 1
+                continue
+            }
+            // Digit whole numbers: "6 and a half", "22 and a half"
+            if c.allSatisfy(\.isNumber), !c.isEmpty {
+                words.append(c)
                 j += 1
                 continue
             }
@@ -339,10 +350,12 @@ enum SpokenNumberITN {
         let afterFrequency = isFrequencyTimesAPeriod(parts: parts, afterNumber: j)
         // "two dozen" → 24 (multiplier, not "2 dozen")
         let afterDozen = nextCore == "dozen"
-        // "two and a half dozen" → 30
-        let halfDozen = matchAndAHalfDozen(parts: parts, start: j)
+        // "two and a half dozen" → 30; "six and a half" → 6½
+        let halfDozen = matchAndAHalf(parts: parts, start: j, requireDozen: true)
+        let andAHalf = matchAndAHalf(parts: parts, start: j, requireDozen: false)
         let allowBare =
-            forceConvert || afterQuantity || afterFrequency || afterDozen || halfDozen != nil
+            forceConvert || afterQuantity || afterFrequency || afterDozen
+            || halfDozen != nil || andAHalf != nil
 
         // Phone-style: consecutive single-digit units → concatenate
         // "five five five one two one two" → "5551212", "oh five five five" → "0555"
@@ -351,6 +364,10 @@ enum SpokenNumberITN {
             if let end = halfDozen, let n = digitRunInt(words) {
                 let trailing = trailingPunctuation(parts[end - 1])
                 return (formatValue(Double(n * 12 + 6)) + trailing, end)
+            }
+            if let end = andAHalf, let n = digitRunInt(words) {
+                let trailing = trailingPunctuation(parts[end - 1])
+                return (formatHalfMixed(n) + trailing, end)
             }
             if afterDozen, let n = digitRunInt(words) {
                 let trailing = trailingPunctuation(parts[j])
@@ -374,6 +391,11 @@ enum SpokenNumberITN {
                 let n = Int(value.rounded())
                 return (formatValue(Double(n * 12 + 6)) + trailing, end)
             }
+            if let end = andAHalf {
+                let trailing = trailingPunctuation(parts[end - 1])
+                let n = Int(value.rounded())
+                return (formatHalfMixed(n) + trailing, end)
+            }
             if afterDozen {
                 let trailing = trailingPunctuation(parts[j])
                 let n = Int(value.rounded())
@@ -383,11 +405,38 @@ enum SpokenNumberITN {
             let trailing = trailingPunctuation(lastRaw)
             return (formatValue(value) + trailing, j)
         }
+        // Bare unit + "and a half": "six and a half" (shouldConvert would refuse bare six)
+        if let end = andAHalf, let n = integerFromWords(words) {
+            let trailing = trailingPunctuation(parts[end - 1])
+            return (formatHalfMixed(n) + trailing, end)
+        }
+        if let end = halfDozen, let n = integerFromWords(words) {
+            let trailing = trailingPunctuation(parts[end - 1])
+            return (formatValue(Double(n * 12 + 6)) + trailing, end)
+        }
         return nil
     }
 
-    /// If parts[start…] is "and (a)? half dozen", return index after dozen.
-    private static func matchAndAHalfDozen(parts: [String], start: Int) -> Int? {
+    /// Whole number + ½ as mixed unicode fraction string.
+    private static func formatHalfMixed(_ whole: Int) -> String {
+        if whole == 0 { return "½" }
+        return "\(whole)½"
+    }
+
+    private static func integerFromWords(_ words: [String]) -> Int? {
+        if words.count == 1, let n = Int(words[0]) { return n }
+        if let n = digitRunInt(words) { return n }
+        if let v = parsePhrase(words) { return Int(v.rounded()) }
+        return nil
+    }
+
+    /// If parts[start…] is "and (a)? half [dozen]?", return index after last consumed token.
+    /// `requireDozen`: true → must end with dozen; false → must NOT have dozen (bare half).
+    private static func matchAndAHalf(
+        parts: [String],
+        start: Int,
+        requireDozen: Bool
+    ) -> Int? {
         guard start < parts.count, normalizeToken(parts[start]) == "and" else {
             return nil
         }
@@ -399,8 +448,20 @@ enum SpokenNumberITN {
         }
         guard normalizeToken(parts[j]) == "half" else { return nil }
         j += 1
-        guard j < parts.count, normalizeToken(parts[j]) == "dozen" else { return nil }
-        return j + 1
+        if requireDozen {
+            guard j < parts.count, normalizeToken(parts[j]) == "dozen" else { return nil }
+            return j + 1
+        }
+        // Bare "and a half" — do not steal "... and a half dozen"
+        if j < parts.count, normalizeToken(parts[j]) == "dozen" {
+            return nil
+        }
+        return j
+    }
+
+    /// If parts[start…] is "and (a)? half dozen", return index after dozen.
+    private static func matchAndAHalfDozen(parts: [String], start: Int) -> Int? {
+        matchAndAHalf(parts: parts, start: start, requireDozen: true)
     }
 
     /// Whole-token mixed fractions from phraseFixes (½ … 5½) → integer whole part.

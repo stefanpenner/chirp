@@ -359,6 +359,9 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("three eighths").contains("⅜"))
         #expect(TextPostProcessor.process("two and a half cups").contains("2½"))
         #expect(TextPostProcessor.process("one and a half") == "1½" || TextPostProcessor.process("one and a half").contains("1½"))
+        #expect(TextPostProcessor.process("six and a half") == "6½")
+        #expect(TextPostProcessor.process("ten and a half cups") == "10½ cups")
+        #expect(TextPostProcessor.process("twenty two and a half") == "22½")
         // Dozen compound must not stop at fraction rewrite
         #expect(TextPostProcessor.process("two and a half dozen") == "30")
         #expect(TextPostProcessor.process("two and a half dozen eggs") == "30 eggs")

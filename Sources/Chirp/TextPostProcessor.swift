@@ -195,17 +195,13 @@ enum TextPostProcessor {
             (#"\bfive eighths\b"#, "⅝"),
             (#"\bseven eighths\b"#, "⅞"),
             // Mixed numbers
-            // Dozen compounds before bare "N and a half" fraction rewrites
+            // Dozen compounds before bare "N and a half" (SpokenNumberITN owns general halves)
             (#"\bone and a half dozen\b"#, "18"),
             (#"\btwo and a half dozen\b"#, "30"),
             (#"\bthree and a half dozen\b"#, "42"),
             (#"\bfour and a half dozen\b"#, "54"),
             (#"\bfive and a half dozen\b"#, "60"),
-            (#"\btwo and a half\b"#, "2½"),
-            (#"\bthree and a half\b"#, "3½"),
-            (#"\bfour and a half\b"#, "4½"),
-            (#"\bfive and a half\b"#, "5½"),
-            (#"\bone and a half\b"#, "1½"),
+            // Bare "N and a half" → SpokenNumberITN (general, not fixed 1–5 list)
             // Spoken web/domain fragments (email "local at host dots" handled in applySpokenEmail)
             (#"\s+dot com\b"#, ".com"),
             // ASR: "dat" ≈ "dot" for common TLDs (Parakeet dump)

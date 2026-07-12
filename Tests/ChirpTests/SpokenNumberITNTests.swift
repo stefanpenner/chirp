@@ -234,9 +234,23 @@ struct SpokenNumberITNTests {
         #expect(SpokenNumberITN.apply("two and a half dozen eggs") == "30 eggs")
         #expect(SpokenNumberITN.apply("I need two and a half dozen") == "I need 30")
         #expect(SpokenNumberITN.apply("two and half dozen") == "30")
-        // Without dozen, spoken form stays (unicode fractions live in phraseFixes)
-        #expect(SpokenNumberITN.apply("two and a half") == "two and a half")
         #expect(SpokenNumberITN.apply("half a dozen") == "6")
+    }
+
+    @Test("general N and a half beyond hardcoded 1–5")
+    func generalAndAHalf() {
+        #expect(SpokenNumberITN.apply("six and a half") == "6½")
+        #expect(SpokenNumberITN.apply("seven and a half") == "7½")
+        #expect(SpokenNumberITN.apply("ten and a half cups") == "10½ cups")
+        #expect(SpokenNumberITN.apply("twenty and a half") == "20½")
+        #expect(SpokenNumberITN.apply("twenty two and a half") == "22½")
+        #expect(SpokenNumberITN.apply("6 and a half") == "6½")
+        #expect(SpokenNumberITN.apply("two and half") == "2½")
+        // Keep dozen compounds
+        #expect(SpokenNumberITN.apply("two and a half dozen") == "30")
+        #expect(SpokenNumberITN.apply("one and a half") == "1½")
+        #expect(SpokenNumberITN.apply("five and a half") == "5½")
+        #expect(SpokenNumberITN.apply("three point five") == "3.5")
     }
 
     @Test("a couple of / a pair of force two")
