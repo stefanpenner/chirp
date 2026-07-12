@@ -13,6 +13,16 @@ enum CommandHotwords {
     /// Max active paths when using modified_beam_search with hotwords.
     static let maxActivePaths: Int32 = 4
 
+    /// Minimum encodable phrases before paying for modified_beam_search.
+    /// Sparse lists (Parakeet bare-token filter often yields 1–2) are not worth
+    /// the latency vs greedy + CommandNearMiss (SOTA: beam is for real bias).
+    static let minUsefulPhrases = 4
+
+    /// True when beam+hotwords is worth the decode cost.
+    static func shouldEnableHotwords(encodableCount: Int) -> Bool {
+        encodableCount >= minUsefulPhrases
+    }
+
     /// SentencePiece word-boundary marker used in Parakeet tokens.txt.
     static let spWordMark: Character = "\u{2581}" // ▁
 
@@ -170,8 +180,9 @@ enum CommandHotwords {
             .joined(separator: " ")
     }
 
-    /// Write hotwords file. When `tokensPath` is set, only encodable phrases
-    /// (SentencePiece-aware) are written — avoids EncodeBase skip spam.
+    /// Write hotwords file. When `tokensPath` is set, only bare-encodable
+    /// phrases are written. Returns nil when the list is empty or below
+    /// `minUsefulPhrases` so Transcriber stays on greedy_search.
     static func ensureFileOnDisk(
         fileManager: FileManager = .default,
         directory: URL? = nil,
@@ -183,7 +194,7 @@ enum CommandHotwords {
         } else {
             list = phrases
         }
-        guard !list.isEmpty else { return nil }
+        guard shouldEnableHotwords(encodableCount: list.count) else { return nil }
         let dir: URL
         if let directory {
             dir = directory

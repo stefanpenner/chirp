@@ -75,8 +75,8 @@ actor Transcriber: TranscriberProtocol {
     }
 
     /// Try preferred ASR providers in order until create succeeds.
-    /// Prefers modified_beam_search + command hotwords (SOTA contextual bias);
-    /// falls back to greedy_search if beam/hotwords create fails.
+    /// Prefers modified_beam_search + command hotwords when enough phrases
+    /// encode; otherwise greedy_search (CommandNearMiss repairs commands).
     private func createRecognizer(modelDir: String) -> Bool {
         for provider in InferenceProvider.asrCandidates {
             if let handle = makeRecognizer(modelDir: modelDir, provider: provider, useHotwords: true) {
@@ -112,7 +112,7 @@ actor Transcriber: TranscriberProtocol {
             useHotwords ? "modified_beam_search" : "greedy_search"
         )
         let hotwordsPathStr: UnsafeMutablePointer<CChar>?
-        // Pass model tokens.txt so phrases encode as ▁word forms (EncodeBase).
+        // Bare-token hotwords only; skip beam if list is sparse (latency).
         if useHotwords,
            let path = CommandHotwords.ensureFileOnDisk(
              tokensPath: "\(modelDir)/tokens.txt"
@@ -120,7 +120,7 @@ actor Transcriber: TranscriberProtocol {
         {
             hotwordsPathStr = toCString(path)
         } else if useHotwords {
-            // No encodable hotwords → greedy path (CommandNearMiss still repairs).
+            // Sparse/empty encodable list → greedy (CommandNearMiss repairs).
             free(tokensPath); free(providerStr); free(modelTypeStr)
             free(emptyStr); free(decodingMethodStr)
             return nil

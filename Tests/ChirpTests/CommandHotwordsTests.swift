@@ -109,14 +109,31 @@ struct CommandHotwordsTests {
         #expect(!enc.contains { $0.contains("spell") })
     }
 
-    @Test("ensureFileOnDisk with tokens writes only bare-encodable lines")
-    func ensureFileOnDiskTokenFiltered() throws {
+    @Test("shouldEnableHotwords gates sparse lists")
+    func shouldEnableHotwords() {
+        #expect(!CommandHotwords.shouldEnableHotwords(encodableCount: 0))
+        #expect(!CommandHotwords.shouldEnableHotwords(encodableCount: 2))
+        #expect(
+            !CommandHotwords.shouldEnableHotwords(
+                encodableCount: CommandHotwords.minUsefulPhrases - 1
+            )
+        )
+        #expect(
+            CommandHotwords.shouldEnableHotwords(
+                encodableCount: CommandHotwords.minUsefulPhrases
+            )
+        )
+        #expect(CommandHotwords.shouldEnableHotwords(encodableCount: 20))
+    }
+
+    @Test("ensureFileOnDisk skips sparse token-filtered lists (prefer greedy)")
+    func ensureFileOnDiskSparseSkips() throws {
         let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chirp-hotwords-tok-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("chirp-hotwords-sparse-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         let tokensFile = tmp.appendingPathComponent("tokens.txt")
-        // Bare tokens only (what EncodeBase accepts without bpe_vocab)
+        // Only enough bare tokens for 2 seed phrases — below minUsefulPhrases.
         try """
         go 1
         to 2
@@ -129,12 +146,43 @@ struct CommandHotwordsTests {
             directory: tmp,
             tokensPath: tokensFile.path
         )
+        #expect(path == nil, "sparse hotwords must not enable beam search")
+    }
+
+    @Test("ensureFileOnDisk with tokens writes when enough bare phrases")
+    func ensureFileOnDiskTokenFiltered() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chirp-hotwords-tok-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let tokensFile = tmp.appendingPathComponent("tokens.txt")
+        // Bare tokens for ≥ minUsefulPhrases seed phrases.
+        try """
+        go 1
+        to 2
+        end 3
+        start 4
+        press 5
+        enter 6
+        tab 7
+        space 8
+        new 9
+        line 10
+        paragraph 11
+        """.write(to: tokensFile, atomically: true, encoding: .utf8)
+
+        let path = CommandHotwords.ensureFileOnDisk(
+            directory: tmp,
+            tokensPath: tokensFile.path
+        )
         #expect(path != nil)
         let text = try String(contentsOfFile: path!, encoding: .utf8)
         #expect(text.contains("go to end"))
         #expect(text.contains("press enter"))
         #expect(!text.contains("spell"))
         #expect(!text.contains("scratch"))
+        let lines = text.split(whereSeparator: \.isNewline).filter { !$0.isEmpty }
+        #expect(lines.count >= CommandHotwords.minUsefulPhrases)
     }
 
     @Test("loadTokenSet reads first column of tokens.txt")

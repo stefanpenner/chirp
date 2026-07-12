@@ -144,8 +144,9 @@ newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `Dicta
 Command ASR bias: `CommandHotwords` writes multi-word command phrases to
 `~/Library/Application Support/Chirp/command-hotwords.txt`. Against Parakeet
 `tokens.txt`, only phrases whose **every word is a bare vocab token** are kept
-(EncodeBase without `bpe_vocab` rejects `▁word` forms). If none encode → skip
-hotwords and use greedy; `CommandNearMiss` still repairs commands.
+(EncodeBase without `bpe_vocab` rejects `▁word` forms). If fewer than
+`minUsefulPhrases` (4) encode → **skip hotwords and stay on greedy_search**
+(beam latency not worth 1–2 phrases); `CommandNearMiss` repairs commands.
 Command recognition eval: `CommandPhraseEval` (pure hit rate on golden +
 near-miss hyps; always-on). Full-utterance ASR repair: `CommandNearMiss`
 (exact dumps, glue expand, starter-gated Levenshtein ≤1) before parse —
