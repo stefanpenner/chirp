@@ -96,7 +96,11 @@ enum CommandPhraseEval {
         Trial(hyp: "paste that", expected: .pasteThat),
         Trial(hyp: "taste that", expected: .pasteThat), // ASR paste→taste
         Trial(hyp: "Taste that.", expected: .pasteThat),
+        Trial(hyp: "Haste that.", expected: .pasteThat), // multi-voice Tessa
         Trial(hyp: "cut that", expected: .cutThat),
+        Trial(hyp: "Cartage", expected: .cutThat), // multi-voice Moira
+        Trial(hyp: "Italic Dutch", expected: .italicThat), // multi-voice Moira
+        Trial(hyp: "It chalic that.", expected: .italicThat), // multi-voice Tessa
         Trial(hyp: "duplicate that", expected: .duplicateThat),
         // Redo / replace
         Trial(hyp: "redo that", expected: .redoThat(count: 1)),
@@ -141,6 +145,7 @@ enum CommandPhraseEval {
 
     /// Core subset for multi-voice soak (latency × voices). High-frequency +
     /// weaker commands that often fail under accent variance.
+    /// Expanded after 100% hit on 12 phrases × 6 regional voices (raise floors).
     static let multiVoiceSoakPhrases: [(id: String, spoken: String, expected: DictationCommand)] = [
         ("mv_scratch", "scratch that", .scratchThat(count: 1)),
         ("mv_select", "select that", .selectThat),
@@ -154,6 +159,13 @@ enum CommandPhraseEval {
         ("mv_bold", "bold that", .boldThat),
         ("mv_undo", "undo that", .scratchThat(count: 1)),
         ("mv_redo", "redo that", .redoThat(count: 1)),
+        // Expanded set (format + nav + edit) — multi-accent robustness
+        ("mv_cut", "cut that", .cutThat),
+        ("mv_italic", "italic that", .italicThat),
+        ("mv_underline", "underline that", .underlineThat),
+        ("mv_spell", "spell that", .spellThat),
+        ("mv_replace", "replace that", .replaceThat),
+        ("mv_go_start", "go to start", .moveToStart),
     ]
 
     /// Candidate macOS `say` voices for multi-voice soak (regional English).
@@ -169,12 +181,12 @@ enum CommandPhraseEval {
         "Karen", "Moira", "Tessa", "Rishi",
     ]
 
-    /// Overall multi-voice command hit budget (pooled trials). Slightly below
-    /// single-voice soak — acoustic variance across TTS voices.
-    static let multiVoiceSoakMinHitRate: Double = 0.85
+    /// Overall multi-voice command hit budget (pooled trials).
+    /// Raised after 100% on 12×6 regional (was 0.85); locks SOTA floor.
+    static let multiVoiceSoakMinHitRate: Double = 0.90
 
-    /// Worst single voice must still clear this floor.
-    static let multiVoiceMinPerVoiceHitRate: Double = 0.70
+    /// Worst single voice must still clear this floor (was 0.70).
+    static let multiVoiceMinPerVoiceHitRate: Double = 0.80
 
     /// Minimum distinct TTS voices required for a multi-voice soak to count.
     static let multiVoiceMinVoices = 2

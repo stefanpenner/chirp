@@ -38,6 +38,8 @@ enum CommandNearMiss {
         "faced that": "paste that",
         "hey dad": "paste that",
         "hay dad": "paste that",
+        "haste that": "paste that", // multi-voice Tessa (also fuzzy dist-1 → paste)
+        "waste that": "paste that",
         // backspace
         "press back space": "press backspace",
         "hit back space": "press backspace",
@@ -66,6 +68,16 @@ enum CommandNearMiss {
         "built that": "bold that",
         "ball t": "bold that",
         "bold touch": "bold that",
+        // cut that (multi-voice Moira: Cartage)
+        "cartage": "cut that",
+        "cart that": "cut that",
+        "caught that": "cut that",
+        // italic that (multi-voice Moira/Tessa dumps)
+        "italic dutch": "italic that",
+        "italics dutch": "italic that",
+        "it chalic that": "italic that",
+        "italic touch": "italic that",
+        "italicized that": "italic that",
         // undo that (ASR near-misses; "undo hat" already → scratch that above)
         "until that": "undo that",
         "under that": "undo that",
@@ -166,8 +178,10 @@ enum CommandNearMiss {
         "undo that",
         "correct that",
         "unselect that",
+        "deselect that",
         "bold that",
         "italic that",
+        "italicize that",
         "underline that",
         "go to start",
         "go to end",

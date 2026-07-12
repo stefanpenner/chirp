@@ -26,12 +26,19 @@ struct CommandNearMissTests {
         #expect(DictationCommand.parse("Bulldog.") == .boldThat)
         #expect(DictationCommand.parse("Build that.") == .boldThat)
         #expect(DictationCommand.parse("Face that") == .pasteThat)
+        #expect(DictationCommand.parse("Haste that.") == .pasteThat) // Tessa
+        #expect(DictationCommand.parse("Cartage") == .cutThat) // Moira
+        #expect(DictationCommand.parse("Italic Dutch") == .italicThat) // Moira
+        #expect(DictationCommand.parse("It chalic that.") == .italicThat) // Tessa
         #expect(DictationCommand.parse("Until that.") == .scratchThat(count: 1))
         #expect(DictationCommand.parse("We do that.") == .redoThat(count: 1))
         #expect(DictationCommand.parse("Select lost words.") == .selectLastWord)
-        // Free dictation must not steal
+        // Free dictation must not steal (multi-word / mid-sentence)
         #expect(DictationCommand.parse("we do that every day") == .none)
         #expect(DictationCommand.parse("have that ready") == .none)
+        #expect(DictationCommand.parse("build that house carefully") == .none)
+        #expect(DictationCommand.parse("hey dad how are you") == .none)
+        #expect(DictationCommand.parse("under that shelf") == .none)
         #expect(DictationCommand.parse("escape") == .none)
     }
 
@@ -39,10 +46,18 @@ struct CommandNearMissTests {
     func pasteBackspace() {
         #expect(CommandNearMiss.repair("Taste that.") == "paste that")
         #expect(DictationCommand.parse("Taste that.") == .pasteThat)
+        #expect(CommandNearMiss.repair("Haste that.") == "paste that")
+        #expect(DictationCommand.parse("Haste that.") == .pasteThat)
         #expect(CommandNearMiss.repair("Press back space.") == "press backspace")
         #expect(DictationCommand.parse("Press back space.") == .pressBackspace(count: 1))
         #expect(CommandNearMiss.repair("Ball Dad.") == "bold that")
         #expect(DictationCommand.parse("Ball Dad.") == .boldThat)
+    }
+
+    @Test("glued fill/deselect surfaces expand")
+    func expandedSurfacesGlue() {
+        #expect(CommandNearMiss.repair("deselectthat") == "deselect that")
+        #expect(CommandNearMiss.repair("italicizethat") == "italicize that")
     }
 
     @Test("glued multi-word commands expand")

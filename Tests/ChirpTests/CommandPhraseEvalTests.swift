@@ -69,14 +69,18 @@ struct CommandPhraseEvalTests {
 
     @Test("multi-voice soak subset is consistent and budgets ordered")
     func multiVoiceSoakConfig() {
-        #expect(CommandPhraseEval.multiVoiceSoakPhrases.count >= 10)
+        #expect(CommandPhraseEval.multiVoiceSoakPhrases.count >= 16)
         #expect(CommandPhraseEval.multiVoiceCandidates.count >= 6)
         // Accent coverage: UK + AU (and ideally IE/ZA/IN) in the probe list.
         let set = Set(CommandPhraseEval.multiVoiceCandidates)
         #expect(set.contains("Daniel"), "UK Daniel")
         #expect(set.contains("Karen"), "AU Karen")
+        #expect(set.contains("Rishi"), "IN Rishi")
         #expect(!set.contains("Fred"), "skip novelty voices")
         #expect(CommandPhraseEval.multiVoiceMinVoices >= 2)
+        // SOTA floors after 100% regional soak (raised from 0.85 / 0.70).
+        #expect(CommandPhraseEval.multiVoiceSoakMinHitRate >= 0.90)
+        #expect(CommandPhraseEval.multiVoiceMinPerVoiceHitRate >= 0.80)
         #expect(
             CommandPhraseEval.multiVoiceSoakMinHitRate
                 <= CommandPhraseEval.soakMinHitRate
