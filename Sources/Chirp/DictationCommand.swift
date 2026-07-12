@@ -252,6 +252,10 @@ enum DictationCommand: Equatable, Sendable {
     case moveUpParagraphs(count: Int)
     /// Move down N paragraphs (to start of paragraph). Dragon "move down N paragraphs".
     case moveDownParagraphs(count: Int)
+    /// Move up N sentences (to start of sentence). Dragon-style counted jump.
+    case moveUpSentences(count: Int)
+    /// Move down N sentences (to start of sentence). Dragon-style counted jump.
+    case moveDownSentences(count: Int)
     /// Select N paragraphs upward from caret (inclusive). Buffer unchanged until type-over.
     case selectUpParagraphs(count: Int)
     /// Select N paragraphs downward from caret (inclusive). Buffer unchanged until type-over.
@@ -804,6 +808,16 @@ enum DictationCommand: Equatable, Sendable {
                 #"^(?:move )?down "# + num + #" paragraphs?$"#,
                 { c in (1...20).contains(c) ? .moveDownParagraphs(count: c) : nil }
             ),
+            // Dragon-style "move up/down N sentences" (N ≥ 1). Progressive
+            // "previous sentence" stays matchExact (session cursor).
+            (
+                #"^(?:move )?up "# + num + #" sentences?$"#,
+                { c in (1...20).contains(c) ? .moveUpSentences(count: c) : nil }
+            ),
+            (
+                #"^(?:move )?down "# + num + #" sentences?$"#,
+                { c in (1...20).contains(c) ? .moveDownSentences(count: c) : nil }
+            ),
             // Select up/down N paragraphs from caret (not buffer last/next peels).
             (
                 #"^select (?:the )?up "# + num + #" paragraphs?$"#,
@@ -1251,6 +1265,12 @@ enum DictationCommand: Equatable, Sendable {
             return .moveUpParagraphs(count: 1)
         case "move down a paragraph", "down a paragraph", "move down paragraph":
             return .moveDownParagraphs(count: 1)
+        // Counted host-style sentence jumps (session dual).
+        // "move up a sentence" ≠ progressive "previous sentence".
+        case "move up a sentence", "up a sentence", "move up sentence":
+            return .moveUpSentences(count: 1)
+        case "move down a sentence", "down a sentence", "move down sentence":
+            return .moveDownSentences(count: 1)
         // Select one paragraph up/down from caret (not progressive select previous).
         case "select up a paragraph", "select up paragraph", "select paragraph up":
             return .selectUpParagraphs(count: 1)
@@ -1366,6 +1386,7 @@ enum DictationCommand: Equatable, Sendable {
         ("move up / move down / line up / line down", "Cursor up/down one line (host ↑↓)"),
         ("move up N lines / move down 3 lines", "Cursor up/down N lines (host ↑↓ × N)"),
         ("move up N paragraphs / move down 3 paragraphs", "Jump N paragraphs (session dual)"),
+        ("move up N sentences / move down 3 sentences", "Jump N sentences (session dual)"),
         ("select up N paragraphs / select down 2 paragraphs", "Select N paragraphs from caret"),
         ("select up N sentences / select down 2 sentences", "Select N sentences from caret"),
         ("select up N lines / select down 3 lines", "Select N lines up/down (⇧↑/↓; keyboard only)"),
@@ -1854,18 +1875,16 @@ enum TranscriptSelection {
         return pos
     }
 
-    /// Session caret after moving `count` paragraphs up/down to paragraph start.
-    /// Dual of MoveParagraphsN.tla. `caret == nil` means end of buffer.
-    static func offsetAfterParagraphMove(
-        _ text: String,
+    /// Jump `count` units up/down to unit start (sentence or paragraph ranges).
+    private static func offsetAfterUnitMove(
+        ranges: [SentenceRange],
         caret: Int?,
+        textCount: Int,
         up: Bool,
         count: Int
     ) -> Int {
-        let len = text.count
-        let pos = min(max(caret ?? len, 0), len)
+        let pos = min(max(caret ?? textCount, 0), textCount)
         guard count > 0 else { return pos }
-        let ranges = paragraphRanges(text)
         guard !ranges.isEmpty else { return pos }
         guard let startIdx = rangeIndexContaining(pos, ranges: ranges) else {
             return ranges[0].start
@@ -1877,6 +1896,40 @@ enum TranscriptSelection {
             targetIdx = min(ranges.count - 1, startIdx + count)
         }
         return ranges[targetIdx].start
+    }
+
+    /// Session caret after moving `count` paragraphs up/down to paragraph start.
+    /// Dual of MoveParagraphsN.tla. `caret == nil` means end of buffer.
+    static func offsetAfterParagraphMove(
+        _ text: String,
+        caret: Int?,
+        up: Bool,
+        count: Int
+    ) -> Int {
+        offsetAfterUnitMove(
+            ranges: paragraphRanges(text),
+            caret: caret,
+            textCount: text.count,
+            up: up,
+            count: count
+        )
+    }
+
+    /// Session caret after moving `count` sentences up/down to sentence start.
+    /// Dual of MoveSentencesN.tla. `caret == nil` means end of buffer.
+    static func offsetAfterSentenceMove(
+        _ text: String,
+        caret: Int?,
+        up: Bool,
+        count: Int
+    ) -> Int {
+        offsetAfterUnitMove(
+            ranges: sentenceRanges(text),
+            caret: caret,
+            textCount: text.count,
+            up: up,
+            count: count
+        )
     }
 
     /// Shared span for selecting `count` units (sentence/paragraph) from caret.

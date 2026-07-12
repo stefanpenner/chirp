@@ -1424,6 +1424,26 @@ struct DictationCommandTests {
         #expect(DictationCommand.parse("select up 3 lines") == .selectUpLines(count: 3))
     }
 
+    @Test("Dragon move up/down N sentences")
+    func moveUpDownNSentences() {
+        #expect(DictationCommand.parse("move up 3 sentences") == .moveUpSentences(count: 3))
+        #expect(DictationCommand.parse("move down two sentences") == .moveDownSentences(count: 2))
+        #expect(DictationCommand.parse("up 4 sentences") == .moveUpSentences(count: 4))
+        #expect(DictationCommand.parse("down 5 sentence") == .moveDownSentences(count: 5))
+        #expect(DictationCommand.parse("Move up 2 sentences.") == .moveUpSentences(count: 2))
+        #expect(DictationCommand.parse("please move down three sentences") == .moveDownSentences(count: 3))
+        #expect(DictationCommand.parse("move up a sentence") == .moveUpSentences(count: 1))
+        #expect(DictationCommand.parse("move down a sentence") == .moveDownSentences(count: 1))
+        #expect(DictationCommand.parse("up a sentence") == .moveUpSentences(count: 1))
+        // Progressive session cursor not stolen
+        #expect(DictationCommand.parse("previous sentence") == .moveToPreviousSentence)
+        #expect(DictationCommand.parse("next sentence") == .moveToNextSentence)
+        #expect(DictationCommand.parse("go to previous sentence") == .moveToPreviousSentence)
+        // Paragraphs / lines stay separate
+        #expect(DictationCommand.parse("move up 3 paragraphs") == .moveUpParagraphs(count: 3))
+        #expect(DictationCommand.parse("move up 3 lines") == .moveUpLines(count: 3))
+    }
+
     @Test("select up/down N sentences from caret (not buffer peels)")
     func selectUpDownNSentences() {
         #expect(DictationCommand.parse("select up 3 sentences") == .selectUpSentences(count: 3))

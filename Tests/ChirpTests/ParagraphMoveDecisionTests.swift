@@ -62,6 +62,26 @@ struct ParagraphMoveDecisionTests {
         #expect(TranscriptSelection.selectParagraphsSpan("", caret: 0, up: true, count: 1) == nil)
     }
 
+    @Test("offsetAfterSentenceMove jumps to sentence starts")
+    func dualSentenceOffset() {
+        let t = "One. Two. Three. Four."
+        let ranges = TranscriptSelection.sentenceRanges(t)
+        #expect(ranges.count >= 3)
+        let lastStart = ranges[ranges.count - 1].start
+        let up2 = TranscriptSelection.offsetAfterSentenceMove(
+            t, caret: lastStart, up: true, count: 2
+        )
+        #expect(up2 == ranges[ranges.count - 3].start)
+        let down2 = TranscriptSelection.offsetAfterSentenceMove(
+            t, caret: ranges[0].start, up: false, count: 2
+        )
+        #expect(down2 == ranges[2].start)
+        #expect(
+            TranscriptSelection.offsetAfterSentenceMove(t, caret: 0, up: true, count: 9)
+                == ranges[0].start
+        )
+    }
+
     @Test("selectSentencesSpan covers N sentences inclusive")
     func selectSentenceSpan() {
         let t = "One. Two. Three. Four."
