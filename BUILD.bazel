@@ -145,6 +145,7 @@ swift_test(
         "Tests/ChirpTests/SegmentJoinerTests.swift",
         "Tests/ChirpTests/DictationDictionaryTests.swift",
         "Tests/ChirpTests/DictationCommandTests.swift",
+        "Tests/ChirpTests/CommandHotwordsTests.swift",
         "Tests/ChirpTests/EditStackTests.swift",
         "Tests/ChirpTests/CapsModeTests.swift",
         "Tests/ChirpTests/SpellModeTests.swift",

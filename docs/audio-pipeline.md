@@ -140,6 +140,10 @@ guards.
 Spoken `new line` / `new paragraph` rewrite in `TextPostProcessor`;
 newlines type as Return keys via `TextInserter.steps`. Custom vocabulary: `DictationDictionary`
 (built-in tech ASR seeds + UserDefaults `chirp.dictationDictionary`).
+Command ASR bias: `CommandHotwords` writes multi-word command phrases to
+`~/Library/Application Support/Chirp/command-hotwords.txt` and the offline
+recognizer uses **modified_beam_search** + `hotwords_score` (falls back to
+greedy if create fails). SOTA contextual biasing for dictation commands.
 Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** / **correct that** — multi-level undo (`EditStack`)
 - **scratch that N times** / **undo that N times** — undo last N phrases in one utterance (`ScratchThatN.tla`)

@@ -75,11 +75,22 @@ actor Transcriber: TranscriberProtocol {
     }
 
     /// Try preferred ASR providers in order until create succeeds.
+    /// Prefers modified_beam_search + command hotwords (SOTA contextual bias);
+    /// falls back to greedy_search if beam/hotwords create fails.
     private func createRecognizer(modelDir: String) -> Bool {
         for provider in InferenceProvider.asrCandidates {
-            if let handle = makeRecognizer(modelDir: modelDir, provider: provider) {
+            if let handle = makeRecognizer(modelDir: modelDir, provider: provider, useHotwords: true) {
                 recognizer = handle
-                Log.transcription.info("Offline recognizer using provider=\(provider)")
+                Log.transcription.info(
+                    "Offline recognizer using provider=\(provider) decoding=modified_beam_search hotwords=on"
+                )
+                return true
+            }
+            if let handle = makeRecognizer(modelDir: modelDir, provider: provider, useHotwords: false) {
+                recognizer = handle
+                Log.transcription.info(
+                    "Offline recognizer using provider=\(provider) decoding=greedy_search hotwords=off"
+                )
                 return true
             }
             Log.transcription.info("Provider \(provider) unavailable for ASR — trying next")
@@ -87,12 +98,30 @@ actor Transcriber: TranscriberProtocol {
         return false
     }
 
-    private func makeRecognizer(modelDir: String, provider: String) -> OpaquePointer? {
+    private func makeRecognizer(
+        modelDir: String,
+        provider: String,
+        useHotwords: Bool
+    ) -> OpaquePointer? {
         let tokensPath = toCString("\(modelDir)/tokens.txt")
         let providerStr = toCString(provider)
         let modelTypeStr = toCString(ModelVariant.modelType)
         let emptyStr = toCString("")
-        let decodingMethodStr = toCString("greedy_search")
+        // Hotwords require modified_beam_search (sherpa-onnx); greedy ignores them.
+        let decodingMethodStr = toCString(
+            useHotwords ? "modified_beam_search" : "greedy_search"
+        )
+        let hotwordsPathStr: UnsafeMutablePointer<CChar>?
+        if useHotwords, let path = CommandHotwords.ensureFileOnDisk() {
+            hotwordsPathStr = toCString(path)
+        } else if useHotwords {
+            // No file → do not claim hotwords path; caller will try greedy.
+            free(tokensPath); free(providerStr); free(modelTypeStr)
+            free(emptyStr); free(decodingMethodStr)
+            return nil
+        } else {
+            hotwordsPathStr = nil
+        }
 
         let encoderPath = toCString("\(modelDir)/encoder.int8.onnx")
         let decoderPath = toCString("\(modelDir)/decoder.int8.onnx")
@@ -102,6 +131,7 @@ actor Transcriber: TranscriberProtocol {
             free(encoderPath); free(decoderPath); free(joinerPath)
             free(tokensPath); free(providerStr); free(modelTypeStr); free(emptyStr)
             free(decodingMethodStr)
+            if let hotwordsPathStr { free(hotwordsPathStr) }
         }
 
         var modelConfig = SherpaOnnxOfflineModelConfig()
@@ -139,9 +169,14 @@ actor Transcriber: TranscriberProtocol {
         config.model_config = modelConfig
         config.lm_config = lmConfig
         config.decoding_method = UnsafePointer(decodingMethodStr)
-        config.max_active_paths = 4
-        config.hotwords_file = UnsafePointer(emptyStr)
-        config.hotwords_score = 1.5
+        config.max_active_paths = CommandHotwords.maxActivePaths
+        if let hotwordsPathStr {
+            config.hotwords_file = UnsafePointer(hotwordsPathStr)
+            config.hotwords_score = CommandHotwords.score
+        } else {
+            config.hotwords_file = UnsafePointer(emptyStr)
+            config.hotwords_score = CommandHotwords.score
+        }
         config.rule_fsts = UnsafePointer(emptyStr)
         config.rule_fars = UnsafePointer(emptyStr)
         config.blank_penalty = 0.0
