@@ -272,7 +272,9 @@ enum DictationCommand: Equatable, Sendable {
 
     /// Parse a post-processed segment into a command, or `.none` for normal text.
     static func parse(_ text: String) -> DictationCommand {
-        let candidates = normalizeCandidates(text)
+        // Full-utterance ASR near-miss repair first (capta → cap that, etc.).
+        let repaired = CommandNearMiss.repair(text)
+        let candidates = normalizeCandidates(repaired)
         for candidate in candidates {
             if let cmd = matchExact(candidate) {
                 return cmd

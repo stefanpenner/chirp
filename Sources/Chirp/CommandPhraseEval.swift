@@ -71,6 +71,8 @@ enum CommandPhraseEval {
         Trial(hyp: "forward delete", expected: .pressForwardDelete(count: 1)),
         // Caps / spell
         Trial(hyp: "cap that", expected: .capThat),
+        Trial(hyp: "Capta", expected: .capThat), // live soak dump
+        Trial(hyp: "capthat", expected: .capThat),
         Trial(hyp: "all caps that", expected: .allCapsThat),
         Trial(hyp: "spell that", expected: .spellThat),
         Trial(hyp: "spell mode", expected: .setSpellMode(.on)),
@@ -109,7 +111,8 @@ enum CommandPhraseEval {
 
     /// Soft budget for live soak: at least this fraction of commands must parse
     /// correctly after TTS → Parakeet (short commands are ASR-hard).
-    static let soakMinHitRate: Double = 0.70
+    /// Raised after full-utterance near-miss repair (was 0.70).
+    static let soakMinHitRate: Double = 0.80
 
     /// Command-bias hotwords that must parse as commands (excludes content/open).
     static func commandBiasPhrases(

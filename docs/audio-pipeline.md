@@ -37,7 +37,7 @@ bazel test //:TranscriberIntegrationTests --test_output=all
 Coverage:
 
 - **Clean corpus** — 16 golden phrases, mean majorWER ≤ 8%, WER ≤ 12%, CER ≤ 8%, median ≤ 5%, RTF ≤ 0.5
-- **Command soak** — Dragon phrases TTS → parse hit rate ≥ 70% (`CommandPhraseEval.soakMinHitRate`)
+- **Command soak** — Dragon phrases TTS → parse hit rate ≥ 80% (`CommandPhraseEval.soakMinHitRate`)
 - **AppState E2E** — MockAudioRecorder → typed text, ranked subset
 - **Silence** — no hallucination (WER 0 against empty ref)
 - **Noisy** — 15 dB SNR, 6 phrases, mean majorWER ≤ 40%, WER ≤ 55%
@@ -146,8 +146,9 @@ Command ASR bias: `CommandHotwords` writes multi-word command phrases to
 recognizer uses **modified_beam_search** + `hotwords_score` (falls back to
 greedy if create fails). SOTA contextual biasing for dictation commands.
 Command recognition eval: `CommandPhraseEval` (pure hit rate on golden +
-near-miss hyps; always-on). Live soak: `AudioCorpusPipelineTests`
-`commandPhraseSoak` (TTS → ASR → parse; budget ≥ 70% hit rate).
+near-miss hyps; always-on). Full-utterance ASR repair: `CommandNearMiss`
+(e.g. Capta → cap that) before parse. Live soak: `AudioCorpusPipelineTests`
+`commandPhraseSoak` (TTS → ASR → parse; budget ≥ 80% hit rate).
 Spoken edit commands (`DictationCommand` + `EditCommands.tla`):
 - **scratch that** / **correct that** — multi-level undo (`EditStack`)
 - **scratch that N times** / **undo that N times** — undo last N phrases in one utterance (`ScratchThatN.tla`)
