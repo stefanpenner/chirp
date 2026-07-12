@@ -6,6 +6,9 @@
     PhraseReplaceDecision.findLastRange(before:) / findFirstRange(after:)
     AppState.performSelectAgain / performSelectNextOccurrence
 
+  Seed (SelectPhrase): select X, select that (last stack delta), or select last
+  word(s) — all call rememberSelectSearch so select again has a target.
+
   Grain: abstract count of matches (1..MaxMatches). cursor is 0-based index
   into that list (rightmost = last occurrence = first select). No buffer text.
 *)

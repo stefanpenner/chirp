@@ -2286,6 +2286,117 @@ struct AppStateTests {
         #expect(!inserter.typedTexts.contains("select that"))
     }
 
+    @Test("select that seeds select again memory (Dragon dual of SelectAgain.tla)")
+    func selectThatThenSelectAgainWalksEarlierOccurrence() async throws {
+        // Last stack delta is the word "foo" (second utterance). Buffer holds
+        // two foos so select again can walk left (SelectAgain cursor-1).
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["hello foo"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("hello") { break }
+        }
+
+        await mock.setFeedAudioResult(["foo"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            // Two foos in buffer (first inside "hello foo", second from last delta)
+            let lower = state.transcribedText.lowercased()
+            if lower.components(separatedBy: "foo").count >= 3 { break }
+        }
+        let buf = state.transcribedText.lowercased()
+        #expect(
+            buf.components(separatedBy: "foo").count >= 3,
+            "need two foos in buffer for select again, got \"\(state.transcribedText)\""
+        )
+
+        await mock.setFeedAudioResult(["select that"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+        #expect(!inserter.typedTexts.contains("select that"))
+        // lastDelta is second "foo" (maybe with leading space) — trailing select
+        let thatSpan = inserter.selectBackwardCounts.last
+        #expect(
+            thatSpan == "foo".count || thatSpan == " foo".count
+                || thatSpan == "Foo".count || thatSpan == " Foo".count,
+            "select that should select last delta foo, got \(String(describing: thatSpan))"
+        )
+        let forwardBefore = inserter.selectForwardCounts.count
+
+        await mock.setFeedAudioResult(["select again"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count > forwardBefore { break }
+        }
+
+        // Select again re-selects earlier foo via selectForward (mid-buffer).
+        #expect(
+            inserter.selectForwardCounts.last == "foo".count
+                || inserter.selectForwardCounts.last == "Foo".count,
+            "select again after select that should select earlier foo, got \(String(describing: inserter.selectForwardCounts.last))"
+        )
+        #expect(!inserter.typedTexts.contains("select again"))
+    }
+
+    @Test("select last word seeds select again for repeated word")
+    func selectLastWordThenSelectAgain() async throws {
+        let mock = MockTranscriber()
+        await mock.setFeedAudioResult(["alpha beta alpha"])
+        let recorder = MockAudioRecorder()
+        let inserter = MockTextInserter()
+        let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
+        state.status = .ready
+        state.startRecording()
+
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if await mock.resetVADCalled { break }
+        }
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if state.transcribedText.lowercased().contains("beta") { break }
+        }
+
+        await mock.setFeedAudioResult(["select last word"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if !inserter.selectBackwardCounts.isEmpty { break }
+        }
+        let beforeAgain = inserter.selectForwardCounts.count
+
+        await mock.setFeedAudioResult(["select again"])
+        recorder.lastOnSamples?([0.1])
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            if inserter.selectForwardCounts.count > beforeAgain { break }
+        }
+
+        #expect(
+            inserter.selectForwardCounts.last == "alpha".count
+                || inserter.selectForwardCounts.last == "Alpha".count,
+            "select again after select last word should land on earlier alpha"
+        )
+        #expect(!inserter.typedTexts.contains("select again"))
+    }
+
     @Test("go after X then content inserts mid-buffer (not always append)")
     func goAfterPhraseThenContentInsertsMid() async throws {
         let mock = MockTranscriber()

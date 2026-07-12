@@ -2217,12 +2217,17 @@ public final class AppState {
     }
 
     /// Select the last typed phrase (EditStack top delta). Buffer unchanged.
+    /// Seeds select-again memory with the selected phrase (Dragon "select that"
+    /// → "select again" walks earlier occurrences of that text).
     /// Requires focus in target app (same as deleteBackward).
     private func performSelectThat(typesIncrementally: Bool) {
         guard typesIncrementally else { return }
         guard let delta = editStack.lastDelta, !delta.isEmpty else { return }
         guard transcribedText.hasSuffix(delta) else { return }
-        armSessionSelection(start: transcribedText.count - delta.count, length: delta.count)
+        let start = transcribedText.count - delta.count
+        let match = PhraseReplaceDecision.Match(start: start, length: delta.count)
+        rememberSelectSearch(target: delta, match: match)
+        armSessionSelection(start: start, length: delta.count)
         textInserter.selectBackward(count: delta.count)
     }
 
@@ -2579,11 +2584,17 @@ public final class AppState {
     }
 
     /// Select last N whitespace-delimited words (session trailing). Buffer unchanged.
+    /// Seeds select-again memory so "select again" walks earlier matches of the
+    /// selected word/phrase (Dragon dual of SelectAgain after select last word).
     private func performSelectLastWords(count: Int, typesIncrementally: Bool) {
         guard typesIncrementally, count > 0 else { return }
         let selected = TranscriptSelection.lastWords(transcribedText, count: count)
         guard !selected.isEmpty else { return }
-        armSessionSelection(start: transcribedText.count - selected.count, length: selected.count)
+        let start = transcribedText.count - selected.count
+        let match = PhraseReplaceDecision.Match(start: start, length: selected.count)
+        // Target is the visible word span (trim handled in rememberSelectSearch).
+        rememberSelectSearch(target: selected, match: match)
+        armSessionSelection(start: start, length: selected.count)
         textInserter.selectBackward(count: selected.count)
         let words = TranscriptSelection.wordRanges(transcribedText)
         if !words.isEmpty {
