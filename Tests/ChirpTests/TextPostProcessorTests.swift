@@ -764,12 +764,23 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("exp of x") == "exp(x)")
         #expect(TextPostProcessor.process("det of A") == "det(A)")
         #expect(TextPostProcessor.process("max of n") == "max(n)")
-        // Multi-arg: f of x and y
+        // Multi-arg: f of x and y / three-arg
         #expect(TextPostProcessor.process("f of x and y") == "f(x, y)")
         #expect(TextPostProcessor.process("g of a and b") == "g(a, b)")
         #expect(TextPostProcessor.process("max of m and n") == "max(m, n)")
         #expect(TextPostProcessor.process("f of 1 and 2") == "f(1, 2)")
         #expect(TextPostProcessor.process("sin of x and y") == "sin(x, y)")
+        #expect(TextPostProcessor.process("f of x and y and z") == "f(x, y, z)")
+        #expect(TextPostProcessor.process("g of 1 and 2 and 3") == "g(1, 2, 3)")
+        #expect(TextPostProcessor.process("max of a and b and c") == "max(a, b, c)")
+        // Comma-spoken args after "comma" → ","
+        #expect(TextPostProcessor.process("f of x comma y") == "f(x, y)")
+        #expect(TextPostProcessor.process("f of x comma y comma z") == "f(x, y, z)")
+        // Tuples / ordered pairs
+        #expect(TextPostProcessor.process("tuple of x and y") == "(x, y)")
+        #expect(TextPostProcessor.process("ordered pair of a and b") == "(a, b)")
+        #expect(TextPostProcessor.process("tuple of 1 and 2 and 3") == "(1, 2, 3)")
+        #expect(TextPostProcessor.process("the tuple of x and y") == "(x, y)")
         // Subscripts
         #expect(TextPostProcessor.process("x sub i") == "xᵢ")
         #expect(TextPostProcessor.process("x subscript j") == "xⱼ")

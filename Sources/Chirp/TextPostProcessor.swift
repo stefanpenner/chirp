@@ -900,6 +900,8 @@ enum TextPostProcessor {
         var result = applyTimeITN(text)
         // Dates before cardinals so "twenty twenty four" is not split into 20 24
         result = SpokenDateITN.apply(result)
+        // Tuples/ordered pairs before number ITN so "pair of" is not rewritten to 2.
+        result = applyTupleOfITN(result)
         // Cardinals/ordinals (and remaining "march 15th" if date missed spoken day words)
         result = SpokenNumberITN.apply(result)
         // Second date pass: "march 15th" after ordinal ITN → "March 15"
@@ -2130,20 +2132,58 @@ enum TextPostProcessor {
     private static let functionArgToken =
         #"[A-Za-z]|\d{1,6}|zero|one|two|three|four|five|six|seven|eight|nine|ten"#
 
+    private static let functionNameToken =
+        #"(?:[fghFGH])|(?:"# + mathFunctionNames + #")"#
+
+    /// "f of x and y and z" — three args (apply before two-arg).
+    private static let functionOfThreeITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\b("# + functionNameToken + #")\s+of\s+("#
+            + a + #")\s+and\s+("# + a + #")\s+and\s+("# + a + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
     /// "f of x and y" / "max of m and n" — two args (apply before single-arg).
     private static let functionOfTwoITNPattern: NSRegularExpression = {
         let a = functionArgToken
         let pattern =
-            #"\b((?:[fghFGH])|(?:"# + mathFunctionNames + #"))\s+of\s+("#
+            #"\b("# + functionNameToken + #")\s+of\s+("#
             + a + #")\s+and\s+("# + a + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// "f of x comma y" / "f of x, y, z" after spoken-comma rewrite.
+    private static let functionOfCommaITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\b("# + functionNameToken + #")\s+of\s+("#
+            + a + #")\s*,\s*("# + a + #")(?:\s*,\s*("# + a + #"))?\b"#
         return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }()
 
     /// Single-letter or named: "f of x" / "sin of x" / "h of 0"
     private static let functionOfITNPattern: NSRegularExpression = {
         let pattern =
-            #"\b((?:[fghFGH])|(?:"# + mathFunctionNames + #"))\s+of\s+("#
+            #"\b("# + functionNameToken + #")\s+of\s+("#
             + functionArgToken + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// "tuple of x and y" / "ordered pair of a and b" / three-arg tuple.
+    private static let tupleOfThreeITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\b(?:the\s+)?(?:tuple|ordered\s+pair)\s+of\s+("#
+            + a + #")\s+and\s+("# + a + #")\s+and\s+("# + a + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    private static let tupleOfTwoITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\b(?:the\s+)?(?:tuple|ordered\s+pair)\s+of\s+("#
+            + a + #")\s+and\s+("# + a + #")\b"#
         return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }()
 
@@ -2189,33 +2229,100 @@ enum TextPostProcessor {
 
     private static func applyFunctionOfITN(_ text: String) -> String {
         var result = text
-        // Two-arg first so "f of x and y" is not reduced to "f(x) and y".
+        // Longest arity first: 3-and → 2-and → comma → single.
+        result = applyFnOfAndArgs(result, pattern: functionOfThreeITNPattern, arity: 3)
+        result = applyFnOfAndArgs(result, pattern: functionOfTwoITNPattern, arity: 2)
+        result = applyFnOfCommaArgs(result)
+        result = applyFnOfAndArgs(result, pattern: functionOfITNPattern, arity: 1)
+        return result
+    }
+
+    private static func applyFnOfAndArgs(
+        _ text: String,
+        pattern: NSRegularExpression,
+        arity: Int
+    ) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            // Groups: 1=fn, 2..=args (arity groups)
+            guard match.numberOfRanges >= arity + 2,
+                  let fnRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let fn = String(result[fnRange])
+            var args: [String] = []
+            var ok = true
+            for i in 0..<arity {
+                guard let ar = Range(match.range(at: 2 + i), in: result) else {
+                    ok = false
+                    break
+                }
+                args.append(rangeDigits(from: String(result[ar])))
+            }
+            guard ok else { continue }
+            result.replaceSubrange(fullRange, with: "\(fn)(\(args.joined(separator: ", ")))")
+        }
+        return result
+    }
+
+    private static func applyFnOfCommaArgs(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = functionOfCommaITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            // Groups: 1=fn, 2=a, 3=b, 4=c?
+            guard match.numberOfRanges >= 4,
+                  let fnRange = Range(match.range(at: 1), in: result),
+                  let aRange = Range(match.range(at: 2), in: result),
+                  let bRange = Range(match.range(at: 3), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let fn = String(result[fnRange])
+            var args = [
+                rangeDigits(from: String(result[aRange])),
+                rangeDigits(from: String(result[bRange])),
+            ]
+            if match.numberOfRanges > 4, match.range(at: 4).location != NSNotFound,
+               let cRange = Range(match.range(at: 4), in: result)
+            {
+                args.append(rangeDigits(from: String(result[cRange])))
+            }
+            result.replaceSubrange(fullRange, with: "\(fn)(\(args.joined(separator: ", ")))")
+        }
+        return result
+    }
+
+    private static func applyTupleOfITN(_ text: String) -> String {
+        var result = text
+        // Three-arg first.
         do {
             let range = NSRange(result.startIndex..., in: result)
-            let matches = functionOfTwoITNPattern.matches(in: result, range: range)
+            let matches = tupleOfThreeITNPattern.matches(in: result, range: range)
             for match in matches.reversed() {
                 guard match.numberOfRanges >= 4,
-                      let fnRange = Range(match.range(at: 1), in: result),
-                      let aRange = Range(match.range(at: 2), in: result),
-                      let bRange = Range(match.range(at: 3), in: result),
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let cRange = Range(match.range(at: 3), in: result),
                       let fullRange = Range(match.range, in: result) else { continue }
-                let fn = String(result[fnRange])
                 let a = rangeDigits(from: String(result[aRange]))
                 let b = rangeDigits(from: String(result[bRange]))
-                result.replaceSubrange(fullRange, with: "\(fn)(\(a), \(b))")
+                let c = rangeDigits(from: String(result[cRange]))
+                result.replaceSubrange(fullRange, with: "(\(a), \(b), \(c))")
             }
         }
         do {
             let range = NSRange(result.startIndex..., in: result)
-            let matches = functionOfITNPattern.matches(in: result, range: range)
+            let matches = tupleOfTwoITNPattern.matches(in: result, range: range)
             for match in matches.reversed() {
                 guard match.numberOfRanges >= 3,
-                      let fnRange = Range(match.range(at: 1), in: result),
-                      let argRange = Range(match.range(at: 2), in: result),
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
                       let fullRange = Range(match.range, in: result) else { continue }
-                let fn = String(result[fnRange])
-                let arg = rangeDigits(from: String(result[argRange]))
-                result.replaceSubrange(fullRange, with: "\(fn)(\(arg))")
+                let a = rangeDigits(from: String(result[aRange]))
+                let b = rangeDigits(from: String(result[bRange]))
+                result.replaceSubrange(fullRange, with: "(\(a), \(b))")
             }
         }
         return result
