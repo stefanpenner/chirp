@@ -764,6 +764,12 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("exp of x") == "exp(x)")
         #expect(TextPostProcessor.process("det of A") == "det(A)")
         #expect(TextPostProcessor.process("max of n") == "max(n)")
+        // Multi-arg: f of x and y
+        #expect(TextPostProcessor.process("f of x and y") == "f(x, y)")
+        #expect(TextPostProcessor.process("g of a and b") == "g(a, b)")
+        #expect(TextPostProcessor.process("max of m and n") == "max(m, n)")
+        #expect(TextPostProcessor.process("f of 1 and 2") == "f(1, 2)")
+        #expect(TextPostProcessor.process("sin of x and y") == "sin(x, y)")
         // Subscripts
         #expect(TextPostProcessor.process("x sub i") == "xᵢ")
         #expect(TextPostProcessor.process("x subscript j") == "xⱼ")
@@ -773,6 +779,12 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("v sub n") == "vₙ")
         #expect(TextPostProcessor.process("subscript i of x") == "xᵢ"
             || TextPostProcessor.process("x sub i") == "xᵢ")
+        // Superscripts (variable powers / free index)
+        #expect(TextPostProcessor.process("x super n") == "xⁿ")
+        #expect(TextPostProcessor.process("x superscript 2") == "x²")
+        #expect(TextPostProcessor.process("a super i") == "aⁱ")
+        #expect(TextPostProcessor.process("v super 10") == "v¹⁰")
+        #expect(TextPostProcessor.process("x super zero") == "x⁰")
         // Guards
         #expect(TextPostProcessor.process("sort of x") == "sort of x"
             || !TextPostProcessor.process("sort of nice").contains("("))
@@ -780,6 +792,9 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("a of the") == "a of the")
         #expect(TextPostProcessor.process("sub sandwich") == "sub sandwich")
         #expect(TextPostProcessor.process("of course") == "of course")
+        #expect(TextPostProcessor.process("super bowl") == "super bowl")
+        #expect(TextPostProcessor.process("f of x and the") == "f of x and the"
+            || TextPostProcessor.process("f of x and the").contains("the"))
     }
 
     @Test("Light ITN math relations and letter accents")

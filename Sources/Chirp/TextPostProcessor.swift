@@ -2126,21 +2126,42 @@ enum TextPostProcessor {
     private static let mathFunctionNames =
         "sin|cos|tan|sec|csc|cot|arcsin|arccos|arctan|sinh|cosh|tanh|exp|det|max|min|gcd|lcm|erf|abs"
 
-    /// Single-letter or named: "f of x" / "sin of x" / "h of 0"
-    private static let functionOfITNPattern: NSRegularExpression = {
-        let arg =
-            #"[A-Za-z]|\d{1,6}|zero|one|two|three|four|five|six|seven|eight|nine|ten"#
+    /// Arg token shared by single- and multi-arg function "of" forms.
+    private static let functionArgToken =
+        #"[A-Za-z]|\d{1,6}|zero|one|two|three|four|five|six|seven|eight|nine|ten"#
+
+    /// "f of x and y" / "max of m and n" — two args (apply before single-arg).
+    private static let functionOfTwoITNPattern: NSRegularExpression = {
+        let a = functionArgToken
         let pattern =
-            #"\b((?:[fghFGH])|(?:"# + mathFunctionNames + #"))\s+of\s+("# + arg + #")\b"#
+            #"\b((?:[fghFGH])|(?:"# + mathFunctionNames + #"))\s+of\s+("#
+            + a + #")\s+and\s+("# + a + #")\b"#
         return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }()
 
+    /// Single-letter or named: "f of x" / "sin of x" / "h of 0"
+    private static let functionOfITNPattern: NSRegularExpression = {
+        let pattern =
+            #"\b((?:[fghFGH])|(?:"# + mathFunctionNames + #"))\s+of\s+("#
+            + functionArgToken + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// Index token for sub/super: letter, digit run, or small spoken number.
+    private static let indexToken =
+        #"[A-Za-z]|\d{1,3}|zero|one|two|three|four|five|six|seven|eight|nine|ten"#
+
     /// "x sub i" / "a subscript 0" / "v sub n"
     private static let subscriptITNPattern: NSRegularExpression = {
-        let idx =
-            #"[A-Za-z]|\d{1,3}|zero|one|two|three|four|five|six|seven|eight|nine|ten"#
         let pattern =
-            #"\b([A-Za-z])\s+(?:sub(?:script)?)\s+("# + idx + #")\b"#
+            #"\b([A-Za-z])\s+(?:sub(?:script)?)\s+("# + indexToken + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// "x super n" / "a superscript 2" — free index / power without "to the power of".
+    private static let superscriptITNPattern: NSRegularExpression = {
+        let pattern =
+            #"\b([A-Za-z])\s+(?:super(?:script)?)\s+("# + indexToken + #")\b"#
         return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }()
 
@@ -2153,26 +2174,66 @@ enum TextPostProcessor {
         "S": "ₛ", "T": "ₜ", "U": "ᵤ", "V": "ᵥ", "X": "ₓ",
     ]
 
+    /// Unicode superscript letters (common free indices).
+    private static let superscriptLetterMap: [Character: Character] = [
+        "a": "ᵃ", "b": "ᵇ", "c": "ᶜ", "d": "ᵈ", "e": "ᵉ", "f": "ᶠ",
+        "g": "ᵍ", "h": "ʰ", "i": "ⁱ", "j": "ʲ", "k": "ᵏ", "l": "ˡ",
+        "m": "ᵐ", "n": "ⁿ", "o": "ᵒ", "p": "ᵖ", "r": "ʳ", "s": "ˢ",
+        "t": "ᵗ", "u": "ᵘ", "v": "ᵛ", "w": "ʷ", "x": "ˣ", "y": "ʸ",
+        "z": "ᶻ",
+        "A": "ᴬ", "B": "ᴮ", "D": "ᴰ", "E": "ᴱ", "G": "ᴳ", "H": "ᴴ",
+        "I": "ᴵ", "J": "ᴶ", "K": "ᴷ", "L": "ᴸ", "M": "ᴹ", "N": "ᴺ",
+        "O": "ᴼ", "P": "ᴾ", "R": "ᴿ", "T": "ᵀ", "U": "ᵁ", "V": "ⱽ",
+        "W": "ᵂ",
+    ]
+
     private static func applyFunctionOfITN(_ text: String) -> String {
-        let range = NSRange(text.startIndex..., in: text)
-        let matches = functionOfITNPattern.matches(in: text, range: range)
-        guard !matches.isEmpty else { return text }
         var result = text
-        for match in matches.reversed() {
-            guard match.numberOfRanges >= 3,
-                  let fnRange = Range(match.range(at: 1), in: result),
-                  let argRange = Range(match.range(at: 2), in: result),
-                  let fullRange = Range(match.range, in: result) else { continue }
-            let fn = String(result[fnRange])
-            let arg = rangeDigits(from: String(result[argRange]))
-            result.replaceSubrange(fullRange, with: "\(fn)(\(arg))")
+        // Two-arg first so "f of x and y" is not reduced to "f(x) and y".
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = functionOfTwoITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 4,
+                      let fnRange = Range(match.range(at: 1), in: result),
+                      let aRange = Range(match.range(at: 2), in: result),
+                      let bRange = Range(match.range(at: 3), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let fn = String(result[fnRange])
+                let a = rangeDigits(from: String(result[aRange]))
+                let b = rangeDigits(from: String(result[bRange]))
+                result.replaceSubrange(fullRange, with: "\(fn)(\(a), \(b))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = functionOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let fnRange = Range(match.range(at: 1), in: result),
+                      let argRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let fn = String(result[fnRange])
+                let arg = rangeDigits(from: String(result[argRange]))
+                result.replaceSubrange(fullRange, with: "\(fn)(\(arg))")
+            }
         }
         return result
     }
 
     private static func applySubscriptITN(_ text: String) -> String {
+        var result = applyIndexScriptITN(text, pattern: subscriptITNPattern, format: formatSubscriptIndex)
+        result = applyIndexScriptITN(result, pattern: superscriptITNPattern, format: formatSuperscriptIndex)
+        return result
+    }
+
+    private static func applyIndexScriptITN(
+        _ text: String,
+        pattern: NSRegularExpression,
+        format: (String) -> String
+    ) -> String {
         let range = NSRange(text.startIndex..., in: text)
-        let matches = subscriptITNPattern.matches(in: text, range: range)
+        let matches = pattern.matches(in: text, range: range)
         guard !matches.isEmpty else { return text }
         var result = text
         for match in matches.reversed() {
@@ -2182,8 +2243,7 @@ enum TextPostProcessor {
                   let fullRange = Range(match.range, in: result) else { continue }
             let base = String(result[baseRange])
             let idxRaw = String(result[idxRange])
-            let idx = formatSubscriptIndex(idxRaw)
-            result.replaceSubrange(fullRange, with: base + idx)
+            result.replaceSubrange(fullRange, with: base + format(idxRaw))
         }
         return result
     }
@@ -2200,6 +2260,22 @@ enum TextPostProcessor {
         }
         // Fallback underscore form
         return "_\(raw)"
+    }
+
+    private static func formatSuperscriptIndex(_ raw: String) -> String {
+        let asDigits = rangeDigits(from: raw)
+        if asDigits.allSatisfy(\.isNumber) {
+            return superscriptFromDigits(asDigits)
+        }
+        if raw.count == 1, let ch = raw.first {
+            if let sup = superscriptLetterMap[ch] {
+                return String(sup)
+            }
+            if let sup = superscriptLetterMap[Character(ch.lowercased())] {
+                return String(sup)
+            }
+        }
+        return "^\(raw)"
     }
 
     private static func applySciPowerOfITN(_ text: String) -> String {
