@@ -2187,6 +2187,49 @@ enum TextPostProcessor {
         return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }()
 
+    /// "set of a and b [and c]"
+    private static let setOfThreeITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\b(?:the\s+)?set\s+of\s+("#
+            + a + #")\s+and\s+("# + a + #")\s+and\s+("# + a + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    private static let setOfTwoITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\b(?:the\s+)?set\s+of\s+("# + a + #")\s+and\s+("# + a + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// "set of a comma b comma c" after spoken comma → ","
+    private static let setOfCommaITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\b(?:the\s+)?set\s+of\s+("#
+            + a + #")\s*,\s*("# + a + #")(?:\s*,\s*("# + a + #"))?\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// "row of 1 and 2 and 3" → [1, 2, 3]
+    private static let rowOfThreeITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\brow\s+of\s+("#
+            + a + #")\s+and\s+("# + a + #")\s+and\s+("# + a + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    private static let rowOfTwoITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\brow\s+of\s+("# + a + #")\s+and\s+("# + a + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+
+
     /// Index token for sub/super: letter, digit run, or small spoken number.
     private static let indexToken =
         #"[A-Za-z]|\d{1,3}|zero|one|two|three|four|five|six|seven|eight|nine|ten"#
@@ -2296,36 +2339,206 @@ enum TextPostProcessor {
 
     private static func applyTupleOfITN(_ text: String) -> String {
         var result = text
-        // Three-arg first.
-        do {
-            let range = NSRange(result.startIndex..., in: result)
-            let matches = tupleOfThreeITNPattern.matches(in: result, range: range)
-            for match in matches.reversed() {
-                guard match.numberOfRanges >= 4,
-                      let aRange = Range(match.range(at: 1), in: result),
-                      let bRange = Range(match.range(at: 2), in: result),
-                      let cRange = Range(match.range(at: 3), in: result),
-                      let fullRange = Range(match.range, in: result) else { continue }
-                let a = rangeDigits(from: String(result[aRange]))
-                let b = rangeDigits(from: String(result[bRange]))
-                let c = rangeDigits(from: String(result[cRange]))
-                result.replaceSubrange(fullRange, with: "(\(a), \(b), \(c))")
+        // Matrix multi-row before bare row-of (so "matrix row …" is not partial).
+        result = applyMatrixRowsITN(result)
+        // Three-arg collections first.
+        result = applyAndArgsCollection(result, pattern: tupleOfThreeITNPattern, open: "(", close: ")", arity: 3)
+        result = applyAndArgsCollection(result, pattern: setOfThreeITNPattern, open: "{", close: "}", arity: 3)
+        result = applyAndArgsCollection(result, pattern: rowOfThreeITNPattern, open: "[", close: "]", arity: 3)
+        // Two-arg
+        result = applyAndArgsCollection(result, pattern: tupleOfTwoITNPattern, open: "(", close: ")", arity: 2)
+        result = applyAndArgsCollection(result, pattern: setOfTwoITNPattern, open: "{", close: "}", arity: 2)
+        result = applyAndArgsCollection(result, pattern: rowOfTwoITNPattern, open: "[", close: "]", arity: 2)
+        // Comma-separated sets
+        result = applySetOfCommaITN(result)
+        return result
+    }
+
+    private static func applyAndArgsCollection(
+        _ text: String,
+        pattern: NSRegularExpression,
+        open: String,
+        close: String,
+        arity: Int
+    ) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= arity + 1,
+                  let fullRange = Range(match.range, in: result) else { continue }
+            var args: [String] = []
+            var ok = true
+            for i in 0..<arity {
+                guard let ar = Range(match.range(at: 1 + i), in: result) else {
+                    ok = false
+                    break
+                }
+                args.append(rangeDigits(from: String(result[ar])))
             }
-        }
-        do {
-            let range = NSRange(result.startIndex..., in: result)
-            let matches = tupleOfTwoITNPattern.matches(in: result, range: range)
-            for match in matches.reversed() {
-                guard match.numberOfRanges >= 3,
-                      let aRange = Range(match.range(at: 1), in: result),
-                      let bRange = Range(match.range(at: 2), in: result),
-                      let fullRange = Range(match.range, in: result) else { continue }
-                let a = rangeDigits(from: String(result[aRange]))
-                let b = rangeDigits(from: String(result[bRange]))
-                result.replaceSubrange(fullRange, with: "(\(a), \(b))")
-            }
+            guard ok else { continue }
+            result.replaceSubrange(
+                fullRange,
+                with: "\(open)\(args.joined(separator: ", "))\(close)"
+            )
         }
         return result
+    }
+
+    private static func applySetOfCommaITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = setOfCommaITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let aRange = Range(match.range(at: 1), in: result),
+                  let bRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            var args = [
+                rangeDigits(from: String(result[aRange])),
+                rangeDigits(from: String(result[bRange])),
+            ]
+            if match.numberOfRanges > 3, match.range(at: 3).location != NSNotFound,
+               let cRange = Range(match.range(at: 3), in: result)
+            {
+                args.append(rangeDigits(from: String(result[cRange])))
+            }
+            result.replaceSubrange(fullRange, with: "{\(args.joined(separator: ", "))}")
+        }
+        return result
+    }
+
+    /// "matrix row of 1 and 2 next row of 3 and 4" → [[1, 2], [3, 4]]
+    /// String-scan (not one big regex) so multi-row forms stay reliable.
+    private static func applyMatrixRowsITN(_ text: String) -> String {
+        let lower = text.lowercased()
+        var searchFrom = lower.startIndex
+        var replacements: [(Range<String.Index>, String)] = []
+        while let matrixRange = lower.range(of: "matrix row of ", range: searchFrom..<lower.endIndex) {
+            // Align indices with original `text` (same UTF-16 layout as lowercased ASCII keywords).
+            let start = matrixRange.lowerBound
+            // Body starts at "row of …" (skip "matrix ").
+            guard let rowStart = lower.range(of: "row of ", range: start..<lower.endIndex)?.lowerBound
+            else { break }
+            // Consume successive "row of …" linked by " next row of ".
+            var cursor = rowStart
+            var rowFrags: [String] = []
+            while true {
+                guard let fragEnd = endIndexOfRowOf(in: lower, from: cursor) else { break }
+                let frag = String(text[cursor..<fragEnd])
+                guard parseRowOfAndArgs(frag) != nil else { break }
+                rowFrags.append(frag)
+                // Look for "next row of " (optional leading spaces already skipped by frag end).
+                let after = fragEnd
+                var restStart = after
+                while restStart < lower.endIndex, lower[restStart].isWhitespace {
+                    restStart = lower.index(after: restStart)
+                }
+                let rest = lower[restStart...]
+                if rest.hasPrefix("next row of ") {
+                    // Land on "row of " for the following fragment.
+                    cursor = lower.index(restStart, offsetBy: "next ".count)
+                    continue
+                }
+                // Done with this matrix — full span is start..<fragEnd
+                if rowFrags.count >= 2 {
+                    let rows = rowFrags.compactMap { parseRowOfAndArgs($0) }
+                    if rows.count == rowFrags.count {
+                        let rendered = rows
+                            .map { "[\($0.joined(separator: ", "))]" }
+                            .joined(separator: ", ")
+                        replacements.append((start..<fragEnd, "[\(rendered)]"))
+                    }
+                }
+                searchFrom = fragEnd
+                break
+            }
+            if cursor == rowStart {
+                // Failed to parse even first row — advance past "matrix "
+                searchFrom = lower.index(start, offsetBy: 1)
+            }
+        }
+        guard !replacements.isEmpty else { return text }
+        var result = text
+        for (range, rep) in replacements.reversed() {
+            result.replaceSubrange(range, with: rep)
+        }
+        return result
+    }
+
+    /// End index of "row of A and B [and C]" starting at `from` (must be on "row").
+    private static func endIndexOfRowOf(in lower: String, from: String.Index) -> String.Index? {
+        guard lower[from...].hasPrefix("row of ") else { return nil }
+        var i = lower.index(from, offsetBy: "row of ".count)
+        var args = 0
+        var expectAnd = false
+        while i < lower.endIndex {
+            // Skip spaces
+            while i < lower.endIndex, lower[i].isWhitespace {
+                i = lower.index(after: i)
+            }
+            guard i < lower.endIndex else { break }
+            // Peek next word
+            let wordStart = i
+            while i < lower.endIndex, !lower[i].isWhitespace {
+                i = lower.index(after: i)
+            }
+            let word = String(lower[wordStart..<i])
+            if expectAnd {
+                if word == "and" {
+                    expectAnd = false
+                    continue
+                }
+                // End of row-of before this word
+                return wordStart
+            }
+            // Arg?
+            let dig = rangeDigits(from: word)
+            let isArg =
+                (word.count == 1 && word.first!.isLetter)
+                || dig.allSatisfy(\.isNumber)
+            if isArg {
+                args += 1
+                if args > 3 { return nil }
+                expectAnd = true
+                continue
+            }
+            // Not an arg — end before this word (if we have enough args)
+            return args >= 2 ? wordStart : nil
+        }
+        return args >= 2 && expectAnd ? i : nil
+    }
+
+    /// Parse "row of A and B [and C]" → [A, B, C] digit-normalized.
+    private static func parseRowOfAndArgs(_ fragment: String) -> [String]? {
+        let trimmed = fragment.trimmingCharacters(in: .whitespaces)
+        let lower = trimmed.lowercased()
+        guard lower.hasPrefix("row of ") else { return nil }
+        let ofPrefix = String(trimmed.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+        let tokens = ofPrefix.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        // tokens like ["1", "and", "2", "and", "3"] or ["a", "and", "b"]
+        var args: [String] = []
+        var expectAnd = false
+        for t in tokens {
+            let c = t.lowercased()
+            if expectAnd {
+                guard c == "and" else { return nil }
+                expectAnd = false
+                continue
+            }
+            let dig = rangeDigits(from: t)
+            let isArg =
+                (t.count == 1 && t.first!.isLetter)
+                || dig.allSatisfy(\.isNumber)
+            guard isArg else { return nil }
+            args.append(dig.allSatisfy(\.isNumber) ? dig : String(t))
+            expectAnd = true
+        }
+        // Last token must be an arg (expectAnd true means we ended on arg).
+        guard expectAnd, args.count >= 2, args.count <= 3 else { return nil }
+        return args
     }
 
     private static func applySubscriptITN(_ text: String) -> String {

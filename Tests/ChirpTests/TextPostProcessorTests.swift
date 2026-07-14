@@ -781,6 +781,26 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("ordered pair of a and b") == "(a, b)")
         #expect(TextPostProcessor.process("tuple of 1 and 2 and 3") == "(1, 2, 3)")
         #expect(TextPostProcessor.process("the tuple of x and y") == "(x, y)")
+        // Sets
+        #expect(TextPostProcessor.process("set of a and b") == "{a, b}")
+        #expect(TextPostProcessor.process("the set of x and y and z") == "{x, y, z}")
+        #expect(TextPostProcessor.process("set of 1 and 2") == "{1, 2}")
+        #expect(TextPostProcessor.process("set of a comma b comma c") == "{a, b, c}")
+        // Rows / matrix
+        #expect(TextPostProcessor.process("row of 1 and 2 and 3") == "[1, 2, 3]")
+        #expect(TextPostProcessor.process("row of a and b") == "[a, b]")
+        #expect(TextPostProcessor.process(
+            "matrix row of 1 and 2 next row of 3 and 4"
+        ) == "[[1, 2], [3, 4]]")
+        #expect(TextPostProcessor.process(
+            "matrix row of a and b and c next row of d and e and f"
+        ) == "[[a, b, c], [d, e, f]]")
+        #expect(TextPostProcessor.process(
+            "matrix row of 1 and 2 next row of 3 and 4 next row of 5 and 6"
+        ) == "[[1, 2], [3, 4], [5, 6]]")
+        // Guards
+        #expect(TextPostProcessor.process("set of tools") == "set of tools")
+        #expect(TextPostProcessor.process("row of seats") == "row of seats")
         // Subscripts
         #expect(TextPostProcessor.process("x sub i") == "xᵢ")
         #expect(TextPostProcessor.process("x subscript j") == "xⱼ")
