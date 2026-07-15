@@ -818,6 +818,25 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("row of seats") == "row of seats")
         #expect(TextPostProcessor.process("column of smoke") == "column of smoke")
         #expect(TextPostProcessor.process("empty handed") == "empty handed")
+        // Set ops + norm
+        #expect(TextPostProcessor.process("A union B") == "A ∪ B")
+        #expect(TextPostProcessor.process("A intersection B") == "A ∩ B")
+        #expect(TextPostProcessor.process("A intersect B") == "A ∩ B")
+        #expect(TextPostProcessor.process("A cup B") == "A ∪ B")
+        #expect(TextPostProcessor.process("A cap B") == "A ∩ B")
+        #expect(TextPostProcessor.process("union of A and B") == "A ∪ B")
+        #expect(TextPostProcessor.process("intersection of X and Y") == "X ∩ Y")
+        #expect(TextPostProcessor.process("A setminus B") == "A ∖ B")
+        #expect(TextPostProcessor.process("A without B") == "A ∖ B")
+        #expect(TextPostProcessor.process("norm of v") == "‖v‖")
+        #expect(TextPostProcessor.process("the norm of x") == "‖x‖")
+        #expect(TextPostProcessor.process("l2 norm of v") == "‖v‖₂"
+            || TextPostProcessor.process("L2 norm of v") == "‖v‖₂")
+        #expect(TextPostProcessor.process("L2 norm of v") == "‖v‖₂")
+        // Guards
+        #expect(TextPostProcessor.process("trade union") == "trade union")
+        #expect(TextPostProcessor.process("cup of tea") == "cup of tea")
+        #expect(TextPostProcessor.process("norm of the sample") == "norm of the sample")
         // Subscripts
         #expect(TextPostProcessor.process("x sub i") == "xᵢ")
         #expect(TextPostProcessor.process("x subscript j") == "xⱼ")

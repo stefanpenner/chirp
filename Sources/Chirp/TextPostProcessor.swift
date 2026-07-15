@@ -2392,6 +2392,101 @@ enum TextPostProcessor {
         // Empty set + intervals
         result = applyEmptySetITN(result)
         result = applyIntervalFromToITN(result)
+        // Set ops (A ∪ B) + vector norm
+        result = applySetOpITN(result)
+        result = applyNormOfITN(result)
+        return result
+    }
+
+    /// "A union B" / "A cup B" / "union of A and B" → A ∪ B
+    private static let setOpInfixITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(union|intersection|intersect|cup|cap|setminus|without)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let setOpOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(union|intersection)\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "norm of v" / "the norm of x" / "L2 norm of v"
+    private static let normOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:(l2|L2)\s+)?norm\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static func applySetOpITN(_ text: String) -> String {
+        var result = text
+        // "union of A and B" first
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = setOpOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 4,
+                      let opRange = Range(match.range(at: 1), in: result),
+                      let aRange = Range(match.range(at: 2), in: result),
+                      let bRange = Range(match.range(at: 3), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let op = String(result[opRange]).lowercased()
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                let sym = op.hasPrefix("inter") ? "∩" : "∪"
+                result.replaceSubrange(fullRange, with: "\(a) \(sym) \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = setOpInfixITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 4,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let opRange = Range(match.range(at: 2), in: result),
+                      let bRange = Range(match.range(at: 3), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                let op = String(result[opRange]).lowercased()
+                let sym: String
+                switch op {
+                case "union", "cup":
+                    sym = "∪"
+                case "intersection", "intersect", "cap":
+                    sym = "∩"
+                case "setminus", "without":
+                    sym = "∖"
+                default:
+                    continue
+                }
+                result.replaceSubrange(fullRange, with: "\(a) \(sym) \(b)")
+            }
+        }
+        return result
+    }
+
+    private static func applyNormOfITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = normOfITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            // Groups: 1=l2?, 2=var
+            guard match.numberOfRanges >= 3,
+                  let varRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let v = String(result[varRange])
+            let isL2 = match.range(at: 1).location != NSNotFound
+            if isL2 {
+                result.replaceSubrange(fullRange, with: "‖\(v)‖₂")
+            } else {
+                result.replaceSubrange(fullRange, with: "‖\(v)‖")
+            }
+        }
         return result
     }
 
