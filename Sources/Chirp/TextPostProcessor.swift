@@ -2397,6 +2397,9 @@ enum TextPostProcessor {
         result = applyNormOfITN(result)
         result = applyLinAlgOpITN(result)
         result = applyMatmulITN(result)
+        result = applyKroneckerDirectSumITN(result)
+        result = applyFundamentalSpaceITN(result)
+        // After suffix linAlg so "eigenvalues of A transpose" → λ(Aᵀ)
         result = applyEigenDetITN(result)
         return result
     }
@@ -2434,10 +2437,52 @@ enum TextPostProcessor {
         )
     }()
 
-    /// eigenvalues / eigenvectors / det / determinant of single-letter matrix.
+    /// eigenvalues / eigenvectors / det of letter, optionally already-suffixed (Aᵀ).
+    /// Prefer letter+suffix over bare letter: `\b` after A fires before Unicode
+    /// superscripts (⁻¹/ᵀ/† are non-word), which wrongly yielded `det(A)⁻¹`.
     private static let eigenDetOfITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(?:the\s+)?(eigenvalues?|eigenvectors?|determinant|det)\s+of\s+([A-Za-z])\b"#,
+            pattern: #"\b(?:the\s+)?(eigenvalues?|eigenvectors?|determinant|det)\s+of\s+([A-Za-z](?:ᵀ|⁻¹|†)|[A-Za-z])(?!\w)"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A tensor B" / "A kronecker B" / "A kron B"
+    private static let kroneckerInfixITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(?:tensor|kronecker|kron)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "kronecker product of A and B" / "tensor product of A and B"
+    private static let kroneckerOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:kronecker|tensor)\s+product\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A direct sum B"
+    private static let directSumInfixITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+direct\s+sum\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "direct sum of A and B" — both sides must be single letters (not "of money").
+    private static let directSumOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bdirect\s+sum\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// null space / nullspace / kernel / column space / row space of single-letter matrix.
+    private static let fundamentalSpaceOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(null\s*space|kernel|column\s+space|row\s+space)\s+of\s+([A-Za-z])\b"#,
             options: .caseInsensitive
         )
     }()
@@ -2509,6 +2554,82 @@ enum TextPostProcessor {
         return result
     }
 
+    private static func applyKroneckerDirectSumITN(_ text: String) -> String {
+        var result = text
+        // "of" forms first (longer cues)
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = kroneckerOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ⊗ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = directSumOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ⊕ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = kroneckerInfixITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ⊗ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = directSumInfixITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ⊕ \(b)")
+            }
+        }
+        return result
+    }
+
+    private static func applyFundamentalSpaceITN(_ text: String) -> String {
+        var result = text
+        let range = NSRange(result.startIndex..., in: result)
+        let matches = fundamentalSpaceOfITNPattern.matches(in: result, range: range)
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let opRange = Range(match.range(at: 1), in: result),
+                  let mRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let op = String(result[opRange]).lowercased()
+                .replacingOccurrences(of: " ", with: "")
+            let m = String(result[mRange])
+            guard let written = fundamentalSpaceWritten(op: op, matrix: m) else { continue }
+            result.replaceSubrange(fullRange, with: written)
+        }
+        return result
+    }
+
     private static func applyEigenDetITN(_ text: String) -> String {
         var result = text
         let range = NSRange(result.startIndex..., in: result)
@@ -2538,6 +2659,21 @@ enum TextPostProcessor {
             return "tr(\(m))"
         case "rank":
             return "rank(\(m))"
+        default:
+            return nil
+        }
+    }
+
+    private static func fundamentalSpaceWritten(op: String, matrix m: String) -> String? {
+        switch op {
+        case "nullspace":
+            return "N(\(m))"
+        case "kernel":
+            return "ker(\(m))"
+        case "columnspace":
+            return "C(\(m))"
+        case "rowspace":
+            return "R(\(m))"
         default:
             return nil
         }

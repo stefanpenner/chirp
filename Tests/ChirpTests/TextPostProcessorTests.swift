@@ -881,6 +881,30 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("matrix of numbers") == "matrix of numbers")
         #expect(TextPostProcessor.process("eigenvalues of the sample") == "eigenvalues of the sample")
         #expect(TextPostProcessor.process("determinant of the outcome") == "determinant of the outcome")
+        // Kronecker / tensor product + direct sum
+        #expect(TextPostProcessor.process("A tensor B") == "A ⊗ B")
+        #expect(TextPostProcessor.process("A kronecker B") == "A ⊗ B")
+        #expect(TextPostProcessor.process("A kron B") == "A ⊗ B")
+        #expect(TextPostProcessor.process("kronecker product of A and B") == "A ⊗ B")
+        #expect(TextPostProcessor.process("tensor product of X and Y") == "X ⊗ Y")
+        #expect(TextPostProcessor.process("A direct sum B") == "A ⊕ B")
+        #expect(TextPostProcessor.process("direct sum of A and B") == "A ⊕ B")
+        // Fundamental subspaces
+        #expect(TextPostProcessor.process("null space of A") == "N(A)")
+        #expect(TextPostProcessor.process("the nullspace of B") == "N(B)")
+        #expect(TextPostProcessor.process("kernel of A") == "ker(A)")
+        #expect(TextPostProcessor.process("the kernel of M") == "ker(M)")
+        #expect(TextPostProcessor.process("column space of A") == "C(A)")
+        #expect(TextPostProcessor.process("row space of A") == "R(A)")
+        #expect(TextPostProcessor.process("the column space of B") == "C(B)")
+        // Nested: eigen/det after suffix linAlg on same letter
+        #expect(TextPostProcessor.process("eigenvalues of A transpose") == "λ(Aᵀ)")
+        #expect(TextPostProcessor.process("determinant of A inverse") == "det(A⁻¹)")
+        // Guards
+        #expect(TextPostProcessor.process("tensor of the team") == "tensor of the team")
+        #expect(TextPostProcessor.process("kernel of the idea") == "kernel of the idea")
+        #expect(TextPostProcessor.process("null space of the room") == "null space of the room")
+        #expect(TextPostProcessor.process("direct sum of money") == "direct sum of money")
         // Subscripts
         #expect(TextPostProcessor.process("x sub i") == "xᵢ")
         #expect(TextPostProcessor.process("x subscript j") == "xⱼ")
