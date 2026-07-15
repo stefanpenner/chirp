@@ -3192,7 +3192,53 @@ enum TextPostProcessor {
         )
     }()
 
-    /// Power set, closure, interior, boundary, complement, cardinality.
+    /// "diameter of S" / "diam of S" → diam(S)
+    private static let diameterOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:diameter|diam)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "convex hull of S" → conv(S)
+    private static let convexHullOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?convex\s+hull\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Radius token: digit run or single letter (after SpokenNumberITN).
+    private static let ballRadiusToken = #"(?:\d+(?:\.\d+)?|[A-Za-z])"#
+
+    /// "open|closed|∅ ball of radius r around|at x"
+    private static let ballRadiusFirstITNPattern: NSRegularExpression = {
+        let r = ballRadiusToken
+        let pattern =
+            #"\b(?:the\s+)?(open|closed)?\s*ball\s+(?:of\s+)?radius\s+("# + r
+            + #")\s+(?:centered\s+)?(?:at|around)\s+([A-Za-z])\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// "open|closed ball around|at x of radius r"
+    private static let ballCenterFirstITNPattern: NSRegularExpression = {
+        let r = ballRadiusToken
+        let pattern =
+            #"\b(?:the\s+)?(open|closed)?\s*ball\s+(?:centered\s+)?(?:at|around)\s+([A-Za-z])\s+(?:of\s+)?radius\s+("#
+            + r + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// "neighborhood of x" → N(x)
+    private static let neighborhoodOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?neighborhood\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Power set, closure, interior, boundary, complement, cardinality,
+    /// diameter, convex hull, open/closed balls, neighborhood.
     private static func applyTopologySetITN(_ text: String) -> String {
         var result = text
         do {
@@ -3252,7 +3298,83 @@ enum TextPostProcessor {
                 result.replaceSubrange(fullRange, with: "|\(s)|")
             }
         }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = diameterOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let sRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let s = String(result[sRange])
+                result.replaceSubrange(fullRange, with: "diam(\(s))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = convexHullOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let sRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let s = String(result[sRange])
+                result.replaceSubrange(fullRange, with: "conv(\(s))")
+            }
+        }
+        // Balls: radius-first then center-first (longer spoken orders).
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = ballRadiusFirstITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 4,
+                      let rRange = Range(match.range(at: 2), in: result),
+                      let xRange = Range(match.range(at: 3), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let kind: String? = match.range(at: 1).location != NSNotFound
+                    ? Range(match.range(at: 1), in: result).map { String(result[$0]).lowercased() }
+                    : nil
+                let r = String(result[rRange])
+                let x = String(result[xRange])
+                result.replaceSubrange(fullRange, with: ballWritten(kind: kind, center: x, radius: r))
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = ballCenterFirstITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 4,
+                      let xRange = Range(match.range(at: 2), in: result),
+                      let rRange = Range(match.range(at: 3), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let kind: String? = match.range(at: 1).location != NSNotFound
+                    ? Range(match.range(at: 1), in: result).map { String(result[$0]).lowercased() }
+                    : nil
+                let x = String(result[xRange])
+                let r = String(result[rRange])
+                result.replaceSubrange(fullRange, with: ballWritten(kind: kind, center: x, radius: r))
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = neighborhoodOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let xRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let x = String(result[xRange])
+                result.replaceSubrange(fullRange, with: "N(\(x))")
+            }
+        }
         return result
+    }
+
+    private static func ballWritten(kind: String?, center x: String, radius r: String) -> String {
+        switch kind {
+        case "closed":
+            return "B̄(\(x), \(r))"
+        default:
+            // open or unspecified ball
+            return "B(\(x), \(r))"
+        }
     }
 
     /// "norm of v" / "L2 norm of v" / "frobenius norm of A" / "infinity norm of v"
