@@ -2401,10 +2401,43 @@ enum TextPostProcessor {
         result = applyFundamentalSpaceITN(result)
         result = applySpanITN(result)
         result = applyDimITN(result)
+        result = applyOrthoCondProjITN(result)
         // After suffix linAlg so "eigenvalues of A transpose" → λ(Aᵀ)
         result = applyEigenDetITN(result)
         return result
     }
+
+    /// "orthogonal complement of V" / "orthocomplement of V" → V⊥
+    private static let orthoComplementOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:orthogonal\s+complement|orthocomplement)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "condition number of A" / "cond of A" → κ(A)
+    private static let conditionNumberOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:condition\s+number|cond)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "projection of u onto v" / "proj of u onto v" → proj_v(u)
+    private static let projectionOfOntoITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:projection|proj)\s+of\s+([A-Za-z])\s+onto\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "projection onto V" / "proj onto V" → proj_V
+    private static let projectionOntoITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:projection|proj)\s+onto\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
 
     /// transpose / inverse / dagger / hermitian / trace / rank / pseudoinverse of letter.
     private static let linAlgOfITNPattern: NSRegularExpression = {
@@ -2740,6 +2773,59 @@ enum TextPostProcessor {
                   let fullRange = Range(match.range, in: result) else { continue }
             let m = String(result[mRange])
             result.replaceSubrange(fullRange, with: "dim(\(m))")
+        }
+        return result
+    }
+
+    /// Orthogonal complement, condition number, projection (pure free-dict LA).
+    private static func applyOrthoCondProjITN(_ text: String) -> String {
+        var result = text
+        // Longer "of … onto …" before bare "onto …"
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = projectionOfOntoITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let uRange = Range(match.range(at: 1), in: result),
+                      let vRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let u = String(result[uRange])
+                let v = String(result[vRange])
+                result.replaceSubrange(fullRange, with: "proj_\(v)(\(u))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = projectionOntoITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let vRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let v = String(result[vRange])
+                result.replaceSubrange(fullRange, with: "proj_\(v)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = orthoComplementOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let mRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let m = String(result[mRange])
+                result.replaceSubrange(fullRange, with: "\(m)⊥")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = conditionNumberOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let mRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let m = String(result[mRange])
+                result.replaceSubrange(fullRange, with: "κ(\(m))")
+            }
         }
         return result
     }

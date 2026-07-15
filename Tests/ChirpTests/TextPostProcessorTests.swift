@@ -928,6 +928,22 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("dimension of the problem") == "dimension of the problem")
         #expect(TextPostProcessor.process("pseudoinverse of the claim") == "pseudoinverse of the claim")
         #expect(TextPostProcessor.process("norm of the sample") == "norm of the sample")
+        // Orthogonal complement, condition number, projection
+        #expect(TextPostProcessor.process("orthogonal complement of V") == "V⊥")
+        #expect(TextPostProcessor.process("the orthogonal complement of W") == "W⊥")
+        #expect(TextPostProcessor.process("orthocomplement of V") == "V⊥")
+        #expect(TextPostProcessor.process("condition number of A") == "κ(A)")
+        #expect(TextPostProcessor.process("the condition number of B") == "κ(B)")
+        #expect(TextPostProcessor.process("cond of A") == "κ(A)")
+        #expect(TextPostProcessor.process("projection onto V") == "proj_V")
+        #expect(TextPostProcessor.process("the projection onto W") == "proj_W")
+        #expect(TextPostProcessor.process("proj onto V") == "proj_V")
+        #expect(TextPostProcessor.process("projection of u onto v") == "proj_v(u)")
+        #expect(TextPostProcessor.process("proj of x onto y") == "proj_y(x)")
+        // Guards
+        #expect(TextPostProcessor.process("condition number of the patient") == "condition number of the patient")
+        #expect(TextPostProcessor.process("projection onto the wall") == "projection onto the wall")
+        #expect(TextPostProcessor.process("orthogonal complement of the set") == "orthogonal complement of the set")
         // Subscripts
         #expect(TextPostProcessor.process("x sub i") == "xᵢ")
         #expect(TextPostProcessor.process("x subscript j") == "xⱼ")
