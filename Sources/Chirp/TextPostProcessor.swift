@@ -2402,10 +2402,51 @@ enum TextPostProcessor {
         result = applySpanITN(result)
         result = applyDimITN(result)
         result = applyOrthoCondProjITN(result)
+        result = applyRelProdArgITN(result)
         // After suffix linAlg so "eigenvalues of A transpose" → λ(Aᵀ)
         result = applyEigenDetITN(result)
         return result
     }
+
+    /// "A orthogonal to B" / "A is perpendicular to B" → A ⊥ B
+    private static let orthogonalToITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(?:is\s+)?(?:orthogonal|perpendicular)\s+to\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A parallel to B" / "A is parallel to B" → A ∥ B
+    private static let parallelToITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(?:is\s+)?parallel\s+to\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "dot product of u and v" / "inner product of u and v" → ⟨u, v⟩
+    private static let innerProductOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:dot|inner)\s+product\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "cross product of u and v" → u × v
+    private static let crossProductOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?cross\s+product\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "argmin of f" / "arg min of f" / "argmax of g"
+    private static let argMinMaxOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\barg\s*(min|max)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
 
     /// "orthogonal complement of V" / "orthocomplement of V" → V⊥
     private static let orthoComplementOfITNPattern: NSRegularExpression = {
@@ -2825,6 +2866,77 @@ enum TextPostProcessor {
                       let fullRange = Range(match.range, in: result) else { continue }
                 let m = String(result[mRange])
                 result.replaceSubrange(fullRange, with: "κ(\(m))")
+            }
+        }
+        return result
+    }
+
+    /// Orthogonal/parallel relations, inner/cross products, argmin/argmax.
+    private static func applyRelProdArgITN(_ text: String) -> String {
+        var result = text
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = orthogonalToITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ⊥ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = parallelToITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ∥ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = innerProductOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "⟨\(a), \(b)⟩")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = crossProductOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) × \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = argMinMaxOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let kindRange = Range(match.range(at: 1), in: result),
+                      let fRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let kind = String(result[kindRange]).lowercased()
+                let f = String(result[fRange])
+                result.replaceSubrange(fullRange, with: "arg\(kind)(\(f))")
             }
         }
         return result
