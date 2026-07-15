@@ -2228,6 +2228,42 @@ enum TextPostProcessor {
         return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
     }()
 
+    /// "column of a and b [and c]" / "column vector of …" → [[a], [b], …]
+    private static let columnOfThreeITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\bcolumn(?:\s+vector)?\s+of\s+("#
+            + a + #")\s+and\s+("# + a + #")\s+and\s+("# + a + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    private static let columnOfTwoITNPattern: NSRegularExpression = {
+        let a = functionArgToken
+        let pattern =
+            #"\bcolumn(?:\s+vector)?\s+of\s+("# + a + #")\s+and\s+("# + a + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
+    /// "empty set" → ∅
+    private static let emptySetITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?empty\s+set\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Interval bounds (same as function args / small numbers).
+    private static let intervalBoundToken = functionArgToken
+
+    /// "closed/open/left closed/right closed interval from A to B"
+    private static let intervalFromToITNPattern: NSRegularExpression = {
+        let b = intervalBoundToken
+        let pattern =
+            #"\b(closed|open|half\s+open|left\s+closed|right\s+closed)\s+interval\s+from\s+("#
+            + b + #")\s+to\s+("# + b + #")\b"#
+        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+    }()
+
 
 
     /// Index token for sub/super: letter, digit run, or small spoken number.
@@ -2345,12 +2381,93 @@ enum TextPostProcessor {
         result = applyAndArgsCollection(result, pattern: tupleOfThreeITNPattern, open: "(", close: ")", arity: 3)
         result = applyAndArgsCollection(result, pattern: setOfThreeITNPattern, open: "{", close: "}", arity: 3)
         result = applyAndArgsCollection(result, pattern: rowOfThreeITNPattern, open: "[", close: "]", arity: 3)
+        result = applyColumnOfITN(result, pattern: columnOfThreeITNPattern, arity: 3)
         // Two-arg
         result = applyAndArgsCollection(result, pattern: tupleOfTwoITNPattern, open: "(", close: ")", arity: 2)
         result = applyAndArgsCollection(result, pattern: setOfTwoITNPattern, open: "{", close: "}", arity: 2)
         result = applyAndArgsCollection(result, pattern: rowOfTwoITNPattern, open: "[", close: "]", arity: 2)
+        result = applyColumnOfITN(result, pattern: columnOfTwoITNPattern, arity: 2)
         // Comma-separated sets
         result = applySetOfCommaITN(result)
+        // Empty set + intervals
+        result = applyEmptySetITN(result)
+        result = applyIntervalFromToITN(result)
+        return result
+    }
+
+    /// Column vector: args stacked as [[a], [b], …]
+    private static func applyColumnOfITN(
+        _ text: String,
+        pattern: NSRegularExpression,
+        arity: Int
+    ) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= arity + 1,
+                  let fullRange = Range(match.range, in: result) else { continue }
+            var args: [String] = []
+            var ok = true
+            for i in 0..<arity {
+                guard let ar = Range(match.range(at: 1 + i), in: result) else {
+                    ok = false
+                    break
+                }
+                args.append(rangeDigits(from: String(result[ar])))
+            }
+            guard ok else { continue }
+            let cells = args.map { "[\($0)]" }.joined(separator: ", ")
+            result.replaceSubrange(fullRange, with: "[\(cells)]")
+        }
+        return result
+    }
+
+    private static func applyEmptySetITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = emptySetITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard let full = Range(match.range, in: result) else { continue }
+            result.replaceSubrange(full, with: "∅")
+        }
+        return result
+    }
+
+    private static func applyIntervalFromToITN(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = intervalFromToITNPattern.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+        var result = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 4,
+                  let kindRange = Range(match.range(at: 1), in: result),
+                  let loRange = Range(match.range(at: 2), in: result),
+                  let hiRange = Range(match.range(at: 3), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let kind = String(result[kindRange]).lowercased()
+            let lo = rangeDigits(from: String(result[loRange]))
+            let hi = rangeDigits(from: String(result[hiRange]))
+            let brackets: (String, String)
+            switch kind {
+            case "closed":
+                brackets = ("[", "]")
+            case "open":
+                brackets = ("(", ")")
+            case "half open", "left closed":
+                brackets = ("[", ")")
+            case "right closed":
+                brackets = ("(", "]")
+            default:
+                continue
+            }
+            result.replaceSubrange(
+                fullRange,
+                with: "\(brackets.0)\(lo), \(hi)\(brackets.1)"
+            )
+        }
         return result
     }
 

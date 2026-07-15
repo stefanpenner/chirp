@@ -798,9 +798,26 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process(
             "matrix row of 1 and 2 next row of 3 and 4 next row of 5 and 6"
         ) == "[[1, 2], [3, 4], [5, 6]]")
+        // Columns (vertical)
+        #expect(TextPostProcessor.process("column of 1 and 2") == "[[1], [2]]")
+        #expect(TextPostProcessor.process("column of a and b and c") == "[[a], [b], [c]]")
+        #expect(TextPostProcessor.process("column vector of x and y") == "[[x], [y]]")
+        // Empty set
+        #expect(TextPostProcessor.process("empty set") == "∅")
+        #expect(TextPostProcessor.process("the empty set") == "∅")
+        // Intervals
+        #expect(TextPostProcessor.process("closed interval from 0 to 1") == "[0, 1]")
+        #expect(TextPostProcessor.process("open interval from a to b") == "(a, b)")
+        #expect(TextPostProcessor.process("closed interval from one to ten") == "[1, 10]")
+        #expect(TextPostProcessor.process("half open interval from 0 to 1") == "[0, 1)"
+            || TextPostProcessor.process("left closed interval from 0 to 1") == "[0, 1)")
+        #expect(TextPostProcessor.process("left closed interval from 0 to 1") == "[0, 1)")
+        #expect(TextPostProcessor.process("right closed interval from 0 to 1") == "(0, 1]")
         // Guards
         #expect(TextPostProcessor.process("set of tools") == "set of tools")
         #expect(TextPostProcessor.process("row of seats") == "row of seats")
+        #expect(TextPostProcessor.process("column of smoke") == "column of smoke")
+        #expect(TextPostProcessor.process("empty handed") == "empty handed")
         // Subscripts
         #expect(TextPostProcessor.process("x sub i") == "xᵢ")
         #expect(TextPostProcessor.process("x subscript j") == "xⱼ")
