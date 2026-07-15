@@ -2396,6 +2396,8 @@ enum TextPostProcessor {
         result = applySetOpITN(result)
         result = applyNormOfITN(result)
         result = applyLinAlgOpITN(result)
+        result = applyMatmulITN(result)
+        result = applyEigenDetITN(result)
         return result
     }
 
@@ -2411,6 +2413,31 @@ enum TextPostProcessor {
     private static let linAlgSuffixITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
             pattern: #"\b([A-Za-z])\s+(transpose(?:d)?|inverse|dagger|hermitian)\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A matmul B" / "A matrix multiply B" / "A matrix times B"
+    /// Bare "A times B" is intentionally excluded (false-positives: "a times a day").
+    private static let matmulInfixITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(?:matmul|matrix\s+(?:multiply|times|product))\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "matrix product of A and B" / "matrix multiply of A and B"
+    private static let matmulOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bmatrix\s+(?:product|multiply|multiplication)\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// eigenvalues / eigenvectors / det / determinant of single-letter matrix.
+    private static let eigenDetOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(eigenvalues?|eigenvectors?|determinant|det)\s+of\s+([A-Za-z])\b"#,
             options: .caseInsensitive
         )
     }()
@@ -2450,6 +2477,55 @@ enum TextPostProcessor {
         return result
     }
 
+    private static func applyMatmulITN(_ text: String) -> String {
+        var result = text
+        // "matrix product of A and B" first (longer cue)
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = matmulOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a)\(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = matmulInfixITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a)\(b)")
+            }
+        }
+        return result
+    }
+
+    private static func applyEigenDetITN(_ text: String) -> String {
+        var result = text
+        let range = NSRange(result.startIndex..., in: result)
+        let matches = eigenDetOfITNPattern.matches(in: result, range: range)
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let opRange = Range(match.range(at: 1), in: result),
+                  let mRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let op = String(result[opRange]).lowercased()
+            let m = String(result[mRange])
+            guard let written = eigenDetWritten(op: op, matrix: m) else { continue }
+            result.replaceSubrange(fullRange, with: written)
+        }
+        return result
+    }
+
     private static func linAlgWritten(op: String, matrix m: String) -> String? {
         switch op {
         case "transpose":
@@ -2462,6 +2538,19 @@ enum TextPostProcessor {
             return "tr(\(m))"
         case "rank":
             return "rank(\(m))"
+        default:
+            return nil
+        }
+    }
+
+    private static func eigenDetWritten(op: String, matrix m: String) -> String? {
+        switch op {
+        case "eigenvalue", "eigenvalues":
+            return "λ(\(m))"
+        case "eigenvector", "eigenvectors":
+            return "V(\(m))"
+        case "determinant", "det":
+            return "det(\(m))"
         default:
             return nil
         }
