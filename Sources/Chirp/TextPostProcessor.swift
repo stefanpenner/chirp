@@ -2403,9 +2403,157 @@ enum TextPostProcessor {
         result = applyDimITN(result)
         result = applyOrthoCondProjITN(result)
         result = applyRelProdArgITN(result)
+        result = applyQuantLogicITN(result)
         // After suffix linAlg so "eigenvalues of A transpose" → λ(Aᵀ)
         result = applyEigenDetITN(result)
         return result
+    }
+
+    /// "for all x" / "for every n" / "forall x" → ∀x
+    private static let forAllVarITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:for\s+all|for\s+every|forall)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "there exists unique x" / "unique exists x" → ∃!x (before bare exists)
+    private static let existsUniqueVarITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:there\s+exists\s+unique|unique\s+exists|exists\s+unique)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "there exists x" / "exists y" → ∃x
+    private static let existsVarITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:there\s+exists|exists)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A implies B" → A ⇒ B
+    private static let impliesITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+implies\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A maps to B" → A ↦ B
+    private static let mapsToITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+maps\s+to\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "sup of S" / "supremum of S" / "inf of S" / "infimum of S"
+    private static let supInfOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(supremum|sup|infimum|inf)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Quantifiers with bound vars, implies, maps-to, sup/inf (free-dict logic/analysis).
+    private static func applyQuantLogicITN(_ text: String) -> String {
+        var result = text
+        // Unique-exists before bare exists.
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = existsUniqueVarITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let vRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let v = String(result[vRange])
+                if isArticleVarFollowedByProse(varLetter: v, after: fullRange.upperBound, in: result) {
+                    continue
+                }
+                result.replaceSubrange(fullRange, with: "∃!\(v)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = forAllVarITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let vRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let v = String(result[vRange])
+                result.replaceSubrange(fullRange, with: "∀\(v)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = existsVarITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let vRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let v = String(result[vRange])
+                // "there exists a chance" — article "a" + prose word, not math ∃a.
+                if isArticleVarFollowedByProse(varLetter: v, after: fullRange.upperBound, in: result) {
+                    continue
+                }
+                result.replaceSubrange(fullRange, with: "∃\(v)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = impliesITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ⇒ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = mapsToITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ↦ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = supInfOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let opRange = Range(match.range(at: 1), in: result),
+                      let sRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let op = String(result[opRange]).lowercased()
+                let s = String(result[sRange])
+                let head = (op == "sup" || op == "supremum") ? "sup" : "inf"
+                result.replaceSubrange(fullRange, with: "\(head)(\(s))")
+            }
+        }
+        return result
+    }
+
+    /// True when bound letter is article "a" and the next token is a multi-letter
+    /// word — English "there exists a chance", not math "∃a".
+    private static func isArticleVarFollowedByProse(
+        varLetter: String,
+        after: String.Index,
+        in text: String
+    ) -> Bool {
+        guard varLetter.lowercased() == "a" else { return false }
+        let rest = text[after...]
+        return rest.range(of: #"^\s+[A-Za-z]{2,}\b"#, options: .regularExpression) != nil
     }
 
     /// "A orthogonal to B" / "A is perpendicular to B" → A ⊥ B
