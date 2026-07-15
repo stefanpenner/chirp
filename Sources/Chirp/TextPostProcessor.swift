@@ -3133,6 +3133,31 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "A proper subset of B" / "A subset of B" / "A subseteq B" / superset forms.
+    /// Proper first so "proper subset" is not eaten as "subset".
+    private static let subsetRelITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(proper\s+subset\s+of|subset\s+or\s+equal|subseteq|subset\s+of|proper\s+superset\s+of|superseteq|superset\s+of)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "x such that" → "x s.t." (letter-cued; bare "such that" stays prose)
+    private static let suchThatITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+such\s+that\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "lim sup of a" / "limit superior of a" / lim inf / limit inferior
+    private static let limSupInfOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:lim\s+sup|limit\s+superior|lim\s+inf|limit\s+inferior)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     /// "norm of v" / "L2 norm of v" / "frobenius norm of A" / "infinity norm of v"
     /// Group 1 = optional kind (l2|frobenius|infinity|inf); group 2 = letter.
     private static let normOfITNPattern: NSRegularExpression = {
@@ -3185,6 +3210,62 @@ enum TextPostProcessor {
                     continue
                 }
                 result.replaceSubrange(fullRange, with: "\(a) \(sym) \(b)")
+            }
+        }
+        // Subset / superset relations
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = subsetRelITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 4,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let opRange = Range(match.range(at: 2), in: result),
+                      let bRange = Range(match.range(at: 3), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                let op = String(result[opRange]).lowercased()
+                    .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                let sym: String
+                switch op {
+                case "proper subset of":
+                    sym = "⊂"
+                case "subset of", "subseteq", "subset or equal":
+                    sym = "⊆"
+                case "proper superset of":
+                    sym = "⊃"
+                case "superset of", "superseteq":
+                    sym = "⊇"
+                default:
+                    continue
+                }
+                result.replaceSubrange(fullRange, with: "\(a) \(sym) \(b)")
+            }
+        }
+        // "x such that" → "x s.t."
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = suchThatITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let xRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let x = String(result[xRange])
+                result.replaceSubrange(fullRange, with: "\(x) s.t.")
+            }
+        }
+        // lim sup / lim inf of letter
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = limSupInfOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let sRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let s = String(result[sRange])
+                let full = String(result[fullRange]).lowercased()
+                let head = (full.contains("sup") || full.contains("superior")) ? "limsup" : "liminf"
+                result.replaceSubrange(fullRange, with: "\(head)(\(s))")
             }
         }
         return result
