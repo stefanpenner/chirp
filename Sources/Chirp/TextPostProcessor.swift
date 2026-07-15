@@ -2392,8 +2392,9 @@ enum TextPostProcessor {
         // Empty set + intervals
         result = applyEmptySetITN(result)
         result = applyIntervalFromToITN(result)
-        // Set ops (A ∪ B) + vector norm + linear-algebra ops
+        // Set ops (A ∪ B) + topology/set ops + vector norm + linear-algebra ops
         result = applySetOpITN(result)
+        result = applyTopologySetITN(result)
         result = applyNormOfITN(result)
         result = applyLinAlgOpITN(result)
         result = applyMatmulITN(result)
@@ -3157,6 +3158,102 @@ enum TextPostProcessor {
             options: .caseInsensitive
         )
     }()
+
+    /// "power set of S" → 𝒫(S)
+    private static let powerSetOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?power\s+set\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "closure of S" / "interior of S" / "boundary of S"
+    private static let topologyOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(closure|interior|boundary)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "complement of S" — not "orthogonal complement" / "orthocomplement".
+    /// Word boundary before complement so "orthocomplement" is not a substring hit.
+    private static let setComplementOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"(?<![Oo]rthogonal\s)\b(?:the\s+)?complement\s+of\s+([A-Za-z])\b"#,
+            options: []
+        )
+    }()
+
+    /// "cardinality of S" / "card of S" → |S|
+    private static let cardinalityOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:cardinality|card)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// Power set, closure, interior, boundary, complement, cardinality.
+    private static func applyTopologySetITN(_ text: String) -> String {
+        var result = text
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = powerSetOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let sRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let s = String(result[sRange])
+                result.replaceSubrange(fullRange, with: "𝒫(\(s))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = topologyOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let opRange = Range(match.range(at: 1), in: result),
+                      let sRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let op = String(result[opRange]).lowercased()
+                let s = String(result[sRange])
+                let written: String
+                switch op {
+                case "closure":
+                    written = "cl(\(s))"
+                case "interior":
+                    written = "int(\(s))"
+                case "boundary":
+                    written = "∂\(s)"
+                default:
+                    continue
+                }
+                result.replaceSubrange(fullRange, with: written)
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = setComplementOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let sRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let s = String(result[sRange])
+                result.replaceSubrange(fullRange, with: "\(s)ᶜ")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = cardinalityOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let sRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let s = String(result[sRange])
+                result.replaceSubrange(fullRange, with: "|\(s)|")
+            }
+        }
+        return result
+    }
 
     /// "norm of v" / "L2 norm of v" / "frobenius norm of A" / "infinity norm of v"
     /// Group 1 = optional kind (l2|frobenius|infinity|inf); group 2 = letter.
