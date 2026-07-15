@@ -55,7 +55,7 @@ Coverage:
 - **Calc ops** — `nabla`/`del operator` → ∇; `partial f with respect to x` → ∂f/∂x; `gradient/divergence/curl of f`; bare `infinity` → ∞
 - **Relations** — `not equal to` → ≠; `≤`/`≥`/`≈`/`∈`/`∝`; cued `symbol therefore` → ∴
 - **Accents** — `x hat`/`x bar`/`x vector`/`x tilde` → combining diacritics; `x prime`/`double prime`/`triple prime` → ′ ″ ‴
-- **Functions / scripts** — `f of x` / multi-arg; tuples/sets/rows/columns; matrix; intervals; ∅; set ops ∪∩∖; `norm of v` → ‖v‖; `x sub i` / `x super n`
+- **Functions / scripts** — `f of x` / multi-arg; tuples/sets/rows/columns; matrix; intervals; ∅; set ops ∪∩∖; `norm of v` → ‖v‖; transpose/inverse/dagger/trace/rank; `x sub i` / `x super n`
 - **Roots / abs** — `square root of N` → `√N`; `cube root of N` → `∛N`; `absolute value of N` → `|N|`
 - **Factorial / log** — `N factorial` → `N!`; `log of N` / `ln of N` / `log base B of N`
 - **Percent** — `N percent` / `N per cent` → `N%`; multi-digit after cardinal ITN

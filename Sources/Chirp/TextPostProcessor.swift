@@ -2392,10 +2392,79 @@ enum TextPostProcessor {
         // Empty set + intervals
         result = applyEmptySetITN(result)
         result = applyIntervalFromToITN(result)
-        // Set ops (A ∪ B) + vector norm
+        // Set ops (A ∪ B) + vector norm + linear-algebra ops
         result = applySetOpITN(result)
         result = applyNormOfITN(result)
+        result = applyLinAlgOpITN(result)
         return result
+    }
+
+    /// transpose / inverse / dagger / hermitian / trace / rank of single-letter matrix.
+    private static let linAlgOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(transpose|inverse|hermitian|trace|rank)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A transpose" / "A inverse" / "A dagger" / "A hermitian"
+    private static let linAlgSuffixITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(transpose(?:d)?|inverse|dagger|hermitian)\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static func applyLinAlgOpITN(_ text: String) -> String {
+        var result = text
+        // "of" forms first
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = linAlgOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let opRange = Range(match.range(at: 1), in: result),
+                      let mRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let op = String(result[opRange]).lowercased()
+                let m = String(result[mRange])
+                guard let written = linAlgWritten(op: op, matrix: m) else { continue }
+                result.replaceSubrange(fullRange, with: written)
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = linAlgSuffixITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let mRange = Range(match.range(at: 1), in: result),
+                      let opRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let m = String(result[mRange])
+                var op = String(result[opRange]).lowercased()
+                if op == "transposed" { op = "transpose" }
+                guard let written = linAlgWritten(op: op, matrix: m) else { continue }
+                result.replaceSubrange(fullRange, with: written)
+            }
+        }
+        return result
+    }
+
+    private static func linAlgWritten(op: String, matrix m: String) -> String? {
+        switch op {
+        case "transpose":
+            return "\(m)ᵀ"
+        case "inverse":
+            return "\(m)⁻¹"
+        case "dagger", "hermitian":
+            return "\(m)†"
+        case "trace":
+            return "tr(\(m))"
+        case "rank":
+            return "rank(\(m))"
+        default:
+            return nil
+        }
     }
 
     /// "A union B" / "A cup B" / "union of A and B" → A ∪ B
