@@ -2399,23 +2399,55 @@ enum TextPostProcessor {
         result = applyMatmulITN(result)
         result = applyKroneckerDirectSumITN(result)
         result = applyFundamentalSpaceITN(result)
+        result = applySpanITN(result)
+        result = applyDimITN(result)
         // After suffix linAlg so "eigenvalues of A transpose" → λ(Aᵀ)
         result = applyEigenDetITN(result)
         return result
     }
 
-    /// transpose / inverse / dagger / hermitian / trace / rank of single-letter matrix.
+    /// transpose / inverse / dagger / hermitian / trace / rank / pseudoinverse of letter.
     private static let linAlgOfITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(?:the\s+)?(transpose|inverse|hermitian|trace|rank)\s+of\s+([A-Za-z])\b"#,
+            pattern: #"\b(?:the\s+)?(transpose|inverse|hermitian|trace|rank|pseudoinverse|moore[-\s]?penrose)\s+of\s+([A-Za-z])\b"#,
             options: .caseInsensitive
         )
     }()
 
-    /// "A transpose" / "A inverse" / "A dagger" / "A hermitian"
+    /// "A transpose" / "A inverse" / "A dagger" / "A hermitian" / "A pseudoinverse"
     private static let linAlgSuffixITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b([A-Za-z])\s+(transpose(?:d)?|inverse|dagger|hermitian)\b"#,
+            pattern: #"\b([A-Za-z])\s+(transpose(?:d)?|inverse|dagger|hermitian|pseudoinverse)\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "span of u and v and w" / "span of u and v" / "span of v"
+    private static let spanOfThreeITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?span\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let spanOfTwoITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?span\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let spanOfOneITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?span\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "dimension of V" / "dim of V"
+    private static let dimOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(dimension|dim)\s+of\s+([A-Za-z])\b"#,
             options: .caseInsensitive
         )
     }()
@@ -2648,7 +2680,10 @@ enum TextPostProcessor {
     }
 
     private static func linAlgWritten(op: String, matrix m: String) -> String? {
-        switch op {
+        let key = op.lowercased().replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        switch key {
         case "transpose":
             return "\(m)ᵀ"
         case "inverse":
@@ -2659,9 +2694,54 @@ enum TextPostProcessor {
             return "tr(\(m))"
         case "rank":
             return "rank(\(m))"
+        case "pseudoinverse", "moore penrose":
+            return "\(m)⁺"
         default:
             return nil
         }
+    }
+
+    private static func applySpanITN(_ text: String) -> String {
+        var result = text
+        // Three, then two, then one (longer first).
+        for (pattern, arity) in [
+            (spanOfThreeITNPattern, 3),
+            (spanOfTwoITNPattern, 2),
+            (spanOfOneITNPattern, 1),
+        ] as [(NSRegularExpression, Int)] {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = pattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= arity + 1,
+                      let fullRange = Range(match.range, in: result) else { continue }
+                var args: [String] = []
+                var ok = true
+                for i in 0..<arity {
+                    guard let ar = Range(match.range(at: 1 + i), in: result) else {
+                        ok = false
+                        break
+                    }
+                    args.append(String(result[ar]))
+                }
+                guard ok else { continue }
+                result.replaceSubrange(fullRange, with: "span{\(args.joined(separator: ", "))}")
+            }
+        }
+        return result
+    }
+
+    private static func applyDimITN(_ text: String) -> String {
+        var result = text
+        let range = NSRange(result.startIndex..., in: result)
+        let matches = dimOfITNPattern.matches(in: result, range: range)
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let mRange = Range(match.range(at: 2), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let m = String(result[mRange])
+            result.replaceSubrange(fullRange, with: "dim(\(m))")
+        }
+        return result
     }
 
     private static func fundamentalSpaceWritten(op: String, matrix m: String) -> String? {
@@ -2707,10 +2787,11 @@ enum TextPostProcessor {
         )
     }()
 
-    /// "norm of v" / "the norm of x" / "L2 norm of v"
+    /// "norm of v" / "L2 norm of v" / "frobenius norm of A" / "infinity norm of v"
+    /// Group 1 = optional kind (l2|frobenius|infinity|inf); group 2 = letter.
     private static let normOfITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
-            pattern: #"\b(?:the\s+)?(?:(l2|L2)\s+)?norm\s+of\s+([A-Za-z])\b"#,
+            pattern: #"\b(?:the\s+)?(?:(l2|frobenius|infinity|inf)\s+)?norm\s+of\s+([A-Za-z])\b"#,
             options: .caseInsensitive
         )
     }()
@@ -2769,17 +2850,28 @@ enum TextPostProcessor {
         guard !matches.isEmpty else { return text }
         var result = text
         for match in matches.reversed() {
-            // Groups: 1=l2?, 2=var
+            // Groups: 1=kind?, 2=var
             guard match.numberOfRanges >= 3,
                   let varRange = Range(match.range(at: 2), in: result),
                   let fullRange = Range(match.range, in: result) else { continue }
             let v = String(result[varRange])
-            let isL2 = match.range(at: 1).location != NSNotFound
-            if isL2 {
-                result.replaceSubrange(fullRange, with: "‖\(v)‖₂")
-            } else {
-                result.replaceSubrange(fullRange, with: "‖\(v)‖")
+            let kind: String? = {
+                guard match.range(at: 1).location != NSNotFound,
+                      let kr = Range(match.range(at: 1), in: result) else { return nil }
+                return String(result[kr]).lowercased()
+            }()
+            let written: String
+            switch kind {
+            case "l2":
+                written = "‖\(v)‖₂"
+            case "frobenius":
+                written = "‖\(v)‖_F"
+            case "infinity", "inf":
+                written = "‖\(v)‖_∞"
+            default:
+                written = "‖\(v)‖"
             }
+            result.replaceSubrange(fullRange, with: written)
         }
         return result
     }

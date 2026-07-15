@@ -905,6 +905,29 @@ struct TextPostProcessorTests {
         #expect(TextPostProcessor.process("kernel of the idea") == "kernel of the idea")
         #expect(TextPostProcessor.process("null space of the room") == "null space of the room")
         #expect(TextPostProcessor.process("direct sum of money") == "direct sum of money")
+        // Pseudoinverse
+        #expect(TextPostProcessor.process("pseudoinverse of A") == "A⁺")
+        #expect(TextPostProcessor.process("the pseudoinverse of B") == "B⁺")
+        #expect(TextPostProcessor.process("A pseudoinverse") == "A⁺")
+        #expect(TextPostProcessor.process("moore penrose of A") == "A⁺")
+        #expect(TextPostProcessor.process("Moore-Penrose of M") == "M⁺")
+        // Frobenius / infinity norms
+        #expect(TextPostProcessor.process("frobenius norm of A") == "‖A‖_F")
+        #expect(TextPostProcessor.process("the frobenius norm of B") == "‖B‖_F")
+        #expect(TextPostProcessor.process("infinity norm of v") == "‖v‖_∞")
+        #expect(TextPostProcessor.process("inf norm of x") == "‖x‖_∞")
+        // Span + dimension
+        #expect(TextPostProcessor.process("span of v") == "span{v}")
+        #expect(TextPostProcessor.process("span of u and v") == "span{u, v}")
+        #expect(TextPostProcessor.process("the span of a and b and c") == "span{a, b, c}")
+        #expect(TextPostProcessor.process("dimension of V") == "dim(V)")
+        #expect(TextPostProcessor.process("the dimension of W") == "dim(W)")
+        #expect(TextPostProcessor.process("dim of V") == "dim(V)")
+        // Guards
+        #expect(TextPostProcessor.process("span of control") == "span of control")
+        #expect(TextPostProcessor.process("dimension of the problem") == "dimension of the problem")
+        #expect(TextPostProcessor.process("pseudoinverse of the claim") == "pseudoinverse of the claim")
+        #expect(TextPostProcessor.process("norm of the sample") == "norm of the sample")
         // Subscripts
         #expect(TextPostProcessor.process("x sub i") == "xᵢ")
         #expect(TextPostProcessor.process("x subscript j") == "xⱼ")
