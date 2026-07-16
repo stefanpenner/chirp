@@ -3382,6 +3382,38 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "center of G" / "centre of G" → Z(G)
+    private static let centerOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?cent(?:er|re)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "centralizer of H in G" → C_G(H); "normalizer of H in G" → N_G(H)
+    private static let centralizerNormalizerInITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(centralizer|normalizer)\s+of\s+([A-Za-z])\s+in\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "commutator of a and b" → [a, b]
+    private static let commutatorOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?commutator\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "derived subgroup of G" / "commutator subgroup of G" → G'
+    private static let derivedSubgroupOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:derived|commutator)\s+subgroup\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     /// Power set, closure, interior, boundary, complement, cardinality,
     /// diameter, convex hull, open/closed balls, neighborhood.
     private static func applyTopologySetITN(_ text: String) -> String {
@@ -3751,6 +3783,58 @@ enum TextPostProcessor {
                       let fullRange = Range(match.range, in: result) else { continue }
                 let n = String(result[nRange])
                 result.replaceSubrange(fullRange, with: "φ(\(n))")
+            }
+        }
+        // centralizer/normalizer "… in G" before bare center (no conflict).
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = centralizerNormalizerInITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 4,
+                      let opRange = Range(match.range(at: 1), in: result),
+                      let hRange = Range(match.range(at: 2), in: result),
+                      let gRange = Range(match.range(at: 3), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let op = String(result[opRange]).lowercased()
+                let h = String(result[hRange])
+                let g = String(result[gRange])
+                let head = op.hasPrefix("norm") ? "N" : "C"
+                result.replaceSubrange(fullRange, with: "\(head)_\(g)(\(h))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = centerOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let gRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let g = String(result[gRange])
+                result.replaceSubrange(fullRange, with: "Z(\(g))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = commutatorOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "[\(a), \(b)]")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = derivedSubgroupOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let gRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let g = String(result[gRange])
+                result.replaceSubrange(fullRange, with: "\(g)'")
             }
         }
         return result
