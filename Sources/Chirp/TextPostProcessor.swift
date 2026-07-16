@@ -3414,6 +3414,38 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "stabilizer of x" / "stab of x" → Stab(x)
+    private static let stabilizerOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:stabilizer|stab)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "orbit of x" / "orb of x" → Orb(x)
+    private static let orbitOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:orbit|orb)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "G acts on X" / "G act on X" → G ↷ X
+    private static let actsOnITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+acts?\s+on\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "fixed points of g" / "fixed point of g" → Fix(g)
+    private static let fixedPointsOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?fixed\s+points?\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     /// Power set, closure, interior, boundary, complement, cardinality,
     /// diameter, convex hull, open/closed balls, neighborhood.
     private static func applyTopologySetITN(_ text: String) -> String {
@@ -3835,6 +3867,52 @@ enum TextPostProcessor {
                       let fullRange = Range(match.range, in: result) else { continue }
                 let g = String(result[gRange])
                 result.replaceSubrange(fullRange, with: "\(g)'")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = stabilizerOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let xRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let x = String(result[xRange])
+                result.replaceSubrange(fullRange, with: "Stab(\(x))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = orbitOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let xRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let x = String(result[xRange])
+                result.replaceSubrange(fullRange, with: "Orb(\(x))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = actsOnITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let gRange = Range(match.range(at: 1), in: result),
+                      let xRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let g = String(result[gRange])
+                let x = String(result[xRange])
+                result.replaceSubrange(fullRange, with: "\(g) ↷ \(x)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = fixedPointsOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let gRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let g = String(result[gRange])
+                result.replaceSubrange(fullRange, with: "Fix(\(g))")
             }
         }
         return result
