@@ -3237,6 +3237,54 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "distance from x to y" → d(x, y)
+    private static let distanceFromToITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?distance\s+from\s+([A-Za-z])\s+to\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "distance between x and y" → d(x, y)
+    private static let distanceBetweenITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?distance\s+between\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "angle between u and v" → ∠(u, v)
+    private static let angleBetweenITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?angle\s+between\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A (is) isomorphic to B" → A ≅ B
+    private static let isomorphicToITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(?:is\s+)?isomorphic\s+to\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A (is) homeomorphic to B" → A ≃ B
+    private static let homeomorphicToITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(?:is\s+)?homeomorphic\s+to\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "homomorphism from A to B" → Hom(A, B)
+    private static let homomorphismFromToITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?homomorphism\s+from\s+([A-Za-z])\s+to\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     /// Power set, closure, interior, boundary, complement, cardinality,
     /// diameter, convex hull, open/closed balls, neighborhood.
     private static func applyTopologySetITN(_ text: String) -> String {
@@ -3362,6 +3410,84 @@ enum TextPostProcessor {
                       let fullRange = Range(match.range, in: result) else { continue }
                 let x = String(result[xRange])
                 result.replaceSubrange(fullRange, with: "N(\(x))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = distanceFromToITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "d(\(a), \(b))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = distanceBetweenITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "d(\(a), \(b))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = angleBetweenITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "∠(\(a), \(b))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = isomorphicToITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ≅ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = homeomorphicToITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ≃ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = homomorphismFromToITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "Hom(\(a), \(b))")
             }
         }
         return result
