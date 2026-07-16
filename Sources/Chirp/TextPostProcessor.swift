@@ -3326,6 +3326,30 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "image of f" / "im of f" / "cokernel of f" / "coker of f" / "coimage of f"
+    private static let imageCokerOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(image|im|cokernel|coker|coimage|coim)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A does not divide B" (before bare divides)
+    private static let doesNotDivideITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+does\s+not\s+divide\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A divides B" → A ∣ B
+    private static let dividesITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+divides\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     /// Power set, closure, interior, boundary, complement, cardinality,
     /// diameter, convex hull, open/closed balls, neighborhood.
     private static func applyTopologySetITN(_ text: String) -> String {
@@ -3597,6 +3621,56 @@ enum TextPostProcessor {
                 let a = String(result[aRange])
                 let b = String(result[bRange])
                 result.replaceSubrange(fullRange, with: "\(a) ⤖ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = imageCokerOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let opRange = Range(match.range(at: 1), in: result),
+                      let fRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let op = String(result[opRange]).lowercased()
+                let f = String(result[fRange])
+                let head: String
+                switch op {
+                case "image", "im":
+                    head = "im"
+                case "cokernel", "coker":
+                    head = "coker"
+                case "coimage", "coim":
+                    head = "coim"
+                default:
+                    continue
+                }
+                result.replaceSubrange(fullRange, with: "\(head)(\(f))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = doesNotDivideITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ∤ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = dividesITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ∣ \(b)")
             }
         }
         return result
