@@ -3350,6 +3350,38 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "A (is) coprime to B" / "A relatively prime to B" → gcd(A, B) = 1
+    private static let coprimeToITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(?:is\s+)?(?:coprime|relatively\s+prime)\s+to\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "order of g" / "ord of g" → ord(g)
+    private static let orderOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:order|ord)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "index of H in G" → [G:H]
+    private static let indexOfInITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?index\s+of\s+([A-Za-z])\s+in\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "phi of n" / "euler totient of n" / "euler phi of n" → φ(n)
+    private static let eulerPhiOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(?:euler\s+totient|euler\s+phi|phi)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     /// Power set, closure, interior, boundary, complement, cardinality,
     /// diameter, convex hull, open/closed balls, neighborhood.
     private static func applyTopologySetITN(_ text: String) -> String {
@@ -3671,6 +3703,54 @@ enum TextPostProcessor {
                 let a = String(result[aRange])
                 let b = String(result[bRange])
                 result.replaceSubrange(fullRange, with: "\(a) ∣ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = coprimeToITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "gcd(\(a), \(b)) = 1")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = orderOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let gRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let g = String(result[gRange])
+                result.replaceSubrange(fullRange, with: "ord(\(g))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = indexOfInITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let hRange = Range(match.range(at: 1), in: result),
+                      let gRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let h = String(result[hRange])
+                let g = String(result[gRange])
+                result.replaceSubrange(fullRange, with: "[\(g):\(h)]")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = eulerPhiOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 2,
+                      let nRange = Range(match.range(at: 1), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let n = String(result[nRange])
+                result.replaceSubrange(fullRange, with: "φ(\(n))")
             }
         }
         return result
