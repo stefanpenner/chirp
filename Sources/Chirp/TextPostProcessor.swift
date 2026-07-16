@@ -3285,6 +3285,47 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "a congruent to b mod n" / "a is congruent to b modulo n"
+    /// Modulus: digit run or single letter (after SpokenNumberITN).
+    private static let congruentModITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(?:is\s+)?congruent\s+to\s+([A-Za-z])\s+(?:mod|modulo)\s+(\d+|[A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "endomorphism of A" / "automorphism of A" → End(A) / Aut(A)
+    private static let endAutOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(endomorphism|automorphism)\s+of\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A injects into|to B" → A ↪ B
+    private static let injectsITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+injects\s+(?:into|to)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A surjects onto|to B" → A ↠ B
+    private static let surjectsITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+surjects\s+(?:onto|to)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A bijects onto|to B" → A ⤖ B
+    private static let bijectsITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+bijects\s+(?:onto|to)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     /// Power set, closure, interior, boundary, complement, cardinality,
     /// diameter, convex hull, open/closed balls, neighborhood.
     private static func applyTopologySetITN(_ text: String) -> String {
@@ -3488,6 +3529,74 @@ enum TextPostProcessor {
                 let a = String(result[aRange])
                 let b = String(result[bRange])
                 result.replaceSubrange(fullRange, with: "Hom(\(a), \(b))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = congruentModITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 4,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let mRange = Range(match.range(at: 3), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                let m = String(result[mRange])
+                result.replaceSubrange(fullRange, with: "\(a) ≡ \(b) (mod \(m))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = endAutOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let opRange = Range(match.range(at: 1), in: result),
+                      let aRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let op = String(result[opRange]).lowercased()
+                let a = String(result[aRange])
+                let head = op.hasPrefix("auto") ? "Aut" : "End"
+                result.replaceSubrange(fullRange, with: "\(head)(\(a))")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = injectsITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ↪ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = surjectsITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ↠ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = bijectsITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ⤖ \(b)")
             }
         }
         return result
