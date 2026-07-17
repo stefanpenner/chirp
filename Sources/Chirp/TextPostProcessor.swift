@@ -2734,6 +2734,68 @@ enum TextPostProcessor {
         )
     }()
 
+    /// "A direct product B" / "direct product of A and B" → A × B
+    private static let directProductInfixITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+direct\s+product\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let directProductOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bdirect\s+product\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A semidirect product B" / "A semidirect B" / "A rtimes B" → A ⋊ B
+    private static let semidirectInfixITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(?:semidirect\s+product|semidirect|rtimes)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    private static let semidirectOfITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\bsemidirect\s+product\s+of\s+([A-Za-z])\s+and\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "A ltimes B" → A ⋉ B
+    private static let ltimesInfixITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+ltimes\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "G mod H" / "G modulo H" / "G over H" → G/H
+    private static let quotientModITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b([A-Za-z])\s+(?:mod|modulo|over)\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "quotient of G by H" → G/H
+    private static let quotientOfByITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?quotient\s+of\s+([A-Za-z])\s+by\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
+    /// "left|right cosets of H in G" / "cosets of H in G"
+    private static let cosetsOfInITNPattern: NSRegularExpression = {
+        try! NSRegularExpression(
+            pattern: #"\b(?:the\s+)?(left\s+|right\s+)?cosets\s+of\s+([A-Za-z])\s+in\s+([A-Za-z])\b"#,
+            options: .caseInsensitive
+        )
+    }()
+
     /// null space / nullspace / kernel / column space / row space of single-letter matrix.
     private static let fundamentalSpaceOfITNPattern: NSRegularExpression = {
         try! NSRegularExpression(
@@ -2862,6 +2924,72 @@ enum TextPostProcessor {
                 let a = String(result[aRange])
                 let b = String(result[bRange])
                 result.replaceSubrange(fullRange, with: "\(a) ⊕ \(b)")
+            }
+        }
+        // Direct / semidirect products
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = directProductOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) × \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = semidirectOfITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ⋊ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = directProductInfixITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) × \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = semidirectInfixITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ⋊ \(b)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = ltimesInfixITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let aRange = Range(match.range(at: 1), in: result),
+                      let bRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let a = String(result[aRange])
+                let b = String(result[bRange])
+                result.replaceSubrange(fullRange, with: "\(a) ⋉ \(b)")
             }
         }
         return result
@@ -3913,6 +4041,55 @@ enum TextPostProcessor {
                       let fullRange = Range(match.range, in: result) else { continue }
                 let g = String(result[gRange])
                 result.replaceSubrange(fullRange, with: "Fix(\(g))")
+            }
+        }
+        // Quotients / cosets (letter-letter only — not "mod the rules")
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = quotientOfByITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let gRange = Range(match.range(at: 1), in: result),
+                      let hRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let g = String(result[gRange])
+                let h = String(result[hRange])
+                result.replaceSubrange(fullRange, with: "\(g)/\(h)")
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = cosetsOfInITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 4,
+                      let hRange = Range(match.range(at: 2), in: result),
+                      let gRange = Range(match.range(at: 3), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let h = String(result[hRange])
+                let g = String(result[gRange])
+                let side: String = {
+                    guard match.range(at: 1).location != NSNotFound,
+                          let sr = Range(match.range(at: 1), in: result) else { return "left" }
+                    return String(result[sr]).lowercased()
+                }()
+                if side.contains("right") {
+                    result.replaceSubrange(fullRange, with: "\(h)\\\(g)")
+                } else {
+                    result.replaceSubrange(fullRange, with: "\(g)/\(h)")
+                }
+            }
+        }
+        do {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = quotientModITNPattern.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard match.numberOfRanges >= 3,
+                      let gRange = Range(match.range(at: 1), in: result),
+                      let hRange = Range(match.range(at: 2), in: result),
+                      let fullRange = Range(match.range, in: result) else { continue }
+                let g = String(result[gRange])
+                let h = String(result[hRange])
+                result.replaceSubrange(fullRange, with: "\(g)/\(h)")
             }
         }
         return result
