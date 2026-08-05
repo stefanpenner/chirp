@@ -19,6 +19,11 @@ jobs:
       DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history + tags so release metadata is complete (appcast build
+          # numbers no longer rely on tag count, but homebrew/notes may).
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Extract version
         id: version
@@ -98,11 +103,19 @@ jobs:
       - name: Calculate build number
         id: build
         run: |
-          # Integer build number for CFBundleVersion / sparkle:version
-          # Must be > 1 (broken value in all existing installs)
-          BUILD=$(($(git tag -l 'v*' | wc -l) + 1))
+          # Monotonic CFBundleVersion / sparkle:version from semver X.Y.Z
+          # (tag-count broke under shallow clones → every release was build "2")
+          VERSION="${{ steps.version.outputs.version }}"
+          # Inline same formula as package.sh compute_build_number
+          IFS=. read -r MAJ MIN PAT <<<"$VERSION"
+          MAJ=${MAJ//[^0-9]/}; MIN=${MIN//[^0-9]/}; PAT=${PAT//[^0-9]/}
+          BUILD=$((10#${MAJ:-0} * 1000000 + 10#${MIN:-0} * 1000 + 10#${PAT:-0}))
+          if [[ "$BUILD" -lt 2 ]]; then
+            echo "ERROR: build number $BUILD too small for version $VERSION"
+            exit 1
+          fi
           echo "number=$BUILD" >> "$GITHUB_OUTPUT"
-          echo "Build number: $BUILD"
+          echo "Build number: $BUILD (from semver $VERSION)"
 
       - name: Build and package
         run: scripts/package.sh ${{ steps.version.outputs.version }} ${{ steps.build.outputs.number }}
@@ -122,12 +135,25 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
 
       - name: Update Sparkle appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           DMG_PATH="dist/Chirp-v${VERSION}-macOS.dmg"
           # Checkout main so we can push (tag builds run on detached HEAD)
           git fetch origin main
           git checkout main
+          # Optional EdDSA: download sign_update if private key present
+          if [[ -n "${SPARKLE_PRIVATE_KEY:-}" ]]; then
+            curl -fsSL -o /tmp/Sparkle.tgz \
+              "https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz"
+            mkdir -p /tmp/sparkle-bin
+            tar xf /tmp/Sparkle.tgz -C /tmp/sparkle-bin
+            export SPARKLE_SIGN_UPDATE="$(find /tmp/sparkle-bin -name sign_update -type f | head -1)"
+            echo "Using sign_update: $SPARKLE_SIGN_UPDATE"
+          else
+            echo "WARNING: SPARKLE_PRIVATE_KEY secret not set — appcast will lack edSignature"
+          fi
           scripts/update-appcast.sh "$VERSION" "$DMG_PATH" "${{ steps.build.outputs.number }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

@@ -10,13 +10,47 @@ import SwiftUI
 // Catppuccin Mocha palette (matches OverlayPanel)
 private let cBlue = Color(red: 0.35, green: 0.58, blue: 1.0)
 
+/// Logs Sparkle failures so "Update Error!" can be diagnosed from Console.app.
+private final class ChirpUpdaterDelegate: NSObject, SPUUpdaterDelegate, @unchecked Sendable {
+    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        let ns = error as NSError
+        NSLog("Chirp Sparkle update aborted: %@ domain=%@ code=%ld userInfo=%@",
+              error.localizedDescription as NSString,
+              ns.domain as NSString,
+              ns.code,
+              String(describing: ns.userInfo) as NSString)
+    }
+
+    func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: Error) {
+        NSLog("Chirp Sparkle download failed for %@: %@",
+              item.displayVersionString as NSString,
+              error.localizedDescription as NSString)
+    }
+
+    func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
+        NSLog("Chirp Sparkle will install %@ on quit", item.displayVersionString as NSString)
+        return false // use default quit-and-install UI
+    }
+}
+
 @main
 struct ChirpApp: App {
     // Don't auto-start Sparkle on dev builds (version stays at 0.1.0;
     // release builds stamp the real version via scripts/package.sh).
-    private let updaterController = SPUStandardUpdaterController(
-        startingUpdater: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String != "0.1.0",
-        updaterDelegate: nil, userDriverDelegate: nil)
+    // Keep delegate alive for the app lifetime (SPUUpdater holds it unowned-weak).
+    private let updaterDelegate: ChirpUpdaterDelegate
+    private let updaterController: SPUStandardUpdaterController
+
+    init() {
+        let isRelease = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String != "0.1.0"
+        let delegate = ChirpUpdaterDelegate()
+        self.updaterDelegate = delegate
+        self.updaterController = SPUStandardUpdaterController(
+            startingUpdater: isRelease,
+            updaterDelegate: delegate,
+            userDriverDelegate: nil
+        )
+    }
     @State private var appState = AppState()
     @State private var hotkeyRecorder = InlineHotkeyRecorder()
     @State private var isMicPickerExpanded = false

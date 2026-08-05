@@ -12,17 +12,26 @@ resolve_root() {
     fi
 }
 
-# Compute an integer build number from the count of v* git tags in the repo.
-# Falls back to explicit value if provided.
-# Usage: compute_build_number <repo_dir> [explicit_number]
+# Monotonic integer build from semver X.Y.Z → X*1_000_000 + Y*1000 + Z.
+# Example: 0.3.26 → 3026. Does not depend on git tags (CI shallow clones break tag counts).
+# Usage: compute_build_number <version> [explicit_number]
 compute_build_number() {
-    local repo_dir="$1"
+    local version="$1"
     local explicit="${2:-}"
     if [[ -n "$explicit" ]]; then
         echo "$explicit"
-    else
-        echo $(( $(git -C "$repo_dir" tag -l 'v*' | wc -l) + 1 ))
+        return
     fi
+    local major minor patch
+    IFS=. read -r major minor patch <<<"$version"
+    major=${major:-0}
+    minor=${minor:-0}
+    patch=${patch:-0}
+    # strip non-digits (e.g. 0.3.26-beta)
+    major=${major//[^0-9]/}
+    minor=${minor//[^0-9]/}
+    patch=${patch//[^0-9]/}
+    echo $(( 10#${major:-0} * 1000000 + 10#${minor:-0} * 1000 + 10#${patch:-0} ))
 }
 
 # Stamp CFBundleShortVersionString and CFBundleVersion into an Info.plist.
@@ -41,7 +50,7 @@ main() {
     root="$(resolve_root)"
 
     local build_number
-    build_number="$(compute_build_number "$root" "$build_number_arg")"
+    build_number="$(compute_build_number "$version" "$build_number_arg")"
 
     # Ensure dependencies are present
     "$root/scripts/setup.sh"
@@ -92,12 +101,34 @@ main() {
     codesign --force --sign "$signing_identity" --timestamp \
         "$frameworks/libsherpa-onnx-c-api.dylib"
 
-    # Sign Sparkle.framework (each executable needs hardened runtime)
+    # Sign Sparkle.framework inside-out. Autoupdate + XPC live outside */MacOS/*
+    # — a path-only find misses them and leaves helpers with broken team linkage
+    # for in-app updates ("An error occurred while running the updater").
     if [[ -d "$frameworks/Sparkle.framework" ]]; then
-        find "$frameworks/Sparkle.framework" -type f -perm +111 -path '*/MacOS/*' | while read -r exe; do
-            codesign --force --sign "$signing_identity" --timestamp --options runtime "$exe"
-        done
-        codesign --force --sign "$signing_identity" --timestamp --options runtime --deep \
+        local sparkle_b
+        sparkle_b="$frameworks/Sparkle.framework/Versions/B"
+        # XPC services first
+        if [[ -d "$sparkle_b/XPCServices" ]]; then
+            find "$sparkle_b/XPCServices" -name '*.xpc' -type d | while read -r xpc; do
+                codesign --force --sign "$signing_identity" --timestamp --options runtime "$xpc"
+            done
+        fi
+        # Autoupdate binary (not under MacOS/)
+        if [[ -f "$sparkle_b/Autoupdate" ]]; then
+            codesign --force --sign "$signing_identity" --timestamp --options runtime \
+                "$sparkle_b/Autoupdate"
+        fi
+        # Updater.app
+        if [[ -d "$sparkle_b/Updater.app" ]]; then
+            codesign --force --sign "$signing_identity" --timestamp --options runtime \
+                "$sparkle_b/Updater.app"
+        fi
+        # Framework binary + bundle
+        if [[ -f "$sparkle_b/Sparkle" ]]; then
+            codesign --force --sign "$signing_identity" --timestamp --options runtime \
+                "$sparkle_b/Sparkle"
+        fi
+        codesign --force --sign "$signing_identity" --timestamp --options runtime \
             "$frameworks/Sparkle.framework"
     fi
 

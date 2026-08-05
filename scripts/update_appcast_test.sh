@@ -106,7 +106,20 @@ test_generate_item_includes_minimum_system_version() {
     item="$(generate_appcast_item "0.4.0" "9" "https://example.com/app.dmg" "12345" "Sat, 15 Feb 2026 00:00:00 +0000")"
 
     assert_contains "minimumSystemVersion" \
-        "<sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>" "$item"
+        "<sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>" "$item"
+}
+
+test_compute_build_number_from_semver() {
+    echo "test: compute_build_number from semver is monotonic"
+    local b
+    b="$(compute_build_number "0.3.26")"
+    assert_eq "0.3.26 → 3026" "3026" "$b"
+    b="$(compute_build_number "0.3.27")"
+    assert_eq "0.3.27 → 3027" "3027" "$b"
+    b="$(compute_build_number "1.2.3")"
+    assert_eq "1.2.3 → 1002003" "1002003" "$b"
+    b="$(compute_build_number "0.3.26" "99")"
+    assert_eq "explicit override" "99" "$b"
 }
 
 # --- insert_appcast_item ---
@@ -213,6 +226,7 @@ test_generate_item_version_fields_differ
 test_generate_item_includes_enclosure
 test_generate_item_includes_pubdate
 test_generate_item_includes_minimum_system_version
+test_compute_build_number_from_semver
 test_insert_item_before_channel_close
 test_insert_item_preserves_existing_items
 test_insert_item_appears_after_existing
