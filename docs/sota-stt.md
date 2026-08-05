@@ -48,7 +48,7 @@ Scale 1–5. Higher = better for Chirp’s product.
 | Path | SOTA | Perf (M4/M5) | Local/offline | Quality (dictation) | **Action** |
 |------|------|--------------|---------------|---------------------|------------|
 | **Parakeet TDT 0.6b v3 int8 + sherpa CPU** (shipped) | 4 | 4 (RTF ≫1, multi-thread) | **5** (pinned, MIT/Apache stack + CC-BY model) | **4** (disfluent win; multilingual) | **KEEP** |
-| FluidAudio Parakeet CoreML/ANE (same weights family) | 4 | **5** (ANE, lower idle power) | 5 | 4 | **TRIAL** (not started; SPM/ANE spike) |
+| FluidAudio Parakeet CoreML/ANE (same weights family) | 4 | **5** (ANE, lower idle power) | 5 | 4 | **DEFERRED** — Bazel packaging (see below) |
 | FluidAudio Parakeet EOU 120m streaming | 4 | 5 (true partials) | 5 | 3 (EN-only, smaller) | **DEFERRED** — needs true streaming partials design |
 | Apple SpeechAnalyzer (macOS 26+) | **5** clean multi-lang | **5** ANE | 4 (on-device; opaque OS model) | 4 clean / 3 disfluent | **TRIAL shipped** — optional AI mode |
 | WhisperKit large-v3 | 4 | 3–4 (ANE; heavier) | 5 | 4 clean EN; brand bias | **DEFERRED** — optional mode later |
@@ -62,10 +62,10 @@ Scale 1–5. Higher = better for Chirp’s product.
 3. **TRIAL shipped**: `TranscriptionMode.systemSpeech` → `SystemSpeechClient` + `SystemSpeechAvailability`.
    - AI mode picker: “Apple Speech (trial)”. Flush via SpeechAnalyzer file path; peek still Parakeet.
    - Fallback to offline if OS &lt; 26. Pillars: SOTA↑ optional, local (on-device OS model), default path untouched.
-4. **Still open**: FluidAudio ANE energy path (`yodel-ckb`); true streaming EOU partials (`yodel-88e`); full M4/M5 energy numbers before any default swap.
-5. **Re-bench infra shipped** (`yodel-go0` partial): `TranscriptionScoring` live/total + grades; `VoiceCondition` soft/muffle/noise; manual suites
-   `//:LiveTotalPipelineTests`, `//:VoiceConditionPipelineTests` (TTS → stream peek + flush → WER ceilings).
-   Not yet: battery/RTF side-by-side vs FluidAudio/SpeechAnalyzer on M4/M5 hardware log.
+4. **FluidAudio ANE DEFERRED** (`yodel-ckb`): SPM package is fine (MIT/Apache + binary NemoTextProcessing), but Chirp **ships via Bazel** (`ChirpLib` + vendored sherpa/ORT). Pulling FluidAudio means rules_swift remote package **or** vendored framework + multi‑GB CoreML model manager + code-sign story — larger than a trial slice. Modeled in `EngineMode.tla` (`fluid` → offline when `fluidOk=FALSE`); product has no picker case yet. Revisit when re-bench shows ANE energy win on Chirp peek cadence.
+5. **Still open**: true streaming EOU partials (`yodel-88e`); full M4/M5 energy numbers (`yodel-go0` residual) before any default swap.
+6. **Re-bench infra shipped** (`yodel-go0` partial): `TranscriptionScoring` live/total + grades; `VoiceCondition`; manual `//:LiveTotalPipelineTests` / `//:VoiceConditionPipelineTests`.
+7. **Engine mode rigor**: `EngineMode.tla` + `EngineModeDecision` — optional engines fall back to offline; mid-session select defers (with `PipelineRebuild`).
 
 ## m4/m5 practical notes (Chirp)
 
@@ -81,7 +81,7 @@ Scale 1–5. Higher = better for Chirp’s product.
 |----|--------|--------|
 | yodel-adv1 | Unbounded `AsyncStream` + RT-thread convert | **fixed**: `bufferingNewest(AudioCapturePolicy.streamBufferChunks)`; convert hops on `chirp.audio.convert` with `ConvertBacklog` |
 | yodel-adv2 | Mid-session config change → stale converter in tap | **fixed**: live `AudioConverterSlot`; convert uses **tap-time snapshot** (not hop re-read) so in-flight buffers keep matching rate/converter |
-| yodel-adv3 | SOTA notes + optional engine trial | **decision + systemSpeech trial shipped** (FluidAudio/EOU/re-bench open) |
+| yodel-adv3 | SOTA notes + optional engine trial | **decision + systemSpeech trial shipped**; FluidAudio **deferred** (Bazel); EOU/re-bench residual |
 | yodel-adv4 | Rejoin dual-consumer without gen cancel | **fixed** (SessionMachine + `consumerGeneration` gate) |
 
 ## Refs

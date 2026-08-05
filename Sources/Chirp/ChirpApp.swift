@@ -412,8 +412,12 @@ public final class AppState {
             }
         case .systemSpeech:
             // Trial: Apple SpeechAnalyzer on flush; local Parakeet still peeks.
-            // Falls back to offline if OS < 26 or Speech framework unavailable.
-            if SystemSpeechAvailability.isAvailable {
+            // Resolve dual EngineMode.tla — unavailable → offline (never dead engine).
+            let resolved = EngineModeDecision.resolve(
+                desired: .systemSpeech,
+                systemAvailable: SystemSpeechAvailability.isAvailable
+            )
+            if resolved == .systemSpeech {
                 pipeline = CloudTranscriptionPipeline(
                     sttClient: SystemSpeechClient(),
                     postProcessor: postProcessor,

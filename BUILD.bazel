@@ -112,6 +112,7 @@ swift_test(
         "Tests/ChirpTests/SessionMachinePropertyTests.swift",
         "Tests/ChirpTests/SessionDecisionTests.swift",
         "Tests/ChirpTests/AppStatusDecisionTests.swift",
+        "Tests/ChirpTests/EngineModeDecisionTests.swift",
         "Tests/ChirpTests/PipelineRebuildDecisionTests.swift",
         "Tests/ChirpTests/DecodePolicyTests.swift",
         "Tests/ChirpTests/InferenceProviderTests.swift",
