@@ -845,7 +845,11 @@ public final class AppState {
     /// Shared setup: creates a new audio stream, starts the recorder,
     /// and spawns the consumer task for the given session + consumer gen.
     private func startConsumerAndAudio(session: UInt64, consumerGen: UInt64) {
-        let (stream, continuation) = AsyncStream<[Float]>.makeStream()
+        // yodel-adv1: bound the stream — drop oldest ~85ms chunks when the
+        // consumer (feedAudio/ASR) falls behind instead of unbounded growth.
+        let (stream, continuation) = AsyncStream<[Float]>.makeStream(
+            bufferingPolicy: .bufferingNewest(AudioCapturePolicy.streamBufferChunks)
+        )
         audioContinuation = continuation
 
         audioRecorder.startRecording { samples in

@@ -368,15 +368,20 @@ Recording runs two parallel tasks:
 
 ## Audio Capture
 
-AVAudioEngine tap on the I/O thread resamples to 16kHz mono and yields
-~85ms chunks into an AsyncStream.
+AVAudioEngine tap on the I/O thread **copies** mono PCM, then hops
+resample (`AVAudioConverter` → 16 kHz mono) onto `chirp.audio.convert`
+(`AudioCapturePolicy.maxPendingConverts` drop-under-pressure). Converted
+~85 ms chunks yield into an `AsyncStream` bounded with
+`.bufferingNewest(AudioCapturePolicy.streamBufferChunks)` (~5 s). Mid-session
+format rebuild updates a live `AudioConverterSlot` the hop re-reads
+(no stale converter after config change).
 
 Engine is prepared at launch (no I/O — mic indicator off), started on
 first recording (mic indicator on), and parked 0.5s after stop (so
 quick rejoins reuse it). Device changes tear down and re-prepare.
 
-**Shutdown order:** tap removed *before* stream finished, so in-flight
-I/O callbacks can still yield. Reversed order loses ~85ms in a race.
+**Shutdown order:** tap removed → convert queue drained → stream finished,
+so in-flight hops can still yield. Reversed order loses ~85ms in a race.
 
 
 ## Transcriber

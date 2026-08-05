@@ -63,20 +63,20 @@ Scale 1–5. Higher = better for Chirp’s product.
 
 ## m4/m5 practical notes (Chirp)
 
-- Keep **mic conversion off the audio I/O thread** and bound the sample queue (`yodel-adv1`).
+- Mic convert hops off I/O thread; AsyncStream + convert backlog are bounded (`yodel-adv1` fixed).
 - `num_threads = 4` ASR fine for burst dictation; watch UI + T5 contention on long sessions.
 - Prefer smaller decode work per peek (PeekCache / speech-window).
 - Avoid eager VP aggregate devices when idle (lazy prepare + park teardown).
 - ANE trial paths matter most for **battery/thermal** on continuous peek, not one-shot RTF.
 
-## Hostile / adversarial notes (same fire)
+## Hostile / adversarial notes
 
 | ID | Topic | Status |
 |----|--------|--------|
-| yodel-adv1 | Unbounded `AsyncStream` + RT-thread convert | open (high) |
-| yodel-adv2 | Mid-session config change → stale converter in tap | open (med) |
+| yodel-adv1 | Unbounded `AsyncStream` + RT-thread convert | **fixed**: `bufferingNewest(AudioCapturePolicy.streamBufferChunks)`; convert hops on `chirp.audio.convert` with `ConvertBacklog` |
+| yodel-adv2 | Mid-session config change → stale converter in tap | **fixed**: `AudioConverterSlot` re-read each buffer; `rebuildConverter` updates live slot |
 | yodel-adv3 | SOTA notes + optional engine trial | **decision documented; trial not started** |
-| yodel-adv4 | Rejoin dual-consumer without gen cancel | fix this fire if landed |
+| yodel-adv4 | Rejoin dual-consumer without gen cancel | **fixed** (SessionMachine + `consumerGeneration` gate) |
 
 ## Refs
 

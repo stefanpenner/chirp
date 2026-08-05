@@ -2,6 +2,7 @@
 // Verifies that audio samples flow through makeTapBlock without being
 // dropped. These tests don't need a microphone or ML model — they exercise
 // the sample-rate conversion and channel-extraction logic directly.
+// Also covers yodel-adv1 (bounded backlog / hop) and yodel-adv2 (live slot).
 
 import Testing
 import AVFoundation
@@ -52,22 +53,19 @@ struct AudioRecorderTapBlockTests {
             defer { lock.unlock() }
             return _samples
         }
+
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return _samples.count
+        }
     }
 
-    private static func makeTap(
-        srcRate: Double = 48000,
-        dstRate: Double = 16000,
-        srcChannels: AVAudioChannelCount = 1
-    ) -> (tap: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void,
-          received: SampleCollector) {
-
-        let srcFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: srcRate,
-            channels: srcChannels,
-            interleaved: false
-        )!
-        // Converter source must be mono (tap block extracts ch0 for multi-channel)
+    private static func makeFormats(
+        srcRate: Double,
+        dstRate: Double,
+        srcChannels: AVAudioChannelCount
+    ) -> (converter: AVAudioConverter, dst: AVAudioFormat) {
         let convSrcFormat: AVAudioFormat
         if srcChannels > 1 {
             convSrcFormat = AVAudioFormat(
@@ -77,7 +75,12 @@ struct AudioRecorderTapBlockTests {
                 interleaved: false
             )!
         } else {
-            convSrcFormat = srcFormat
+            convSrcFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: srcRate,
+                channels: srcChannels,
+                interleaved: false
+            )!
         }
         let dstFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -86,7 +89,19 @@ struct AudioRecorderTapBlockTests {
             interleaved: false
         )!
         let converter = AVAudioConverter(from: convSrcFormat, to: dstFormat)!
+        return (converter, dstFormat)
+    }
 
+    private static func makeTap(
+        srcRate: Double = 48000,
+        dstRate: Double = 16000,
+        srcChannels: AVAudioChannelCount = 1
+    ) -> (tap: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void,
+          received: SampleCollector) {
+
+        let (converter, dstFormat) = makeFormats(
+            srcRate: srcRate, dstRate: dstRate, srcChannels: srcChannels
+        )
         let received = SampleCollector()
         let tap = AudioRecorder.makeTapBlock(
             converter: converter,
@@ -164,5 +179,97 @@ struct AudioRecorderTapBlockTests {
 
         #expect(received.samples.count == 5,
                 "Each buffer should produce one callback, got \(received.samples.count)")
+    }
+
+    // MARK: - yodel-adv1 / adv2
+
+    @Test("Capture policy bounds are positive and finite")
+    func capturePolicyBounds() {
+        #expect(AudioCapturePolicy.streamBufferChunks > 0)
+        #expect(AudioCapturePolicy.streamBufferChunks <= 256)
+        #expect(AudioCapturePolicy.maxPendingConverts > 0)
+        #expect(AudioCapturePolicy.maxPendingConverts <= 64)
+    }
+
+    @Test("ConvertBacklog drops when at capacity (yodel-adv1)")
+    func convertBacklogDropsWhenFull() {
+        let backlog = ConvertBacklog(maxPending: 2)
+        #expect(backlog.tryAcquire())
+        #expect(backlog.tryAcquire())
+        #expect(!backlog.tryAcquire(), "Third acquire must fail at capacity")
+        backlog.release()
+        #expect(backlog.tryAcquire(), "Release frees a slot")
+        backlog.release()
+        backlog.release()
+        #expect(backlog.pending == 0)
+    }
+
+    @Test("Live converter slot is visible to tap after update (yodel-adv2)")
+    func liveConverterSlotUpdate() {
+        let (conv48, dst) = Self.makeFormats(srcRate: 48000, dstRate: 16000, srcChannels: 1)
+        let slot = AudioConverterSlot(
+            converter: conv48,
+            targetFormat: dst,
+            inputSampleRate: 48000,
+            outputRate: 16000
+        )
+        let received = SampleCollector()
+        let tap = AudioRecorder.makeTapBlock(
+            slot: slot,
+            convertQueue: nil,
+            backlog: nil,
+            onSamples: { received.append($0) }
+        )
+
+        // First buffer at 48 kHz → ~1600 @ 16 kHz for 4800 frames
+        tap(Self.sineBuffer(sampleRate: 48000, frameCount: 4800), Self.dummyTime)
+        #expect(received.count == 1)
+        let firstCount = received.samples[0].count
+        #expect(firstCount > 1400 && firstCount < 1800)
+
+        // Swap to 24 kHz source converter mid-session (stale path would keep 48 kHz math)
+        let (conv24, _) = Self.makeFormats(srcRate: 24000, dstRate: 16000, srcChannels: 1)
+        slot.update(
+            converter: conv24,
+            targetFormat: dst,
+            inputSampleRate: 24000,
+            outputRate: 16000
+        )
+        tap(Self.sineBuffer(sampleRate: 24000, frameCount: 2400), Self.dummyTime)
+        #expect(received.count == 2)
+        // 2400 @ 24 kHz → 1600 @ 16 kHz
+        let secondCount = received.samples[1].count
+        #expect(secondCount > 1400 && secondCount < 1800,
+                "Live slot must use updated rate; got \(secondCount)")
+    }
+
+    @Test("Async hop delivers samples off the caller's thread (yodel-adv1)")
+    func asyncHopDelivers() async {
+        let (converter, dst) = Self.makeFormats(srcRate: 48000, dstRate: 16000, srcChannels: 1)
+        let slot = AudioConverterSlot(
+            converter: converter,
+            targetFormat: dst,
+            inputSampleRate: 48000,
+            outputRate: 16000
+        )
+        let backlog = ConvertBacklog(maxPending: 8)
+        let received = SampleCollector()
+        let queue = DispatchQueue(label: "test.chirp.convert")
+        let tap = AudioRecorder.makeTapBlock(
+            slot: slot,
+            convertQueue: queue,
+            backlog: backlog,
+            onSamples: { received.append($0) }
+        )
+
+        tap(Self.sineBuffer(sampleRate: 48000, frameCount: 4800), Self.dummyTime)
+
+        // Drain hop queue then observe delivery.
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            queue.async { cont.resume() }
+        }
+        #expect(received.count == 1, "Hop must deliver converted chunk")
+        #expect(received.samples[0].count > 1400)
+        #expect(backlog.pending == 0)
     }
 }

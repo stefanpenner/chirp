@@ -5,10 +5,110 @@
 //
 // The engine is prepared once (via prepare()) and kept alive between recordings.
 // startRecording/stopRecording only install/remove the tap — near-instant.
+//
+// yodel-adv1: convert hops off the I/O thread; AsyncStream is bounded at the
+// consumer. yodel-adv2: converter lives in a slot the tap re-reads each buffer
+// so mid-session rebuildConverter is visible without reinstalling the tap.
 
 @preconcurrency import AVFoundation
 import CoreAudio
 import os
+
+// MARK: - Capture bounds (yodel-adv1)
+
+/// Pure bounds for mic → consumer path. Dual-tested in AudioRecorderTests.
+enum AudioCapturePolicy {
+    /// AsyncStream capacity in ~85 ms chunks. Drop-oldest when full (~5.4 s).
+    static let streamBufferChunks = 64
+
+    /// Max in-flight convert jobs on the hop queue. Excess tap buffers drop
+    /// (RT must never block waiting for convert). Convert is cheap vs ASR, so
+    /// this only bites under extreme main/actor stalls.
+    static let maxPendingConverts = 16
+}
+
+// MARK: - Live converter (yodel-adv2)
+
+/// Mutable converter state shared by MainActor rebuilds and the I/O tap.
+/// Lock is only held for pointer/Double swaps — convert runs outside the lock.
+final class AudioConverterSlot: @unchecked Sendable {
+    private let lock = NSLock()
+    private var converter: AVAudioConverter
+    private var targetFormat: AVAudioFormat
+    private var inputSampleRate: Double
+    private var outputRate: Double
+
+    init(
+        converter: AVAudioConverter,
+        targetFormat: AVAudioFormat,
+        inputSampleRate: Double,
+        outputRate: Double
+    ) {
+        self.converter = converter
+        self.targetFormat = targetFormat
+        self.inputSampleRate = inputSampleRate
+        self.outputRate = outputRate
+    }
+
+    func update(
+        converter: AVAudioConverter,
+        targetFormat: AVAudioFormat,
+        inputSampleRate: Double,
+        outputRate: Double
+    ) {
+        lock.lock()
+        self.converter = converter
+        self.targetFormat = targetFormat
+        self.inputSampleRate = inputSampleRate
+        self.outputRate = outputRate
+        lock.unlock()
+    }
+
+    func snapshot() -> (
+        converter: AVAudioConverter,
+        targetFormat: AVAudioFormat,
+        inputSampleRate: Double,
+        outputRate: Double
+    ) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (converter, targetFormat, inputSampleRate, outputRate)
+    }
+}
+
+/// Counts in-flight convert hops so the RT path can drop instead of unbounded enqueue.
+final class ConvertBacklog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    let maxPending: Int
+
+    init(maxPending: Int = AudioCapturePolicy.maxPendingConverts) {
+        self.maxPending = maxPending
+    }
+
+    /// Reserve a convert slot. `false` → drop this buffer (backpressure).
+    func tryAcquire() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if count >= maxPending { return false }
+        count += 1
+        return true
+    }
+
+    func release() {
+        lock.lock()
+        count -= 1
+        lock.unlock()
+    }
+
+    var pending: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+}
+
+// MARK: - Recorder
 
 @MainActor
 final class AudioRecorder: AudioRecording {
@@ -16,6 +116,8 @@ final class AudioRecorder: AudioRecording {
     private var converter: AVAudioConverter?
     private var targetFormat: AVAudioFormat?
     private var inputFormat: AVAudioFormat?
+    private var converterSlot: AudioConverterSlot?
+    private let convertBacklog = ConvertBacklog()
     private let sampleRate: Double = 16000
     private var configObserver: (any NSObjectProtocol)?
     private var parkTimer: Timer?
@@ -29,6 +131,12 @@ final class AudioRecorder: AudioRecording {
     /// Set when a config change fires during recording. The full tearDown+prepare
     /// is deferred to stopRecording.
     private var configChangeDeferred = false
+
+    /// Serial hop for AVAudioConverter work (off the real-time I/O thread).
+    nonisolated static let convertQueue = DispatchQueue(
+        label: "chirp.audio.convert",
+        qos: .userInitiated
+    )
 
     /// The device ID to use for recording, or nil for the system default.
     var selectedDeviceID: AudioDeviceID?
@@ -128,6 +236,12 @@ final class AudioRecorder: AudioRecording {
         self.converter = conv
         self.targetFormat = tgtFormat
         self.inputFormat = inFormat
+        self.converterSlot = AudioConverterSlot(
+            converter: conv,
+            targetFormat: tgtFormat,
+            inputSampleRate: inFormat.sampleRate,
+            outputRate: sampleRate
+        )
 
         // Re-prepare on audio device changes (e.g. headphones plugged in).
         configObserver = NotificationCenter.default.addObserver(
@@ -216,11 +330,18 @@ final class AudioRecorder: AudioRecording {
             return
         }
 
-        let tapBlock = Self.makeTapBlock(
+        let slot = converterSlot ?? AudioConverterSlot(
             converter: converter,
             targetFormat: targetFormat,
             inputSampleRate: inputFormat.sampleRate,
-            outputRate: sampleRate,
+            outputRate: sampleRate
+        )
+        converterSlot = slot
+
+        let tapBlock = Self.makeTapBlock(
+            slot: slot,
+            convertQueue: Self.convertQueue,
+            backlog: convertBacklog,
             onSamples: onSamples
         )
 
@@ -237,6 +358,51 @@ final class AudioRecorder: AudioRecording {
 
     // nonisolated: prevents @MainActor executor checks from leaking
     // into the returned closure, which runs on AVAudioEngine's I/O thread.
+    //
+    // RT path: copy PCM (buffer invalid after return) → hop convert → onSamples.
+    // convertQueue nil = synchronous convert (unit tests).
+    nonisolated static func makeTapBlock(
+        slot: AudioConverterSlot,
+        convertQueue: DispatchQueue?,
+        backlog: ConvertBacklog?,
+        onSamples: @escaping @Sendable ([Float]) -> Void
+    ) -> @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void {
+        return { buffer, _ in
+            // Buffer is only valid inside this callback — copy before hop.
+            guard let monoSource = Self.copyMonoSource(buffer) else { return }
+
+            // Shared convert body: re-read slot each hop (yodel-adv2).
+            let convertAndDeliver: @Sendable () -> Void = {
+                let live = slot.snapshot()
+                if let chunk = Self.convertToTarget(
+                    source: monoSource,
+                    converter: live.converter,
+                    targetFormat: live.targetFormat,
+                    inputSampleRate: live.inputSampleRate,
+                    outputRate: live.outputRate
+                ) {
+                    onSamples(chunk)
+                }
+            }
+
+            guard let convertQueue else {
+                // Sync path for tests / callers that need immediate delivery.
+                convertAndDeliver()
+                return
+            }
+
+            if let backlog, !backlog.tryAcquire() {
+                // Drop under convert pressure — never block the I/O thread.
+                return
+            }
+            convertQueue.async {
+                defer { backlog?.release() }
+                convertAndDeliver()
+            }
+        }
+    }
+
+    /// Convenience for tests: frozen converter, sync convert (legacy shape).
     nonisolated static func makeTapBlock(
         converter: AVAudioConverter,
         targetFormat: AVAudioFormat,
@@ -244,56 +410,87 @@ final class AudioRecorder: AudioRecording {
         outputRate: Double,
         onSamples: @escaping @Sendable ([Float]) -> Void
     ) -> @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void {
-        return { buffer, _ in
-            let frameCount = AVAudioFrameCount(
-                Double(buffer.frameLength) * outputRate / inputSampleRate
-            )
-            guard frameCount > 0 else { return }
+        let slot = AudioConverterSlot(
+            converter: converter,
+            targetFormat: targetFormat,
+            inputSampleRate: inputSampleRate,
+            outputRate: outputRate
+        )
+        return makeTapBlock(
+            slot: slot,
+            convertQueue: nil,
+            backlog: nil,
+            onSamples: onSamples
+        )
+    }
 
-            // VP may expose multiple internal channels. Extract channel 0
-            // (the voice channel) into a mono buffer for conversion.
-            let source: AVAudioPCMBuffer
-            if buffer.format.channelCount > 1 {
-                guard let monoFmt = AVAudioFormat(
-                    commonFormat: .pcmFormatFloat32, sampleRate: buffer.format.sampleRate,
-                    channels: 1, interleaved: false
-                ),
-                let mono = AVAudioPCMBuffer(pcmFormat: monoFmt, frameCapacity: buffer.frameLength),
-                let src = buffer.floatChannelData?[0],
-                let dst = mono.floatChannelData?[0] else { return }
-                mono.frameLength = buffer.frameLength
-                memcpy(dst, src, Int(buffer.frameLength) * MemoryLayout<Float>.size)
-                source = mono
-            } else {
-                source = buffer
-            }
-
-            guard let convertedBuffer = AVAudioPCMBuffer(
-                pcmFormat: targetFormat,
-                frameCapacity: frameCount
-            ) else { return }
-
-            var error: NSError?
-            converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
-                outStatus.pointee = .haveData
-                return source
-            }
-
-            if error != nil { return }
-
-            guard let channelData = convertedBuffer.floatChannelData else { return }
-            let count = Int(convertedBuffer.frameLength)
-            let chunk = Array(UnsafeBufferPointer(
-                start: channelData[0],
-                count: count
-            ))
-            onSamples(chunk)
+    /// Copy channel 0 into a mono Float32 buffer (tap buffer invalid after return).
+    nonisolated static func copyMonoSource(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        if buffer.format.channelCount > 1 {
+            guard let monoFmt = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: buffer.format.sampleRate,
+                channels: 1,
+                interleaved: false
+            ),
+            let mono = AVAudioPCMBuffer(pcmFormat: monoFmt, frameCapacity: buffer.frameLength),
+            let src = buffer.floatChannelData?[0],
+            let dst = mono.floatChannelData?[0] else { return nil }
+            mono.frameLength = buffer.frameLength
+            memcpy(dst, src, Int(buffer.frameLength) * MemoryLayout<Float>.size)
+            return mono
         }
+        // Mono: still copy — original buffer invalid after tap returns.
+        guard let monoFmt = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: buffer.format.sampleRate,
+            channels: 1,
+            interleaved: false
+        ),
+        let copy = AVAudioPCMBuffer(pcmFormat: monoFmt, frameCapacity: buffer.frameLength),
+        let src = buffer.floatChannelData?[0],
+        let dst = copy.floatChannelData?[0] else { return nil }
+        copy.frameLength = buffer.frameLength
+        memcpy(dst, src, Int(buffer.frameLength) * MemoryLayout<Float>.size)
+        return copy
+    }
+
+    /// Resample mono Float32 source → target rate mono Float array.
+    nonisolated static func convertToTarget(
+        source: AVAudioPCMBuffer,
+        converter: AVAudioConverter,
+        targetFormat: AVAudioFormat,
+        inputSampleRate: Double,
+        outputRate: Double
+    ) -> [Float]? {
+        let frameCount = AVAudioFrameCount(
+            Double(source.frameLength) * outputRate / inputSampleRate
+        )
+        guard frameCount > 0 else { return nil }
+
+        guard let convertedBuffer = AVAudioPCMBuffer(
+            pcmFormat: targetFormat,
+            frameCapacity: frameCount
+        ) else { return nil }
+
+        var error: NSError?
+        converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+            outStatus.pointee = .haveData
+            return source
+        }
+        if error != nil { return nil }
+
+        guard let channelData = convertedBuffer.floatChannelData else { return nil }
+        let count = Int(convertedBuffer.frameLength)
+        return Array(UnsafeBufferPointer(start: channelData[0], count: count))
     }
 
     func stopRecording() {
         isRecordingActive = false
         audioEngine?.inputNode.removeTap(onBus: 0)
+        // Drain in-flight convert hops so trailing chunks can still yield
+        // before AppState finishes the AsyncStream continuation (yodel-adv1).
+        Self.convertQueue.sync {}
         audioDucker.unduck()
         // Apply deferred config change now that the tap is removed.
         if configChangeDeferred {
@@ -327,6 +524,7 @@ final class AudioRecorder: AudioRecording {
 
     /// Re-reads the input format and rebuilds the converter without tearing down the engine.
     /// Used after VP config changes where the engine is still valid.
+    /// Updates the live slot so the installed tap sees the new converter (yodel-adv2).
     private func rebuildConverter() {
         guard let engine = audioEngine, let tgtFormat = targetFormat else { return }
         let newFormat = engine.inputNode.outputFormat(forBus: 0)
@@ -345,6 +543,21 @@ final class AudioRecorder: AudioRecording {
         }
         self.converter = conv
         self.inputFormat = newFormat
+        if let slot = converterSlot {
+            slot.update(
+                converter: conv,
+                targetFormat: tgtFormat,
+                inputSampleRate: newFormat.sampleRate,
+                outputRate: sampleRate
+            )
+        } else {
+            converterSlot = AudioConverterSlot(
+                converter: conv,
+                targetFormat: tgtFormat,
+                inputSampleRate: newFormat.sampleRate,
+                outputRate: sampleRate
+            )
+        }
     }
 
     /// Returns true if the active input device uses Bluetooth transport.
@@ -402,5 +615,6 @@ final class AudioRecorder: AudioRecording {
         converter = nil
         targetFormat = nil
         inputFormat = nil
+        converterSlot = nil
     }
 }
