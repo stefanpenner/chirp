@@ -10,6 +10,15 @@ public enum APIProtocol: String, Codable, CaseIterable, Sendable {
     case openAI
     case anthropic
     case google
+
+    /// Human-facing label (Settings rows, pickers).
+    public var displayName: String {
+        switch self {
+        case .openAI: return "OpenAI"
+        case .anthropic: return "Anthropic"
+        case .google: return "Google"
+        }
+    }
 }
 
 // MARK: - API Endpoint

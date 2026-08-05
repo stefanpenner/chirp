@@ -726,13 +726,18 @@ private struct AIModeRow: View {
     let canDelete: Bool
 
     var body: some View {
-        HStack {
+        HStack(spacing: 10) {
             Button(action: onSelect) {
                 Image(systemName: isActive ? "circle.inset.filled" : "circle")
                     .foregroundStyle(isActive ? cBlue : .secondary)
                     .font(.system(size: 14))
+                    .frame(minWidth: 22, minHeight: 22)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(mode.name)
+            .accessibilityHint("Selects this AI mode")
+            .accessibilityAddTraits(isActive ? [.isSelected] : [])
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -740,30 +745,41 @@ private struct AIModeRow: View {
                         .font(.system(size: 13, weight: .medium))
                     if isDefault {
                         Text("Default")
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.system(size: 10, weight: .medium))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(
-                                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                    .fill(.secondary.opacity(0.15))
+                                Capsule().fill(.secondary.opacity(0.15))
                             )
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                     }
                 }
                 Text(modeSummary)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
-            Spacer()
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(isDefault ? "\(mode.name), Default" : mode.name)
+            .accessibilityValue(modeSummary)
+            .accessibilityAddTraits(isActive ? [.isSelected] : [])
+
+            Spacer(minLength: 8)
+
             Button("Edit", action: onEdit)
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Edit \(mode.name)")
             if canDelete {
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
+                        .frame(minWidth: 22, minHeight: 22)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Delete \(mode.name)")
             }
         }
+        .padding(.vertical, 2)
     }
 
     private var modeSummary: String {
@@ -1002,36 +1018,63 @@ private struct EndpointRow: View {
     let onEdit: () -> Void
     let onDelete: () -> Void
 
+    /// True when the user left the name as the protocol id/label (badge was redundant).
+    private var nameMatchesProtocol: Bool {
+        let n = endpoint.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.caseInsensitiveCompare(endpoint.apiProtocol.rawValue) == .orderedSame
+            || n.caseInsensitiveCompare(endpoint.apiProtocol.displayName) == .orderedSame
+    }
+
+    private var subtitle: String {
+        let proto = endpoint.apiProtocol.displayName
+        let host = endpoint.baseURL.host
+        if nameMatchesProtocol {
+            return host ?? proto
+        }
+        if let host, !host.isEmpty {
+            return "\(proto) · \(host)"
+        }
+        return proto
+    }
+
     var body: some View {
-        HStack {
+        HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(endpoint.name)
-                        .font(.system(size: 13, weight: .medium))
-                    Text(endpoint.apiProtocol.rawValue)
-                        .font(.system(size: 10, weight: .medium))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(cBlue.opacity(0.15))
-                        )
-                        .foregroundStyle(cBlue)
-                }
+                Text(endpoint.name.isEmpty ? endpoint.apiProtocol.displayName : endpoint.name)
+                    .font(.system(size: 13, weight: .medium))
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            Spacer()
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(endpoint.name.isEmpty ? endpoint.apiProtocol.displayName : endpoint.name)
+            .accessibilityValue(
+                endpoint.isEnabled
+                    ? subtitle
+                    : "\(subtitle), Disabled"
+            )
+
+            Spacer(minLength: 8)
+
             if !endpoint.isEnabled {
                 Text("Disabled")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
             Button("Edit", action: onEdit)
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Edit provider \(endpoint.name)")
             Button(role: .destructive, action: onDelete) {
                 Image(systemName: "trash")
+                    .frame(minWidth: 22, minHeight: 22)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel("Delete provider \(endpoint.name)")
         }
+        .padding(.vertical, 2)
     }
 }
 
@@ -1051,17 +1094,24 @@ struct EndpointEditorView: View {
                     TextField("Name", text: $endpoint.name, prompt: Text("e.g. Work OpenAI"))
                     Picker("Protocol", selection: $endpoint.apiProtocol) {
                         ForEach(APIProtocol.allCases, id: \.self) { proto in
-                            Text(proto.rawValue).tag(proto)
+                            Text(proto.displayName).tag(proto)
                         }
                     }
                     .onChange(of: endpoint.apiProtocol) { _, newValue in
                         endpoint.baseURL = APIEndpoint.defaultBaseURL(for: newValue)
+                        // Seed empty name from protocol so rows never show a blank primary.
+                        if endpoint.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            endpoint.name = newValue.displayName
+                        }
                     }
                     TextField("Base URL", text: baseURLBinding)
                     SecureField("API Key", text: $apiKeyText)
                         .onAppear {
                             if !endpoint.apiKeyRef.isEmpty {
                                 apiKeyText = KeychainHelper.load(account: endpoint.apiKeyRef) ?? ""
+                            }
+                            if isNew, endpoint.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                endpoint.name = endpoint.apiProtocol.displayName
                             }
                         }
                     Toggle("Enabled", isOn: $endpoint.isEnabled)
@@ -1072,13 +1122,15 @@ struct EndpointEditorView: View {
             HStack {
                 Spacer()
                 Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
                 Button(isNew ? "Add" : "Save") { save() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(endpoint.name.isEmpty)
+                    .disabled(endpoint.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding()
         }
         .frame(width: 460, height: 300)
+        .accessibilityLabel(isNew ? "Add provider" : "Edit provider")
     }
 
     private var baseURLBinding: Binding<String> {
