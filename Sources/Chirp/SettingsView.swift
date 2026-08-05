@@ -275,30 +275,38 @@ struct DictationDictionaryEditor: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
-                    HStack {
+                    HStack(spacing: 8) {
                         Text(entry.from)
                             .font(.body.monospaced())
                         Image(systemName: "arrow.right")
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                         Text(entry.to)
                             .font(.body.monospaced())
-                        Spacer()
+                        Spacer(minLength: 8)
                         Button(role: .destructive) {
                             entries.remove(at: index)
                             persist()
                         } label: {
                             Image(systemName: "trash")
+                                .frame(minWidth: 22, minHeight: 22)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("Delete phrase \(entry.from)")
                     }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("\(entry.from) becomes \(entry.to)")
                 }
             }
 
             HStack {
                 TextField("heard as", text: $newFrom)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Misheard phrase")
                 TextField("replace with", text: $newTo)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Corrected phrase")
                 Button("Add") {
                     let f = newFrom.trimmingCharacters(in: .whitespacesAndNewlines)
                     let t = newTo.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -310,6 +318,7 @@ struct DictationDictionaryEditor: View {
                 }
                 .disabled(newFrom.trimmingCharacters(in: .whitespaces).isEmpty
                           || newTo.trimmingCharacters(in: .whitespaces).isEmpty)
+                .accessibilityLabel("Add dictionary phrase")
             }
         }
         .onAppear { reload() }
@@ -938,13 +947,15 @@ struct AIModeEditorView: View {
             HStack {
                 Spacer()
                 Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
                 Button(isNew ? "Add" : "Save") { onSave(mode) }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(mode.name.isEmpty)
+                    .disabled(mode.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding()
         }
         .frame(width: 500, height: 480)
+        .accessibilityLabel(isNew ? "Add AI mode" : "Edit AI mode")
     }
 
     // MARK: - Derived post-processing state
