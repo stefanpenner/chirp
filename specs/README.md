@@ -6,6 +6,7 @@ Model-check with the `tlc` CLI:
 tlc specs/SessionMachine.tla
 tlc specs/AppStatus.tla
 tlc specs/EngineMode.tla
+tlc specs/StreamingPartial.tla
 tlc specs/TranscriberBuffer.tla
 tlc specs/PeekCommit.tla
 tlc specs/PipelineRebuild.tla
@@ -16,6 +17,7 @@ tlc specs/PipelineRebuild.tla
 | `SessionMachine` | ready / recording / transcribing lifecycle | `SessionDecision` |
 | `AppStatus` | boot download/load/error + session entry / overlay stuck-modes | `AppStatusDecision` |
 | `EngineMode` | STT engine select + availability fallback + mid-session defer | `EngineModeDecision` |
+| `StreamingPartial` | peek-only vs streaming EOU partials; EOU auto-commit isolation | `StreamingPartialDecision` |
 | `CancelVoid` | ESC cancel voids typed text when incremental | `CancelDecision` |
 | `TranscriberBuffer` | pendingAudio is decode source; empty commit keeps buffer | `DecodePolicy` |
 | `PeekCommit` | stale peeks discarded via commitGen | `AppState` peek loop |
@@ -142,6 +144,7 @@ tlc -c TranscriberBuffer_bait.cfg specs/TranscriberBuffer.tla
 | Bait config | Weakened claim | Real property negated |
 |-------------|----------------|------------------------|
 | `EngineMode_bait` | active may be illegal while stable (no rebuild debt) | `ActiveLegalWhenStable` |
+| `StreamingPartial_bait` | partial may exist outside session | `PartialOnlyInSession` |
 | `AdaptivePeek_bait` | idle interval may appear before threshold misses | `IdleImpliesMisses` |
 | `PeekCache_bait` | reuse may leave lastCount ≠ currentCount | `ReuseImpliesEqual` |
 | `CancelVoid_bait` | ready may keep session text | `ReadyIsVoided` |
