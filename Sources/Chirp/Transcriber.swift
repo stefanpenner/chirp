@@ -363,7 +363,7 @@ actor Transcriber: TranscriberProtocol {
         }
 
         let window = Self.withSpeechWindow(pendingAudio)
-        let text: String
+        var text: String
         if DecodePolicy.shouldReuseCommitHyp(
             cachedSignature: lastPeekSpeechSignature,
             cachedText: lastPeekText,
@@ -376,6 +376,18 @@ actor Transcriber: TranscriberProtocol {
             text = cached
         } else {
             text = transcribeSamples(window.samples, speechFrameCount: window.speechFrameCount)
+        }
+        // Empty re-decode after live peeks → promote last peek (empty-total gap).
+        if DecodePolicy.shouldPromotePeekOnEmptyFlush(
+            flushText: text,
+            lastPeekText: lastPeekText,
+            hasPendingSpeech: true,
+            pendingSampleCount: pendingAudio.count
+        ), let peek = lastPeekText {
+            Log.transcription.info(
+                "flush: promote peek hyp after empty decode pendingAudio=\(self.pendingAudio.count) text=\(peek)"
+            )
+            text = peek
         }
         Log.transcription.debug("flush: pendingAudio=\(self.pendingAudio.count) hasPendingSpeech=true text=\(text)")
         pendingAudio.removeAll()

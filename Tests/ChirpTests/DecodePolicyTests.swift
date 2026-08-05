@@ -155,6 +155,60 @@ struct DecodePolicyTests {
         ))
     }
 
+    @Test("shouldPromotePeekOnEmptyFlush: empty total + live peek + speech")
+    func promotePeekOnEmptyFlush() {
+        #expect(DecodePolicy.shouldPromotePeekOnEmptyFlush(
+            flushText: "",
+            lastPeekText: "hello world",
+            hasPendingSpeech: true,
+            pendingSampleCount: DecodePolicy.minCommitSamples
+        ))
+        #expect(DecodePolicy.shouldPromotePeekOnEmptyFlush(
+            flushText: "   ",
+            lastPeekText: "yes please",
+            hasPendingSpeech: true,
+            pendingSampleCount: DecodePolicy.minCommitSamples + 100
+        ))
+    }
+
+    @Test("shouldPromotePeekOnEmptyFlush: rejects when unsafe")
+    func promotePeekRejects() {
+        // Non-empty flush already won
+        #expect(!DecodePolicy.shouldPromotePeekOnEmptyFlush(
+            flushText: "kept",
+            lastPeekText: "hello",
+            hasPendingSpeech: true,
+            pendingSampleCount: DecodePolicy.minCommitSamples
+        ))
+        // No VAD speech — flush skip path (hallucination guard)
+        #expect(!DecodePolicy.shouldPromotePeekOnEmptyFlush(
+            flushText: "",
+            lastPeekText: "hello",
+            hasPendingSpeech: false,
+            pendingSampleCount: DecodePolicy.minCommitSamples
+        ))
+        // Too short pending
+        #expect(!DecodePolicy.shouldPromotePeekOnEmptyFlush(
+            flushText: "",
+            lastPeekText: "hello",
+            hasPendingSpeech: true,
+            pendingSampleCount: DecodePolicy.minCommitSamples - 1
+        ))
+        // No peek
+        #expect(!DecodePolicy.shouldPromotePeekOnEmptyFlush(
+            flushText: "",
+            lastPeekText: nil,
+            hasPendingSpeech: true,
+            pendingSampleCount: DecodePolicy.minCommitSamples
+        ))
+        #expect(!DecodePolicy.shouldPromotePeekOnEmptyFlush(
+            flushText: "",
+            lastPeekText: "  ",
+            hasPendingSpeech: true,
+            pendingSampleCount: DecodePolicy.minCommitSamples
+        ))
+    }
+
     // MARK: - Adaptive energy noise floor
 
     @Test("noiseFloor tracks low RMS values (≈20th percentile)")

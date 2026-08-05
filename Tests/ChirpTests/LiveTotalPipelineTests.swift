@@ -193,12 +193,12 @@ struct LiveTotalPipelineTests {
             if !p.isEmpty { processed.append(p) }
         }
         let totalHyp = processed.joined(separator: " ")
-        // If final path dropped text but live peeks succeeded, score total as empty
-        // (product gap) — do not silently promote live into total.
+        // Product promotes last peek on empty flush (DecodePolicy.shouldPromotePeekOnEmptyFlush).
+        // Residual WARN only if mid-commits also empty (VAD skip / too-short path).
         let audioSec = Double(samples.count) / Double(DecodePolicy.sampleRate)
         let rtf = audioSec > 0 ? elapsed / audioSec : 0
         if totalHyp.isEmpty, let lastLive = livePeeks.last, !lastLive.isEmpty {
-            print("WARN[\(id)]: empty TOTAL with non-empty LIVE=\"\(lastLive)\" (flush/commit gap)")
+            print("WARN[\(id)]: empty TOTAL with non-empty LIVE=\"\(lastLive)\" (VAD/minCommit residual)")
         }
 
         let score = TranscriptionScoring.scoreLiveTotal(

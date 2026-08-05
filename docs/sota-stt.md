@@ -63,7 +63,8 @@ Scale 1–5. Higher = better for Chirp’s product.
    - AI mode picker: “Apple Speech (trial)”. Flush via SpeechAnalyzer file path; peek still Parakeet.
    - Fallback to offline if OS &lt; 26. Pillars: SOTA↑ optional, local (on-device OS model), default path untouched.
 4. **FluidAudio ANE DEFERRED** (`yodel-ckb`): SPM package is fine (MIT/Apache + binary NemoTextProcessing), but Chirp **ships via Bazel** (`ChirpLib` + vendored sherpa/ORT). Pulling FluidAudio means rules_swift remote package **or** vendored framework + multi‑GB CoreML model manager + code-sign story — larger than a trial slice. Modeled in `EngineMode.tla` (`fluid` → offline when `fluidOk=FALSE`); product has no picker case yet. Revisit when re-bench shows ANE energy win on Chirp peek cadence.
-5. **Still open**: true streaming EOU partials (`yodel-88e`); full M4/M5 energy numbers (`yodel-go0` residual) before any default swap.
+5. **Still open**: true streaming EOU partials (`yodel-88e` — peek-only remains; needs streaming design); full M4/M5 energy numbers (`yodel-go0` residual) before any default swap.
+5b. **Empty-total vs live peeks**: **fixed** — flush promotes last non-empty peek when re-decode empty (`DecodePolicy.shouldPromotePeekOnEmptyFlush` / `PeekCommitHyp` PromoteEmpty).
 6. **Re-bench infra shipped** (`yodel-go0` partial): `TranscriptionScoring` live/total + grades; `VoiceCondition`; manual `//:LiveTotalPipelineTests` / `//:VoiceConditionPipelineTests`.
 7. **Engine mode rigor**: `EngineMode.tla` + `EngineModeDecision` — optional engines fall back to offline; mid-session select defers (with `PipelineRebuild`).
 

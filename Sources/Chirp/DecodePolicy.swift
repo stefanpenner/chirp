@@ -180,4 +180,32 @@ enum DecodePolicy {
         guard pendingSampleCount <= peekMaxSamples else { return false }
         return speechWindowSignature(windowSamples) == cachedSignature
     }
+
+    /// Flush-only: re-decode empty / rejected but user already saw a non-empty peek.
+    ///
+    /// Closes empty-total vs live-peek gap at recording end (mid-session empty
+    /// VAD commits still keep `pendingAudio` — not this path).
+    ///
+    /// Promote when:
+    /// 1. Flush decode text is empty
+    /// 2. VAD still had pending speech (same gate as flush body)
+    /// 3. Pending long enough to commit
+    /// 4. Last peek hyp non-empty (already passed DecodeReject at peek time)
+    ///
+    /// Dual: `PeekCommitHyp` PromoteEmpty.
+    static func shouldPromotePeekOnEmptyFlush(
+        flushText: String,
+        lastPeekText: String?,
+        hasPendingSpeech: Bool,
+        pendingSampleCount: Int
+    ) -> Bool {
+        let trimmed = flushText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty else { return false }
+        guard hasPendingSpeech else { return false }
+        guard canCommit(pendingSampleCount: pendingSampleCount) else { return false }
+        guard let peek = lastPeekText?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !peek.isEmpty
+        else { return false }
+        return true
+    }
 }

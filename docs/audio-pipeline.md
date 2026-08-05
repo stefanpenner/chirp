@@ -438,7 +438,7 @@ end-of-recording flush needs complete audio (pendingAudio).
 |---|---|---|---|
 | **feedAudio** | pendingAudio (all) | VAD silence end mid-recording | VAD only endpoints; raw buffer avoids onset lag |
 | **peek** | pendingAudio (last 5s) | ~250ms active / ~500ms idle | show user everything since last commit |
-| **flush** | pendingAudio (all) | recording ends | match what peek showed; same source as commit |
+| **flush** | pendingAudio (all) | recording ends | match what peek showed; same source as commit; **promote last peek** if re-decode empty (`shouldPromotePeekOnEmptyFlush`) |
 
 **pendingAudio** — all samples since last commit. Cleared on commit.
 Shared source for peek, mid-recording commit, and flush — so preview,

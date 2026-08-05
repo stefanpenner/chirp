@@ -10,7 +10,11 @@
     pendingInPeekWindow \in BOOLEAN  \* pending ≤ peekMaxSamples
     sigMatch \in BOOLEAN             \* speech-window fingerprint equal
     hasHyp \in BOOLEAN               \* cached text non-empty
-    lastOp \in {"none","peek","growSilence","growSpeech","commitReuse","commitDecode"}
+    lastOp \in {"none","peek","growSilence","growSpeech",
+                "commitReuse","commitDecode","promoteEmpty"}
+
+  PromoteEmpty: flush re-decode empty but peek hyp exists → use peek
+  (product: DecodePolicy.shouldPromotePeekOnEmptyFlush; flush-only).
 *)
 
 EXTENDS Integers, TLC
@@ -29,7 +33,7 @@ TypeOK ==
   /\ hasHyp \in BOOLEAN
   /\ lastOp \in {
        "none", "peek", "growSilence", "growSpeech",
-       "commitReuse", "commitDecode"
+       "commitReuse", "commitDecode", "promoteEmpty"
      }
 
 Init ==
@@ -80,6 +84,15 @@ CommitDecode ==
   /\ sigMatch' = FALSE
   /\ UNCHANGED pendingInPeekWindow
 
+\* Flush: re-decode empty but peek hyp exists → promote (empty-total fix)
+\* Pre: hasHyp (peek installed). Post: hyp cleared like other commits.
+PromoteEmpty ==
+  /\ hasHyp = TRUE
+  /\ lastOp' = "promoteEmpty"
+  /\ hasHyp' = FALSE
+  /\ sigMatch' = FALSE
+  /\ UNCHANGED pendingInPeekWindow
+
 \* Abstract: pending grows past peek max (long utterance)
 ExceedPeekWindow ==
   /\ pendingInPeekWindow = TRUE
@@ -93,6 +106,7 @@ Next ==
   \/ GrowSpeech
   \/ CommitReuse
   \/ CommitDecode
+  \/ PromoteEmpty
   \/ ExceedPeekWindow
 
 Spec == Init /\ [][Next]_vars
@@ -106,9 +120,12 @@ ReuseImpliesSafe ==
 \* Stronger: the pre-state of CommitReuse requires the three gates
 \* (encoded in CommitReuse action; post-state clears hyp)
 
-\* After any commit, hyp is cleared
+\* After any commit (reuse, decode, or promote), hyp is cleared
 CommitClearsHyp ==
-  lastOp \in {"commitReuse", "commitDecode"} => hasHyp = FALSE
+  lastOp \in {"commitReuse", "commitDecode", "promoteEmpty"} => hasHyp = FALSE
+
+\* Promote only possible when peek had a hyp (encoded in PromoteEmpty guard)
+\* Observational: promoteEmpty post-state always clears hyp (above).
 
 \* Bait: negation of CommitClearsHyp (must FAIL under TLC — legal states exist)
 BaitInv == ~CommitClearsHyp
