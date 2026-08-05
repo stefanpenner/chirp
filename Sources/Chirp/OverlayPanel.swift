@@ -66,11 +66,19 @@ private let waveConfigs: [WaveConfig] = [
 
 struct LiveWaves: View {
     let level: Float
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        // Reduced motion: static envelope from level only (no phase animation).
+        if reduceMotion {
             Canvas { ctx, size in
-                drawWaves(ctx: &ctx, size: size, t: timeline.date.timeIntervalSinceReferenceDate)
+                drawWaves(ctx: &ctx, size: size, t: 0)
+            }
+        } else {
+            TimelineView(.animation) { timeline in
+                Canvas { ctx, size in
+                    drawWaves(ctx: &ctx, size: size, t: timeline.date.timeIntervalSinceReferenceDate)
+                }
             }
         }
     }
@@ -125,26 +133,40 @@ struct LiveWaves: View {
 struct GlowBorder: View {
     let active: Bool
     let level: Float
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation) { timeline in
-            Canvas { ctx, size in
-                guard active else { return }
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                let amp = Double(min(level * 2.5, 1))
-                let rect = CGRect(origin: .zero, size: size)
-                let path = RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .path(in: rect)
-
-                ctx.opacity = 0.15 + amp * 0.4
-                ctx.stroke(path, with: .conicGradient(
-                    Gradient(colors: [cBlue, cPurple, cCyan, cBlue]),
-                    center: CGPoint(x: size.width / 2, y: size.height / 2),
-                    angle: .degrees(t * 40)
-                ), style: StrokeStyle(lineWidth: 1.5))
+        Group {
+            if reduceMotion {
+                // Static accent ring — no rotating gradient.
+                Canvas { ctx, size in
+                    guard active else { return }
+                    drawBorder(ctx: &ctx, size: size, t: 0, amp: Double(min(level * 2.5, 1)))
+                }
+            } else {
+                TimelineView(.animation) { timeline in
+                    Canvas { ctx, size in
+                        guard active else { return }
+                        let t = timeline.date.timeIntervalSinceReferenceDate
+                        let amp = Double(min(level * 2.5, 1))
+                        drawBorder(ctx: &ctx, size: size, t: t, amp: amp)
+                    }
+                }
             }
         }
         .allowsHitTesting(false)
+    }
+
+    private func drawBorder(ctx: inout GraphicsContext, size: CGSize, t: Double, amp: Double) {
+        let rect = CGRect(origin: .zero, size: size)
+        let path = RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .path(in: rect)
+        ctx.opacity = 0.15 + amp * 0.4
+        ctx.stroke(path, with: .conicGradient(
+            Gradient(colors: [cBlue, cPurple, cCyan, cBlue]),
+            center: CGPoint(x: size.width / 2, y: size.height / 2),
+            angle: .degrees(t * 40)
+        ), style: StrokeStyle(lineWidth: 1.5))
     }
 }
 
@@ -161,6 +183,7 @@ private struct TextHeightKey: PreferenceKey {
 
 struct IslandView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var appState: AppState
     @State private var textHeight: CGFloat = 0
     @State private var pulseOpacity: Double = 1.0
@@ -235,6 +258,34 @@ struct IslandView: View {
         if isError { return errorMessage ?? "Something went wrong" }
         if isNeedsModel { return "Download the speech model to start" }
         return "Ready"
+    }
+
+    /// Combined VoiceOver summary for the floating island.
+    private var overlayAccessibilityLabel: String {
+        if isDownloading {
+            if downloadProgress >= 0.9 {
+                return "Extracting speech model"
+            }
+            let pct = Int(min(downloadProgress / 0.9, 1.0) * 100)
+            return "Downloading speech model, \(pct) percent"
+        }
+        if isLoadingModel { return "Loading speech model" }
+        if isError { return "Error: \(errorMessage ?? "Something went wrong")" }
+        if isNeedsModel { return "Speech model required. Download to start." }
+        if appState.isCleaningUp { return "AI cleanup in progress" }
+        if isTranscribing { return transcribingLabel }
+        if isRecording {
+            let text = (appState.transcribedText + " " + appState.speculativeText)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if text.isEmpty {
+                return "Listening. Release \(appState.hotkeyConfig.label) to finish."
+            }
+            return "Recording. \(text)"
+        }
+        let text = (appState.transcribedText + " " + appState.speculativeText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty { return text }
+        return statusHint
     }
 
     /// Show the text area once any text has appeared during an active session,
@@ -344,7 +395,7 @@ struct IslandView: View {
             }
 
             if isDownloading && downloadProgress >= 0.9 {
-                // Extraction phase — full pulsing bar
+                // Extraction phase — full bar (pulse only when motion OK)
                 Capsule()
                     .fill(
                         LinearGradient(
@@ -354,15 +405,12 @@ struct IslandView: View {
                         )
                     )
                     .frame(height: 6)
-                    .phaseAnimator([false, true]) { content, phase in
-                        content.opacity(phase ? 1.0 : 0.4)
-                    } animation: { _ in
-                        .easeInOut(duration: 0.8)
-                    }
+                    .modifier(PulseOpacityModifier(enabled: !reduceMotion, duration: 0.8))
                     .clipShape(Capsule())
                     .padding(.horizontal, 24)
                     .padding(.top, 14)
                     .padding(.bottom, 8)
+                    .accessibilityHidden(true)
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
             } else if isDownloading {
                 // Download phase — determinate progress bar (rescaled 0-0.9 → 0-1.0)
@@ -380,13 +428,14 @@ struct IslandView: View {
                                     )
                                 )
                                 .frame(width: max(geo.size.width * min(downloadProgress / 0.9, 1.0), 0))
-                                .animation(.easeInOut(duration: 0.3), value: downloadProgress)
+                                .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: downloadProgress)
                         }
                     }
                     .clipShape(Capsule())
                     .padding(.horizontal, 24)
                     .padding(.top, 14)
                     .padding(.bottom, 8)
+                    .accessibilityHidden(true)
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
             } else if isLoadingModel {
                 ProgressView()
@@ -394,6 +443,7 @@ struct IslandView: View {
                     .tint(cBlue)
                     .padding(.top, 12)
                     .padding(.bottom, 6)
+                    .accessibilityHidden(true)
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
             } else if isRecording {
                 LiveWaves(level: appState.audioLevel)
@@ -402,19 +452,17 @@ struct IslandView: View {
                     .padding(.horizontal, 12)
                     .padding(.top, 10)
                     .padding(.bottom, 6)
+                    .accessibilityHidden(true)
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
             } else if isTranscribing || appState.isCleaningUp {
                 // Transcribing or on-demand AI cleanup — pulse so state is obvious.
                 Circle()
                     .fill((appState.isCleaningUp ? cPurple : cBlue).opacity(0.65))
                     .frame(width: 8, height: 8)
-                    .phaseAnimator([false, true]) { content, phase in
-                        content.opacity(phase ? 1.0 : 0.4)
-                    } animation: { _ in
-                        .easeInOut(duration: 0.6)
-                    }
+                    .modifier(PulseOpacityModifier(enabled: !reduceMotion, duration: 0.6))
                     .padding(.top, 10)
                     .padding(.bottom, 6)
+                    .accessibilityHidden(true)
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
             } else {
                 Circle()
@@ -422,6 +470,7 @@ struct IslandView: View {
                     .frame(width: 6, height: 6)
                     .padding(.top, 12)
                     .padding(.bottom, 6)
+                    .accessibilityHidden(true)
                     .transition(.opacity.combined(with: .scale(scale: 0.5)))
             }
 
@@ -429,33 +478,42 @@ struct IslandView: View {
                 VStack(spacing: 4) {
                     if isDownloading && downloadProgress >= 0.9 {
                         Text("Extracting\u{2026}")
-                            .foregroundStyle(.primary.opacity(0.7))
+                            .foregroundStyle(.primary.opacity(0.75))
                     } else if isDownloading {
                         HStack(spacing: 0) {
                             Text("Downloading")
-                                .foregroundStyle(.primary.opacity(0.7))
+                                .foregroundStyle(.primary.opacity(0.75))
                             Text("  \(Int(downloadProgress / 0.9 * 100))%")
-                                .foregroundStyle(.primary.opacity(0.35))
+                                .foregroundStyle(.primary.opacity(0.5))
+                                .monospacedDigit()
                         }
                     } else {
                         Text("Loading\u{2026}")
-                            .foregroundStyle(.primary.opacity(0.7))
+                            .foregroundStyle(.primary.opacity(0.75))
                     }
 
-                    Text(ModelVariant.displayName)
-                        .foregroundStyle(cBlue.opacity(0.8))
-                        .underline(color: cBlue.opacity(0.3))
-                        .onTapGesture { NSWorkspace.shared.open(ModelVariant.infoURL) }
+                    // Link-styled control (not bare tap-on-text).
+                    Button {
+                        NSWorkspace.shared.open(ModelVariant.infoURL)
+                    } label: {
+                        Text(ModelVariant.displayName)
+                            .foregroundStyle(cBlue.opacity(0.85))
+                            .underline(color: cBlue.opacity(0.35))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("About \(ModelVariant.displayName)")
+                    .accessibilityHint("Opens model information in your browser")
 
                     Text("\(ModelVariant.sizeDescription) compressed")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.primary.opacity(0.25))
+                        .foregroundStyle(.primary.opacity(0.4))
                 }
                 .font(.system(size: 15, weight: .regular))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 4)
+                .accessibilityHidden(true)
             } else if isError {
                 VStack(spacing: 6) {
                     Text(errorMessage ?? "Something went wrong")
@@ -464,9 +522,9 @@ struct IslandView: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel("Error: \(errorMessage ?? "Something went wrong")")
-                    Text("Tap Retry or use the menu bar")
+                    Text("Click Retry or use the menu bar")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.primary.opacity(0.35))
+                        .foregroundStyle(.primary.opacity(0.45))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
@@ -515,12 +573,12 @@ struct IslandView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, isActive ? 4 : 10)
                 .onChange(of: isTranscribing) { _, transcribing in
-                    if transcribing {
+                    if transcribing && !reduceMotion {
                         withAnimation(.easeInOut(duration: 0.75).repeatForever(autoreverses: true)) {
                             pulseOpacity = 0.4
                         }
                     } else {
-                        withAnimation(.easeOut(duration: 0.15)) {
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
                             pulseOpacity = 1.0
                         }
                     }
@@ -528,46 +586,34 @@ struct IslandView: View {
             }
 
             if isDownloading {
-                Text("Cancel")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary.opacity(0.35))
-                    .onTapGesture { appState.cancelDownload() }
-                    .onHover { inside in
-                        if inside {
-                            NSCursor.pointingHand.push()
-                        } else {
-                            NSCursor.pop()
-                        }
-                    }
-                    .accessibilityLabel("Cancel model download")
-                    .padding(.bottom, 8)
-                    .transition(.opacity)
+                OverlayActionButton(
+                    title: "Cancel",
+                    emphasis: .secondary,
+                    accessibilityLabel: "Cancel model download"
+                ) { appState.cancelDownload() }
+                .padding(.bottom, 10)
+                .transition(.opacity)
             } else if isError || isNeedsModel {
-                Text(isError ? "Retry" : "Download")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(cBlue.opacity(0.9))
-                    .onTapGesture { appState.retryDownload() }
-                    .onHover { inside in
-                        if inside {
-                            NSCursor.pointingHand.push()
-                        } else {
-                            NSCursor.pop()
-                        }
-                    }
-                    .accessibilityLabel(isError ? "Retry model setup" : "Download speech model")
-                    .padding(.bottom, 8)
-                    .transition(.opacity)
+                OverlayActionButton(
+                    title: isError ? "Retry" : "Download",
+                    emphasis: .primary,
+                    accessibilityLabel: isError ? "Retry model setup" : "Download speech model"
+                ) { appState.retryDownload() }
+                .padding(.bottom, 10)
+                .transition(.opacity)
             } else if isRecording {
-                Text("release \(appState.hotkeyConfig.label) to finish")
+                Text("Release \(appState.hotkeyConfig.label) to finish")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary.opacity(0.2))
-                    .padding(.bottom, 8)
+                    .foregroundStyle(.primary.opacity(0.4))
+                    .padding(.bottom, 10)
+                    .accessibilityHidden(true)
                     .transition(.opacity)
             } else if isTranscribing {
-                Text("esc to discard")
+                Text("Esc to discard")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary.opacity(0.2))
-                    .padding(.bottom, 8)
+                    .foregroundStyle(.primary.opacity(0.4))
+                    .padding(.bottom, 10)
+                    .accessibilityHidden(true)
                     .transition(.opacity)
             }
         }
@@ -582,11 +628,14 @@ struct IslandView: View {
         )
         .overlay(GlowBorder(active: isActive || isDownloading, level: isDownloading ? 0.15 : isTranscribing ? 0.3 : appState.audioLevel))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .scaleEffect(appState.downloadNudge ? 1.03 : breathe)
+        .scaleEffect(reduceMotion ? 1.0 : (appState.downloadNudge ? 1.03 : breathe))
         .shadow(color: .black.opacity(0.3), radius: 20, y: 6)
-        .animation(.easeInOut(duration: 0.15), value: appState.downloadNudge)
-        .animation(.easeInOut(duration: 0.1), value: breathe)
-        .animation(.smooth(duration: 0.35), value: isActive)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: appState.downloadNudge)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.1), value: breathe)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.35), value: isActive)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(overlayAccessibilityLabel)
+        .accessibilityAddTraits(.updatesFrequently)
         .padding(40)
         .frame(maxHeight: .infinity, alignment: .top)
     }
@@ -600,5 +649,59 @@ struct IslandView: View {
         let pfx = appState.transcribedText.isEmpty ? "" : " "
         return Text(pfx + appState.speculativeText)
             .foregroundColor(.primary.opacity(0.4))
+    }
+}
+
+// MARK: - Overlay chrome helpers
+
+/// Text-style control with a real Button role and ≥28pt hit target (menu-bar HUD density).
+private struct OverlayActionButton: View {
+    enum Emphasis {
+        case primary
+        case secondary
+    }
+
+    let title: String
+    let emphasis: Emphasis
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: emphasis == .primary ? .semibold : .medium))
+                .foregroundStyle(
+                    emphasis == .primary
+                        ? cBlue.opacity(isHovered ? 1.0 : 0.9)
+                        : .primary.opacity(isHovered ? 0.55 : 0.4)
+                )
+                .padding(.horizontal, 14)
+                .frame(minHeight: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+/// Optional opacity pulse; static when Reduce Motion is on.
+private struct PulseOpacityModifier: ViewModifier {
+    let enabled: Bool
+    let duration: Double
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .phaseAnimator([false, true]) { view, phase in
+                    view.opacity(phase ? 1.0 : 0.4)
+                } animation: { _ in
+                    .easeInOut(duration: duration)
+                }
+        } else {
+            content.opacity(0.85)
+        }
     }
 }

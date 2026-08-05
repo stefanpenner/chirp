@@ -5,7 +5,7 @@
 import Foundation
 
 /// Status kind without progress/message payloads (TLA dual of AppStatus.status).
-enum AppStatusKind: String, Sendable, Equatable {
+public enum AppStatusKind: String, Sendable, Equatable {
     case needsModel
     case downloading
     case loadingModel
@@ -16,9 +16,9 @@ enum AppStatusKind: String, Sendable, Equatable {
 }
 
 /// Pure decision gates for boot + session entry (no I/O).
-enum AppStatusDecision {
+public enum AppStatusDecision {
     /// Map full AppState.Status → kind (strip progress / error string).
-    static func kind(from status: AppState.Status) -> AppStatusKind {
+    public static func kind(from status: AppState.Status) -> AppStatusKind {
         switch status {
         case .needsModel: return .needsModel
         case .downloading: return .downloading
@@ -32,39 +32,39 @@ enum AppStatusDecision {
 
     /// StartDownload / retryDownload: needsModel | error (and load-path re-entry).
     /// Dual of AppStatus StartDownload from needsModel | error.
-    static func canRetryDownload(_ kind: AppStatusKind) -> Bool {
+    public static func canRetryDownload(_ kind: AppStatusKind) -> Bool {
         kind == .needsModel || kind == .error
     }
 
     /// CancelDownload only while downloading.
-    static func canCancelDownload(_ kind: AppStatusKind) -> Bool {
+    public static func canCancelDownload(_ kind: AppStatusKind) -> Bool {
         kind == .downloading
     }
 
     /// Hotkey during download/load → nudge, do not start session.
-    static func shouldNudgeInsteadOfRecord(_ kind: AppStatusKind) -> Bool {
+    public static func shouldNudgeInsteadOfRecord(_ kind: AppStatusKind) -> Bool {
         kind == .downloading || kind == .loadingModel
     }
 
     /// Hotkey with no model or after error → kick ensureModel / download.
     /// Same gate as `canRetryDownload` (AppStatus StartDownload dual).
-    static func shouldStartDownloadOnHotkey(_ kind: AppStatusKind) -> Bool {
+    public static func shouldStartDownloadOnHotkey(_ kind: AppStatusKind) -> Bool {
         canRetryDownload(kind)
     }
 
     /// ready → recording only.
-    static func canEnterSession(_ kind: AppStatusKind) -> Bool {
+    public static func canEnterSession(_ kind: AppStatusKind) -> Bool {
         kind == .ready
     }
 
     /// transcribing → recording rejoin (coarse; SessionDecision for phase).
-    static func canRejoinSession(_ kind: AppStatusKind) -> Bool {
+    public static func canRejoinSession(_ kind: AppStatusKind) -> Bool {
         kind == .transcribing
     }
 
     /// Island should stay ordered front for download, session, or post-fail error.
     /// Dual of OverlayWhileDownloading / OverlayWhileSession (+ error keep).
-    static func shouldShowOverlay(_ kind: AppStatusKind) -> Bool {
+    public static func shouldShowOverlay(_ kind: AppStatusKind) -> Bool {
         switch kind {
         case .downloading, .recording, .transcribing, .error:
             return true
@@ -74,7 +74,7 @@ enum AppStatusDecision {
     }
 
     /// Short menu/overlay label for non-session statuses.
-    static func statusLabel(_ kind: AppStatusKind) -> String? {
+    public static func statusLabel(_ kind: AppStatusKind) -> String? {
         switch kind {
         case .needsModel: return "Speech model required"
         case .downloading: return "Downloading model\u{2026}"
@@ -85,7 +85,7 @@ enum AppStatusDecision {
     }
 
     /// SF Symbol for MenuBarExtra — glanceable boot/session/error without opening the menu.
-    static func menuBarSystemImage(_ kind: AppStatusKind) -> String {
+    public static func menuBarSystemImage(_ kind: AppStatusKind) -> String {
         switch kind {
         case .error:
             return "exclamationmark.triangle.fill"
@@ -101,7 +101,7 @@ enum AppStatusDecision {
     }
 
     /// Accessibility label for the menu bar extra.
-    static func menuBarAccessibilityLabel(_ kind: AppStatusKind) -> String {
+    public static func menuBarAccessibilityLabel(_ kind: AppStatusKind) -> String {
         switch kind {
         case .needsModel: return "Chirp — speech model required"
         case .downloading: return "Chirp — downloading speech model"
