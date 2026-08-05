@@ -126,7 +126,7 @@ AISettings (persisted in UserDefaults as Codable blob)
 │       └── apiKeyRef (Keychain account name, NOT raw key)
 ├── modes: [AIMode]                   — named pipeline presets
 │       ├── name: String
-│       ├── transcriptionMode: .offline | .cloud
+│       ├── transcriptionMode: .offline | .cloud | .systemSpeech (Apple SpeechAnalyzer trial, macOS 26+)
 │       ├── postProcessingMode: .none | .regex | .llm | .regexThenLLM | .offlineLLM | .regexThenOfflineLLM
 │       ├── sttEndpointID / llmEndpointID (UUID references into endpoints)
 │       └── sttModel / llmModel / llmSystemPrompt (per-mode config)

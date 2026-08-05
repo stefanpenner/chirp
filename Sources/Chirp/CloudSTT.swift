@@ -16,6 +16,8 @@ enum STTError: Error, LocalizedError {
     case httpError(statusCode: Int, body: String)
     case invalidResponse
     case emptyAudio
+    /// Apple SpeechAnalyzer path unavailable or locale/model missing.
+    case systemSpeechUnavailable(String)
 
     var errorDescription: String? {
         switch self {
@@ -23,6 +25,7 @@ enum STTError: Error, LocalizedError {
         case .httpError(let code, let body): return "HTTP \(code): \(body)"
         case .invalidResponse: return "Invalid response from API"
         case .emptyAudio: return "No audio to transcribe"
+        case .systemSpeechUnavailable(let reason): return "Apple Speech unavailable: \(reason)"
         }
     }
 }

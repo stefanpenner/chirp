@@ -26,6 +26,7 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("ApplicationServices"),
+                .linkedFramework("Speech"),
                 .unsafeFlags([
                     "-L\(packageDir)/Frameworks/lib",
                     "-lsherpa-onnx-c-api",

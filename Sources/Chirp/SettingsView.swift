@@ -768,7 +768,7 @@ private struct AIModeRow: View {
 
     private var modeSummary: String {
         var parts: [String] = []
-        parts.append(mode.transcriptionMode == .cloud ? "Cloud STT" : "Offline")
+        parts.append(mode.transcriptionMode.displayName)
         switch mode.postProcessingMode {
         case .none: break
         case .regex: parts.append("Regex")
@@ -799,8 +799,23 @@ struct AIModeEditorView: View {
 
                 Section("Transcription") {
                     Picker("Source", selection: $mode.transcriptionMode) {
-                        Text("Offline").tag(TranscriptionMode.offline)
+                        Text("Offline (Parakeet)").tag(TranscriptionMode.offline)
                         Text("Cloud").tag(TranscriptionMode.cloud)
+                        Text("Apple Speech (trial)").tag(TranscriptionMode.systemSpeech)
+                    }
+
+                    if mode.transcriptionMode == .systemSpeech {
+                        if SystemSpeechAvailability.isAvailable {
+                            Text("On-device SpeechAnalyzer (macOS 26+). Final text on release; local peek while holding.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 20)
+                        } else {
+                            Text(SystemSpeechAvailability.unavailableReason ?? "Unavailable")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                                .padding(.leading, 20)
+                        }
                     }
 
                     if mode.transcriptionMode == .cloud {

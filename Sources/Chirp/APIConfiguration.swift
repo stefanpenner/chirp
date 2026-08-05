@@ -51,8 +51,21 @@ public struct APIEndpoint: Codable, Identifiable, Sendable, Equatable {
 // MARK: - Transcription & Post-Processing Modes
 
 public enum TranscriptionMode: String, Codable, CaseIterable, Sendable {
+    /// Default: local Parakeet via sherpa-onnx (pinned model, full offline).
     case offline
+    /// Opt-in cloud STT (OpenAI / Google / etc.).
     case cloud
+    /// Trial: Apple SpeechAnalyzer / SpeechTranscriber (macOS 26+, OS-managed on-device model).
+    /// Does not replace default offline; selected only via AI mode picker.
+    case systemSpeech
+
+    public var displayName: String {
+        switch self {
+        case .offline: return "Offline"
+        case .cloud: return "Cloud STT"
+        case .systemSpeech: return "Apple Speech"
+        }
+    }
 }
 
 public enum PostProcessingMode: String, Codable, CaseIterable, Sendable {

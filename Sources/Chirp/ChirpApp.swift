@@ -410,6 +410,32 @@ public final class AppState {
                 pipelineTypesIncrementally = !actuallyUsesLLM
                 pipelineSupportsPreview = true
             }
+        case .systemSpeech:
+            // Trial: Apple SpeechAnalyzer on flush; local Parakeet still peeks.
+            // Falls back to offline if OS < 26 or Speech framework unavailable.
+            if SystemSpeechAvailability.isAvailable {
+                pipeline = CloudTranscriptionPipeline(
+                    sttClient: SystemSpeechClient(),
+                    postProcessor: postProcessor,
+                    localTranscriber: transcriber,
+                    speakerVerifier: verifier,
+                    speakerThreshold: threshold
+                )
+                pipelineTypesIncrementally = false
+                pipelineSupportsPreview = true
+            } else {
+                Log.general.warning(
+                    "systemSpeech unavailable (\(SystemSpeechAvailability.unavailableReason ?? "unknown")); falling back to offline"
+                )
+                pipeline = OfflineTranscriptionPipeline(
+                    transcriber: transcriber,
+                    postProcessor: postProcessor,
+                    speakerVerifier: verifier,
+                    speakerThreshold: threshold
+                )
+                pipelineTypesIncrementally = !actuallyUsesLLM
+                pipelineSupportsPreview = true
+            }
         }
     }
 
