@@ -341,18 +341,36 @@ private struct HotkeyRecorderView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            // Shortcut recording field
+            // Shortcut field: primary control + optional clear (siblings, not nested).
             HStack(spacing: 0) {
-                Text(state.displayLabel)
-                    .font(.system(
-                        state.isRecording ? .body : .title3,
-                        design: .rounded,
-                        weight: state.isRecording ? .regular : .semibold
-                    ))
-                    .foregroundStyle(state.isRecording ? .secondary : .primary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .padding(.leading, 14)
+                Button {
+                    if !state.isRecording { onFieldClick() }
+                } label: {
+                    Text(state.displayLabel)
+                        .font(.system(
+                            state.isRecording ? .body : .title3,
+                            design: .rounded,
+                            weight: state.isRecording ? .regular : .semibold
+                        ))
+                        .foregroundStyle(state.isRecording ? .secondary : .primary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 10)
+                        .padding(.leading, 14)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(state.isRecording)
+                .accessibilityLabel(
+                    state.isRecording
+                        ? "Recording shortcut"
+                        : "Hotkey, \(state.displayLabel)"
+                )
+                .accessibilityHint(
+                    state.isRecording
+                        ? "Press a key or modifier, Escape to stop"
+                        : "Starts recording a new shortcut"
+                )
+                .accessibilityAddTraits(state.isRecording ? [.updatesFrequently] : [])
 
                 if state.capturedConfig != nil && !state.isRecording {
                     Button(action: onClear) {
@@ -360,9 +378,12 @@ private struct HotkeyRecorderView: View {
                             .font(.body)
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)
+                            .frame(minWidth: 28, minHeight: 28)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .padding(.trailing, 10)
+                    .padding(.trailing, 8)
+                    .accessibilityLabel("Clear captured shortcut")
                 } else {
                     Spacer().frame(width: 14)
                 }
@@ -381,28 +402,31 @@ private struct HotkeyRecorderView: View {
                     )
             )
             .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
-            .contentShape(Rectangle())
-            .onTapGesture { if !state.isRecording { onFieldClick() } }
             .animation(.easeInOut(duration: 0.2), value: state.isRecording)
 
             Text(state.isRecording
-                ? "Press any key or modifier \u{b7} ESC to stop"
+                ? "Press any key or modifier \u{b7} Esc to stop"
                 : "Click to record a new shortcut")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
             Divider()
 
             HStack(spacing: 12) {
                 Button("Reset to fn", action: onReset)
+                    .accessibilityLabel("Reset hotkey to fn")
                 Spacer()
                 Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
                 Button("Save", action: onSave)
                     .disabled(!state.canSave)
                     .keyboardShortcut(.defaultAction)
+                    .accessibilityHint(state.canSave ? "Saves the new hotkey" : "Capture a shortcut first")
             }
         }
         .padding(20)
         .frame(width: 320)
+        .accessibilityLabel("Change hotkey")
     }
 }

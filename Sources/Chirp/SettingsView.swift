@@ -349,47 +349,61 @@ struct SpeakerModelStatusView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.down.circle")
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                     Text("Speaker model not downloaded (~20 MB)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Download") { startDownload() }
                         .controlSize(.small)
+                        .accessibilityLabel("Download speaker model")
+                        .accessibilityHint("About 20 megabytes")
                 }
 
             case .downloading(let progress):
                 HStack(spacing: 8) {
                     ProgressView(value: progress)
                         .frame(width: 120)
+                        .accessibilityLabel("Speaker model download")
+                        .accessibilityValue("\(Int(progress * 100)) percent")
                     Text("\(Int(progress * 100))%")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .accessibilityHidden(true)
                     Button("Cancel") { cancelDownload() }
                         .controlSize(.small)
+                        .accessibilityLabel("Cancel speaker model download")
                 }
 
             case .ready:
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                        .accessibilityHidden(true)
                     Text("Speaker model ready")
                         .font(.caption)
                     Button(role: .destructive) { deleteModel() } label: {
                         Image(systemName: "trash")
+                            .frame(minWidth: 22, minHeight: 22)
+                            .contentShape(Rectangle())
                     }
                     .controlSize(.small)
                     .buttonStyle(.borderless)
+                    .accessibilityLabel("Delete speaker model")
                 }
 
             case .error(let message):
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel("Speaker model error: \(message)")
                     Button("Retry") { startDownload() }
                         .controlSize(.small)
+                        .accessibilityLabel("Retry speaker model download")
                 }
             }
         }
@@ -465,48 +479,64 @@ struct SpeakerEnrollmentView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                        .accessibilityHidden(true)
                     Text("Voice enrolled (\(appState.speakerEnrollment.phraseCount) phrases)")
                         .font(.caption)
                     Button("Re-enroll") { startEnrollment() }
                         .controlSize(.small)
+                        .accessibilityLabel("Re-enroll voice")
+                        .accessibilityHint("Records new enrollment phrases")
                     Button(role: .destructive) {
                         appState.clearEnrollment()
                     } label: {
                         Text("Delete")
                     }
                     .controlSize(.small)
+                    .accessibilityLabel("Delete voice enrollment")
                 }
             } else if isEnrolling {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Phrase \(currentPhraseIndex + 1) of \(enrollmentPhrases.count)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel(
+                            "Phrase \(currentPhraseIndex + 1) of \(enrollmentPhrases.count)"
+                        )
                     Text(enrollmentPhrases[currentPhraseIndex])
                         .font(.system(size: 13))
                         .italic()
+                        .accessibilityLabel("Say: \(enrollmentPhrases[currentPhraseIndex])")
 
                     HStack(spacing: 8) {
                         if isRecordingPhrase {
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(.red.opacity(0.6))
-                                .frame(width: CGFloat(audioLevel) * 100, height: 4)
+                                .frame(width: max(CGFloat(audioLevel) * 100, 4), height: 4)
                                 .animation(.easeOut(duration: 0.1), value: audioLevel)
+                                .accessibilityLabel("Recording level")
+                                .accessibilityValue("\(Int(audioLevel * 100)) percent")
                             Button("Stop") { stopPhrase() }
                                 .controlSize(.small)
+                                .accessibilityLabel("Stop recording phrase")
                         } else {
                             Button("Record") { startPhrase() }
                                 .controlSize(.small)
+                                .accessibilityLabel("Record enrollment phrase")
                         }
                         Button("Cancel") { cancelEnrollment() }
                             .controlSize(.small)
+                            .accessibilityLabel("Cancel voice enrollment")
                     }
                 }
+                .accessibilityElement(children: .contain)
             } else if enrollmentComplete {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                        .accessibilityHidden(true)
                     Text("Voice enrolled successfully!")
                         .font(.caption)
+                        .accessibilityAddTraits(.updatesFrequently)
                 }
             } else if !SpeakerModelManager.isAvailable {
                 Text("Download the speaker model first to enroll your voice.")
@@ -519,6 +549,7 @@ struct SpeakerEnrollmentView: View {
                         .foregroundStyle(.secondary)
                     Button("Enroll Voice") { startEnrollment() }
                         .controlSize(.small)
+                        .accessibilityLabel("Enroll voice for speaker verification")
                 }
             }
         }
@@ -1171,47 +1202,61 @@ struct T5ModelStatusView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.down.circle")
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                     Text("T5-small model not downloaded (~375 MB)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Download") { startDownload() }
                         .controlSize(.small)
+                        .accessibilityLabel("Download T5-small model")
+                        .accessibilityHint("About 375 megabytes")
                 }
 
             case .downloading(let progress):
                 HStack(spacing: 8) {
                     ProgressView(value: progress)
                         .frame(width: 120)
+                        .accessibilityLabel("T5 model download")
+                        .accessibilityValue("\(Int(progress * 100)) percent")
                     Text("\(Int(progress * 100))%")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .accessibilityHidden(true)
                     Button("Cancel") { cancelDownload() }
                         .controlSize(.small)
+                        .accessibilityLabel("Cancel T5 model download")
                 }
 
             case .ready:
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                        .accessibilityHidden(true)
                     Text("T5-small model ready")
                         .font(.caption)
                     Button(role: .destructive) { deleteModel() } label: {
                         Image(systemName: "trash")
+                            .frame(minWidth: 22, minHeight: 22)
+                            .contentShape(Rectangle())
                     }
                     .controlSize(.small)
                     .buttonStyle(.borderless)
+                    .accessibilityLabel("Delete T5-small model")
                 }
 
             case .error(let message):
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel("T5 model error: \(message)")
                     Button("Retry") { startDownload() }
                         .controlSize(.small)
+                        .accessibilityLabel("Retry T5 model download")
                 }
             }
         }

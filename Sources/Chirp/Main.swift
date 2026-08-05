@@ -84,34 +84,39 @@ struct ChirpApp: App {
             SectionDivider()
         case .downloading:
             if case .downloading(let progress) = appState.status {
+                let pct = Int(min(progress / 0.9, 1.0) * 100)
                 HStack {
                     Text("Downloading model")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.primary.opacity(0.55))
                     Spacer()
-                    Text("\(Int(min(progress / 0.9, 1.0) * 100))%")
+                    Text("\(pct)%")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundColor(cBlue.opacity(0.85))
+                        .monospacedDigit()
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.vertical, 7)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Downloading speech model")
+                .accessibilityValue("\(pct) percent")
             }
             MenuRow("Cancel Download") { appState.cancelDownload() }
             SectionDivider()
         case .loadingModel:
             Text("Loading model\u{2026}")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.primary.opacity(0.45))
+                .foregroundColor(.primary.opacity(0.5))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.vertical, 7)
                 .accessibilityLabel("Loading speech model")
             SectionDivider()
         case .error:
             if case .error(let message) = appState.status {
                 Text(message)
                     .font(.system(size: 11, weight: .regular))
-                    .foregroundColor(.primary.opacity(0.65))
+                    .foregroundColor(.primary.opacity(0.7))
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
