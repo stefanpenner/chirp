@@ -13,8 +13,8 @@
     a cooperatively-cancelled old consumer cannot CommitText after the new
     consumer starts. staleAlive models the dual-consumer window until OldDie.
 
-  NOT modeled (orthogonal): download/load, overlay UI, peek gen counters,
-  pipeline rebuild, audio I/O details.
+  NOT modeled here (orthogonal): download/load + overlay → AppStatus.tla;
+  peek gen counters, pipeline rebuild, audio I/O details.
 *)
 
 EXTENDS Integers, TLC

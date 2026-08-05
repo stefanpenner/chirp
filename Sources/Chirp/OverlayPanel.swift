@@ -200,6 +200,21 @@ struct IslandView: View {
         return false
     }
 
+    private var isError: Bool {
+        if case .error = appState.status { return true }
+        return false
+    }
+
+    private var errorMessage: String? {
+        if case .error(let message) = appState.status { return message }
+        return nil
+    }
+
+    private var isNeedsModel: Bool {
+        if case .needsModel = appState.status { return true }
+        return false
+    }
+
     /// Label shown during the transcribing state, reflecting the current processing phase.
     private var transcribingLabel: String {
         if appState.isCleaningUp { return "AI Cleanup\u{2026}" }
@@ -217,6 +232,8 @@ struct IslandView: View {
             return "Listening\u{2026}  ·  \(appState.aiCleanupChordLabel) to clean"
         }
         if isTranscribing { return transcribingLabel }
+        if isError { return errorMessage ?? "Something went wrong" }
+        if isNeedsModel { return "Download the speech model to start" }
         return "Ready"
     }
 
@@ -439,6 +456,21 @@ struct IslandView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 4)
+            } else if isError {
+                VStack(spacing: 6) {
+                    Text(errorMessage ?? "Something went wrong")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.primary.opacity(0.75))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Error: \(errorMessage ?? "Something went wrong")")
+                    Text("Tap Retry or use the menu bar")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.primary.opacity(0.35))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
             } else {
                 Group {
                     if hasTextToShow {
@@ -507,6 +539,22 @@ struct IslandView: View {
                             NSCursor.pop()
                         }
                     }
+                    .accessibilityLabel("Cancel model download")
+                    .padding(.bottom, 8)
+                    .transition(.opacity)
+            } else if isError || isNeedsModel {
+                Text(isError ? "Retry" : "Download")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(cBlue.opacity(0.9))
+                    .onTapGesture { appState.retryDownload() }
+                    .onHover { inside in
+                        if inside {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                    .accessibilityLabel(isError ? "Retry model setup" : "Download speech model")
                     .padding(.bottom, 8)
                     .transition(.opacity)
             } else if isRecording {

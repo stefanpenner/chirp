@@ -25,6 +25,7 @@ struct ChirpApp: App {
     var body: some Scene {
         MenuBarExtra("Chirp", systemImage: "waveform") {
             VStack(spacing: 0) {
+                statusSection
                 hotkeySection
                 aiModeLabel
                 microphoneSection
@@ -63,6 +64,58 @@ struct ChirpApp: App {
             }
         }
         .menuBarExtraStyle(.window)
+    }
+
+    /// Boot / error status strip (hidden when ready or in a session).
+    /// Dual labels from AppStatusDecision; actions use retry/cancel gates.
+    @ViewBuilder
+    private var statusSection: some View {
+        let kind = AppStatusDecision.kind(from: appState.status)
+        switch kind {
+        case .needsModel:
+            MenuRow("Download Speech Model\u{2026}") { appState.retryDownload() }
+            SectionDivider()
+        case .downloading:
+            if case .downloading(let progress) = appState.status {
+                HStack {
+                    Text("Downloading model")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.primary.opacity(0.55))
+                    Spacer()
+                    Text("\(Int(min(progress / 0.9, 1.0) * 100))%")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundColor(cBlue.opacity(0.85))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+            MenuRow("Cancel Download") { appState.cancelDownload() }
+            SectionDivider()
+        case .loadingModel:
+            Text("Loading model\u{2026}")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.primary.opacity(0.45))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            SectionDivider()
+        case .error:
+            if case .error(let message) = appState.status {
+                Text(message)
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(.primary.opacity(0.65))
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 6)
+                    .padding(.bottom, 2)
+            }
+            MenuRow("Retry Setup") { appState.retryDownload() }
+            SectionDivider()
+        case .ready, .recording, .transcribing:
+            EmptyView()
+        }
     }
 
     private static var versionLabel: String {

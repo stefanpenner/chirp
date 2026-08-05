@@ -4,6 +4,7 @@ Model-check with the `tlc` CLI:
 
 ```bash
 tlc specs/SessionMachine.tla
+tlc specs/AppStatus.tla
 tlc specs/TranscriberBuffer.tla
 tlc specs/PeekCommit.tla
 tlc specs/PipelineRebuild.tla
@@ -12,6 +13,7 @@ tlc specs/PipelineRebuild.tla
 | Spec | Purpose | Swift dual |
 |------|---------|------------|
 | `SessionMachine` | ready / recording / transcribing lifecycle | `SessionDecision` |
+| `AppStatus` | boot download/load/error + session entry / overlay stuck-modes | `AppStatusDecision` |
 | `CancelVoid` | ESC cancel voids typed text when incremental | `CancelDecision` |
 | `TranscriberBuffer` | pendingAudio is decode source; empty commit keeps buffer | `DecodePolicy` |
 | `PeekCommit` | stale peeks discarded via commitGen | `AppState` peek loop |

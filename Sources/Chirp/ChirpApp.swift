@@ -298,7 +298,10 @@ public final class AppState {
                         case .success(let paths):
                             self?.loadTranscriber(paths: paths)
                         case .failure(let error):
+                            // Keep overlay (AppStatus DownloadFail UNCHANGED overlay)
+                            // so IslandView can show error + Retry.
                             self?.status = .error(error.localizedDescription)
+                            self?.overlayPanel?.showOverlay()
                         }
                         self?.modelManager = nil
                     }
@@ -324,10 +327,11 @@ public final class AppState {
                     // dimming system audio output before the user records.
                 } else {
                     self.status = .error("Microphone access denied — enable in System Settings → Privacy & Security → Microphone")
-                    self.overlayPanel?.hideOverlay()
+                    self.overlayPanel?.showOverlay()
                 }
             } else {
                 self.status = .error("Failed to initialize transcriber")
+                self.overlayPanel?.showOverlay()
             }
         }
     }
@@ -336,7 +340,10 @@ public final class AppState {
 
     /// Cancel an in-flight download. Returns to idle `.needsModel` state.
     public func cancelDownload() {
-        guard case .downloading = status else { return }
+        // Dual: AppStatus CancelDownload / AppStatusDecision.canCancelDownload
+        guard AppStatusDecision.canCancelDownload(AppStatusDecision.kind(from: status)) else {
+            return
+        }
         modelManager?.cancel()
         modelManager = nil
         status = .needsModel
@@ -345,10 +352,11 @@ public final class AppState {
 
     /// Start or retry downloading the model.
     public func retryDownload() {
-        switch status {
-        case .error, .needsModel: ensureModel()
-        default: break
+        // Dual: AppStatus StartDownload from needsModel | error
+        guard AppStatusDecision.canRetryDownload(AppStatusDecision.kind(from: status)) else {
+            return
         }
+        ensureModel()
     }
 
     // MARK: - Pipeline management
@@ -762,27 +770,23 @@ public final class AppState {
     }
 
     func startRecording() {
-        switch status {
-        case .downloading, .loadingModel:
+        let kind = AppStatusDecision.kind(from: status)
+        // Dual: AppStatus boot gates (nudge / download / ready / rejoin)
+        if AppStatusDecision.shouldNudgeInsteadOfRecord(kind) {
             triggerDownloadNudge()
             return
-        case .needsModel:
+        }
+        if AppStatusDecision.shouldStartDownloadOnHotkey(kind) {
             ensureModel()
             return
-        case .ready:
-            // SessionDecision.canStartRecording(.ready)
-            break
-        case .transcribing:
-            // Rejoin: fn pressed during finalization — resume recording
-            // in the same session. Text accumulates.
+        }
+        if AppStatusDecision.canRejoinSession(kind) {
             guard SessionDecision.canRejoin(.transcribing) else { return }
             rejoinSession()
             return
-        default:
-            return
         }
-        // Extra pure-gate check for the ready → recording path
-        guard SessionDecision.canStartRecording(.ready) else { return }
+        guard AppStatusDecision.canEnterSession(kind),
+              SessionDecision.canStartRecording(.ready) else { return }
         if !modelFileCheck() {
             ensureModel()
             return
