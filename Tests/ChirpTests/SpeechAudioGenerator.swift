@@ -95,6 +95,90 @@ enum SpeechAudioGenerator {
         }
     }
 
+    /// Soft speech: scale amplitude (e.g. 0.15 ≈ quiet talk / far mic).
+    static func soften(_ samples: [Float], gain: Float = 0.15) -> [Float] {
+        let g = max(0, min(gain, 1))
+        return samples.map { $0 * g }
+    }
+
+    /// Muffled speech: simple one-pole low-pass (covers / pillows over mic).
+    /// `alpha` closer to 1 → darker / more muffled (0.85–0.95 typical).
+    static func muffle(_ samples: [Float], alpha: Float = 0.90) -> [Float] {
+        guard !samples.isEmpty else { return samples }
+        let a = max(0.5, min(alpha, 0.99))
+        var y: Float = 0
+        return samples.map { x in
+            y = a * y + (1 - a) * x
+            return y
+        }
+    }
+
+    /// Pink-ish background (1/f-ish via leaky integrator on white noise), mixed at SNR.
+    /// More realistic room/HVAC than pure white for dictation stress tests.
+    static func addRoomNoise(to samples: [Float], snrDB: Float, seed: UInt64 = 99) -> [Float] {
+        guard !samples.isEmpty else { return samples }
+        let signalPower = samples.reduce(Float(0)) { $0 + $1 * $1 } / Float(samples.count)
+        let signalRMS = sqrtf(max(signalPower, 1e-12))
+        let noiseRMS = signalRMS / powf(10, snrDB / 20)
+        var rng = SeededRNG(seed: seed)
+        var pink: Float = 0
+        var noise = [Float](repeating: 0, count: samples.count)
+        var power: Float = 0
+        for i in 0..<samples.count {
+            let white = rng.nextFloat() * 2 - 1
+            pink = 0.95 * pink + 0.05 * white
+            noise[i] = pink
+            power += pink * pink
+        }
+        let rms = sqrtf(max(power / Float(samples.count), 1e-12))
+        let scale = noiseRMS / rms
+        return zip(samples, noise).map { $0 + $1 * scale }
+    }
+
+    /// Named acoustic conditions for graded voice quality tests.
+    enum VoiceCondition: String, CaseIterable, Sendable {
+        case clean
+        case soft
+        case muffled
+        case softMuffled
+        case noisyWhite15
+        case noisyRoom12
+        /// Soft + muffled + room noise — hard but realistic desk-fan / far-mic.
+        case harshDesk
+
+        var label: String { rawValue }
+
+        /// Apply this condition to clean TTS samples (no trailing silence).
+        func apply(to samples: [Float]) -> [Float] {
+            switch self {
+            case .clean:
+                return samples
+            case .soft:
+                return SpeechAudioGenerator.soften(samples, gain: 0.15)
+            case .muffled:
+                return SpeechAudioGenerator.muffle(samples, alpha: 0.92)
+            case .softMuffled:
+                return SpeechAudioGenerator.muffle(
+                    SpeechAudioGenerator.soften(samples, gain: 0.18),
+                    alpha: 0.90
+                )
+            case .noisyWhite15:
+                return SpeechAudioGenerator.addNoise(to: samples, snrDB: 15, seed: 7)
+            case .noisyRoom12:
+                return SpeechAudioGenerator.addRoomNoise(to: samples, snrDB: 12, seed: 11)
+            case .harshDesk:
+                let soft = SpeechAudioGenerator.soften(samples, gain: 0.20)
+                let muff = SpeechAudioGenerator.muffle(soft, alpha: 0.88)
+                return SpeechAudioGenerator.addRoomNoise(to: muff, snrDB: 10, seed: 13)
+            }
+        }
+    }
+
+    /// Peak absolute amplitude (for soft/muffle unit checks).
+    static func peakAmplitude(_ samples: [Float]) -> Float {
+        samples.map { abs($0) }.max() ?? 0
+    }
+
     // MARK: - WAV I/O
 
     /// Load mono 16 kHz WAV (Float32 or Int16 PCM). Finds the data chunk.

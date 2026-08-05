@@ -114,4 +114,69 @@ struct TranscriptionScoringTests {
         #expect(s.majorWER > 0)
         #expect(abs(s.majorWER - 0.5) < 1e-9)
     }
+
+    // MARK: - Live + total
+
+    @Test("tokenPrecision and tokenRecall bag metrics")
+    func tokenBagMetrics() {
+        #expect(TranscriptionScoring.tokenPrecision(reference: "a b c", hypothesis: "a b") == 1)
+        #expect(abs(TranscriptionScoring.tokenRecall(reference: "a b c", hypothesis: "a b") - 2.0 / 3.0) < 1e-9)
+        #expect(abs(TranscriptionScoring.tokenPrecision(reference: "a b", hypothesis: "a x") - 0.5) < 1e-9)
+        #expect(TranscriptionScoring.tokenPrecision(reference: "a", hypothesis: "") == 0)
+        #expect(TranscriptionScoring.tokenRecall(reference: "", hypothesis: "") == 1)
+    }
+
+    @Test("scoreLiveTotal uses last peek for live and full hyp for total")
+    func scoreLiveTotalBasics() {
+        let s = TranscriptionScoring.scoreLiveTotal(
+            id: "u1",
+            reference: "hello world",
+            livePeeks: ["hel", "hello", "hello wor"],
+            totalHypothesis: "hello world",
+            midCommitCount: 0
+        )
+        #expect(s.liveHypothesis == "hello wor")
+        #expect(s.totalHypothesis == "hello world")
+        #expect(s.livePeeks.count == 3)
+        #expect(s.total.wer == 0)
+        #expect(s.live.wer > 0)
+        // "hello" hits; "wor" misses → precision 0.5
+        #expect(abs(s.livePrecision - 0.5) < 1e-9)
+        #expect(s.totalRecall == 1)
+        #expect(s.summaryLine.contains("LIVE"))
+        #expect(s.summaryLine.contains("TOTAL"))
+    }
+
+    @Test("rankLiveTotal orders by total majorWER")
+    func rankLiveTotalOrder() {
+        let a = TranscriptionScoring.scoreLiveTotal(
+            id: "bad", reference: "hello world",
+            livePeeks: ["x"], totalHypothesis: "goodbye moon"
+        )
+        let b = TranscriptionScoring.scoreLiveTotal(
+            id: "good", reference: "hello world",
+            livePeeks: ["hello world"], totalHypothesis: "hello world"
+        )
+        let ranking = TranscriptionScoring.rankLiveTotal([a, b])
+        #expect(ranking.scores.map(\.id) == ["good", "bad"])
+        #expect(ranking.meanTotalWER > 0)
+        #expect(ranking.leaderboard.contains("Live + Total"))
+    }
+
+    @Test("grade maps majorWER bands")
+    func gradeBands() {
+        #expect(TranscriptionScoring.grade(majorWER: 0.0) == "A")
+        #expect(TranscriptionScoring.grade(majorWER: 0.05) == "A")
+        #expect(TranscriptionScoring.grade(majorWER: 0.06) == "B")
+        #expect(TranscriptionScoring.grade(majorWER: 0.15) == "C")
+        #expect(TranscriptionScoring.grade(majorWER: 0.35) == "D")
+        #expect(TranscriptionScoring.grade(majorWER: 0.50) == "F")
+    }
+
+    @Test("withinBudget is a regression ceiling")
+    func withinBudgetGate() {
+        #expect(TranscriptionScoring.withinBudget(actual: 0.10, ceiling: 0.12))
+        #expect(!TranscriptionScoring.withinBudget(actual: 0.13, ceiling: 0.12))
+        #expect(TranscriptionScoring.withinBudget(actual: 0.12, ceiling: 0.12))
+    }
 }

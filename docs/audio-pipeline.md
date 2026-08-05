@@ -29,10 +29,35 @@ bazel test //:TranscriberIntegrationTests --test_output=all
 
 | Piece | Role |
 |---|---|
-| `SpeechAudioGenerator` | TTS (`say` + `afconvert`), noise, silence, WAV load |
-| `TranscriptionScoring` | WER / majorWER / CER + ranked leaderboard |
+| `SpeechAudioGenerator` | TTS (`say` + `afconvert`), soft/muffle/room noise, `VoiceCondition`, WAV load |
+| `TranscriptionScoring` | WER / majorWER / CER + live/total P/R + letter **grade** + ranked leaderboard |
 | `FixtureASRTests` | Always-on WAV smoke: hard WER when model present |
 | `AudioCorpusPipelineTests` | Generate → pipe → score → assert budgets (manual) |
+| `LiveTotalPipelineTests` | Common speech → stream peeks (**live**) + flush (**total**) scored (manual) |
+| `VoiceConditionPipelineTests` | Soft / muffled / noisy / harsh-desk → **graded** ceilings (manual regression) |
+
+```
+# Live + total (peek during stream, score both; manual tag):
+bazel test //:LiveTotalPipelineTests --test_output=all
+# Acoustic conditions (soft/muffled/noise) with tighten-only budgets:
+bazel test //:VoiceConditionPipelineTests --test_output=all
+```
+
+### Voice condition regression (only improve)
+
+`VoiceConditionBudgets` ceilings: fail if mean majorWER/WER rises. **Tighten** when quality improves; never loosen without a filed issue.
+
+| Condition | Simulation | Default ceiling (mean majorWER) |
+|-----------|------------|----------------------------------|
+| clean | TTS as-is | ≤ 12% |
+| soft | gain ≈ 0.15 (far/quiet mic) | ≤ 30% |
+| muffled | one-pole low-pass | ≤ 35% |
+| softMuffled | soft + muffle | ≤ 45% |
+| noisyWhite15 | white SNR 15 dB | ≤ 40% |
+| noisyRoom12 | pink/HVAC-ish SNR 12 dB | ≤ 45% |
+| harshDesk | soft + muffle + room 10 dB | ≤ 60% + recall floor |
+
+Letter grades: A ≤5%, B ≤10%, C ≤20%, D ≤40%, F >40% (`TranscriptionScoring.grade`).
 
 Coverage:
 

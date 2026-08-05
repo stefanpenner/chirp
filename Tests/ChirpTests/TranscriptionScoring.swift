@@ -292,4 +292,183 @@ enum TranscriptionScoring {
             .sorted()
         return TranscriptionRanking(scores: scores)
     }
+
+    /// Letter grade for mean majorWER (regression dashboards / CI logs).
+    /// A ≤5%, B ≤10%, C ≤20%, D ≤40%, F >40%.
+    static func grade(majorWER: Double) -> String {
+        switch majorWER {
+        case ...0.05: return "A"
+        case ...0.10: return "B"
+        case ...0.20: return "C"
+        case ...0.40: return "D"
+        default: return "F"
+        }
+    }
+
+    /// Fail if `actual` is worse than ceiling by more than `epsilon` (regression gate).
+    /// Tightening ceilings is always OK; loosening needs an explicit budget change.
+    static func withinBudget(actual: Double, ceiling: Double, epsilon: Double = 1e-9) -> Bool {
+        actual <= ceiling + epsilon
+    }
+
+    // MARK: - Live (partial/peek) + total (final) scoring
+
+    /// Bag precision: |hyp ∩ ref| / |hyp| over normalized word tokens (multiset).
+    /// High when live peeks only emit in-reference words (even if incomplete).
+    static func tokenPrecision(reference: String, hypothesis: String) -> Double {
+        let refW = words(reference)
+        let hypW = words(hypothesis)
+        if hypW.isEmpty { return refW.isEmpty ? 1 : 0 }
+        var bag = Dictionary(refW.map { ($0, 1) }, uniquingKeysWith: +)
+        var hits = 0
+        for w in hypW {
+            if let c = bag[w], c > 0 {
+                hits += 1
+                bag[w] = c - 1
+            }
+        }
+        return Double(hits) / Double(hypW.count)
+    }
+
+    /// Bag recall: |hyp ∩ ref| / |ref|. Completeness of live/total hyp vs reference.
+    static func tokenRecall(reference: String, hypothesis: String) -> Double {
+        let refW = words(reference)
+        let hypW = words(hypothesis)
+        if refW.isEmpty { return hypW.isEmpty ? 1 : 0 }
+        var bag = Dictionary(hypW.map { ($0, 1) }, uniquingKeysWith: +)
+        var hits = 0
+        for w in refW {
+            if let c = bag[w], c > 0 {
+                hits += 1
+                bag[w] = c - 1
+            }
+        }
+        return Double(hits) / Double(refW.count)
+    }
+
+    /// Score streaming session: live peeks vs final joined hyp.
+    /// - liveHypothesis: last non-empty peek (or joined peeks if none — empty)
+    /// - totalHypothesis: committed segments + flush after post-process
+    static func scoreLiveTotal(
+        id: String,
+        reference: String,
+        livePeeks: [String],
+        totalHypothesis: String,
+        midCommitCount: Int = 0
+    ) -> LiveTotalScore {
+        let nonEmpty = livePeeks
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let liveHyp = nonEmpty.last ?? ""
+        let live = score(id: "\(id)/live", reference: reference, hypothesis: liveHyp)
+        let total = score(id: "\(id)/total", reference: reference, hypothesis: totalHypothesis)
+        return LiveTotalScore(
+            id: id,
+            reference: reference,
+            liveHypothesis: liveHyp,
+            totalHypothesis: totalHypothesis,
+            livePeeks: nonEmpty,
+            live: live,
+            total: total,
+            livePrecision: tokenPrecision(reference: reference, hypothesis: liveHyp),
+            liveRecall: tokenRecall(reference: reference, hypothesis: liveHyp),
+            totalPrecision: tokenPrecision(reference: reference, hypothesis: totalHypothesis),
+            totalRecall: tokenRecall(reference: reference, hypothesis: totalHypothesis),
+            midCommitCount: midCommitCount
+        )
+    }
+
+    static func rankLiveTotal(_ items: [LiveTotalScore]) -> LiveTotalRanking {
+        // Best total majorWER first; tie-break live majorWER then id.
+        let sorted = items.sorted { a, b in
+            if a.total.majorWER != b.total.majorWER { return a.total.majorWER < b.total.majorWER }
+            if a.live.majorWER != b.live.majorWER { return a.live.majorWER < b.live.majorWER }
+            return a.id < b.id
+        }
+        return LiveTotalRanking(scores: sorted)
+    }
+}
+
+/// Live (peek/partial) + total (final) score for one utterance.
+struct LiveTotalScore: Sendable {
+    let id: String
+    let reference: String
+    let liveHypothesis: String
+    let totalHypothesis: String
+    let livePeeks: [String]
+    let live: TranscriptionScore
+    let total: TranscriptionScore
+    /// Fraction of live hyp words present in reference (hallucination guard).
+    let livePrecision: Double
+    /// Fraction of reference words present in last live peek.
+    let liveRecall: Double
+    let totalPrecision: Double
+    let totalRecall: Double
+    let midCommitCount: Int
+
+    var summaryLine: String {
+        let lW = String(format: "%.1f%%", live.wer * 100)
+        let lM = String(format: "%.1f%%", live.majorWER * 100)
+        let tW = String(format: "%.1f%%", total.wer * 100)
+        let tM = String(format: "%.1f%%", total.majorWER * 100)
+        let lp = String(format: "%.0f%%", livePrecision * 100)
+        let lr = String(format: "%.0f%%", liveRecall * 100)
+        let tr = String(format: "%.0f%%", totalRecall * 100)
+        return "[\(id)] LIVE WER=\(lW) major=\(lM) P=\(lp) R=\(lr) peeks=\(livePeeks.count) | TOTAL WER=\(tW) major=\(tM) R=\(tr) commits=\(midCommitCount) live=\"\(liveHypothesis)\" total=\"\(totalHypothesis)\""
+    }
+}
+
+/// Aggregate live+total ranking over a corpus.
+struct LiveTotalRanking: Sendable {
+    let scores: [LiveTotalScore]
+
+    var meanLiveWER: Double {
+        guard !scores.isEmpty else { return 0 }
+        return scores.map(\.live.wer).reduce(0, +) / Double(scores.count)
+    }
+
+    var meanLiveMajorWER: Double {
+        guard !scores.isEmpty else { return 0 }
+        return scores.map(\.live.majorWER).reduce(0, +) / Double(scores.count)
+    }
+
+    var meanTotalWER: Double {
+        guard !scores.isEmpty else { return 0 }
+        return scores.map(\.total.wer).reduce(0, +) / Double(scores.count)
+    }
+
+    var meanTotalMajorWER: Double {
+        guard !scores.isEmpty else { return 0 }
+        return scores.map(\.total.majorWER).reduce(0, +) / Double(scores.count)
+    }
+
+    var meanLivePrecision: Double {
+        guard !scores.isEmpty else { return 0 }
+        return scores.map(\.livePrecision).reduce(0, +) / Double(scores.count)
+    }
+
+    var meanLiveRecall: Double {
+        guard !scores.isEmpty else { return 0 }
+        return scores.map(\.liveRecall).reduce(0, +) / Double(scores.count)
+    }
+
+    var meanTotalRecall: Double {
+        guard !scores.isEmpty else { return 0 }
+        return scores.map(\.totalRecall).reduce(0, +) / Double(scores.count)
+    }
+
+    var leaderboard: String {
+        var lines: [String] = []
+        lines.append("=== Live + Total ASR Ranking (best total → worst) n=\(scores.count) ===")
+        lines.append(String(format:
+            "mean LIVE major=%.1f%% WER=%.1f%% P=%.0f%% R=%.0f%%  |  mean TOTAL major=%.1f%% WER=%.1f%% R=%.0f%%",
+            meanLiveMajorWER * 100, meanLiveWER * 100,
+            meanLivePrecision * 100, meanLiveRecall * 100,
+            meanTotalMajorWER * 100, meanTotalWER * 100,
+            meanTotalRecall * 100))
+        for (i, s) in scores.enumerated() {
+            lines.append(String(format: "  #%d %@", i + 1, s.summaryLine))
+        }
+        return lines.joined(separator: "\n")
+    }
 }
