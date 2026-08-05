@@ -156,22 +156,33 @@ struct ChirpApp: App {
                 Spacer()
                 Text(activeModeLabel)
                     .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundColor(.primary.opacity(0.4))
+                    .foregroundColor(.primary.opacity(0.45))
                     .lineLimit(1)
+                    .accessibilityHidden(true)
                 if appState.aiSettings.modes.count > 1 {
                     Image(systemName: isAIPickerExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(.primary.opacity(0.3))
+                        .foregroundColor(.primary.opacity(0.35))
+                        .accessibilityHidden(true)
                 }
             }
             .contentShape(Rectangle())
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.vertical, 7)
         }
         .buttonStyle(MenuRowStyle())
+        .disabled(appState.aiSettings.modes.count <= 1)
+        .accessibilityLabel("AI Mode, \(activeModeLabel)")
+        .accessibilityHint(
+            appState.aiSettings.modes.count > 1
+                ? (isAIPickerExpanded ? "Collapses mode list" : "Shows available AI modes")
+                : "Only one mode configured"
+        )
+        .accessibilityValue(isAIPickerExpanded ? "Expanded" : "Collapsed")
 
         if isAIPickerExpanded {
             ForEach(appState.aiSettings.modes) { mode in
+                let selected = appState.aiSettings.activeModeID == mode.id
                 Button {
                     appState.aiSettings.activeModeID = mode.id
                     appState.aiSettings.save()
@@ -181,8 +192,9 @@ struct ChirpApp: App {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(appState.aiSettings.activeModeID == mode.id ? cBlue : .clear)
+                            .foregroundColor(selected ? cBlue : .clear)
                             .frame(width: 14)
+                            .accessibilityHidden(true)
                         Text(mode.name)
                             .font(.system(size: 13))
                             .foregroundColor(.primary.opacity(0.7))
@@ -190,9 +202,11 @@ struct ChirpApp: App {
                     }
                     .contentShape(Rectangle())
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 7)
                 }
                 .buttonStyle(MenuRowStyle())
+                .accessibilityLabel(mode.name)
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
             }
         }
     }
@@ -228,19 +242,29 @@ struct ChirpApp: App {
                     Spacer()
                     Text(selectedName)
                         .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundColor(.primary.opacity(0.4))
+                        .foregroundColor(.primary.opacity(0.45))
                         .lineLimit(1)
+                        .accessibilityHidden(true)
                     if canExpand {
                         Image(systemName: isMicPickerExpanded ? "chevron.up" : "chevron.down")
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(.primary.opacity(0.3))
+                            .foregroundColor(.primary.opacity(0.35))
+                            .accessibilityHidden(true)
                     }
                 }
                 .contentShape(Rectangle())
                 .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.vertical, 7)
             }
             .buttonStyle(MenuRowStyle())
+            .disabled(!canExpand)
+            .accessibilityLabel("Microphone, \(selectedName)")
+            .accessibilityHint(
+                canExpand
+                    ? (isMicPickerExpanded ? "Collapses device list" : "Shows available microphones")
+                    : "Only one microphone available"
+            )
+            .accessibilityValue(isMicPickerExpanded ? "Expanded" : "Collapsed")
 
             // Expanded device picker
             if isMicPickerExpanded {
@@ -271,23 +295,26 @@ struct ChirpApp: App {
     @ViewBuilder
     private var hotkeySection: some View {
         if hotkeyRecorder.isRecording {
-            // Recording state — press any key to set; ESC to cancel
+            // Recording state — press any key to set; Esc to cancel
             HStack {
                 Text("Press a key\u{2026}")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary.opacity(0.4))
+                    .foregroundColor(.primary.opacity(0.55))
                 Spacer()
-                Text("esc to cancel")
-                    .font(.system(size: 9))
-                    .foregroundColor(.primary.opacity(0.2))
+                Text("Esc to cancel")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundColor(.primary.opacity(0.4))
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .strokeBorder(cBlue.opacity(0.5), lineWidth: 1)
                     .padding(.horizontal, 4)
             )
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Recording hotkey. Press a key to set, or Escape to cancel.")
+            .accessibilityAddTraits(.updatesFrequently)
         } else {
             // Normal state — show current hotkey, click to change
             Button {
@@ -300,19 +327,22 @@ struct ChirpApp: App {
                     Spacer()
                     Text(appState.hotkeyConfig.label)
                         .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundColor(.primary.opacity(0.4))
+                        .foregroundColor(.primary.opacity(0.45))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(
                             RoundedRectangle(cornerRadius: 4, style: .continuous)
                                 .fill(.primary.opacity(0.06))
                         )
+                        .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
                 .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.vertical, 7)
             }
             .buttonStyle(MenuRowStyle())
+            .accessibilityLabel("Hotkey, \(appState.hotkeyConfig.label)")
+            .accessibilityHint("Records a new dictation hotkey")
         }
     }
 }
@@ -332,6 +362,7 @@ private struct DeviceRow: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(isSelected ? cBlue : .clear)
                     .frame(width: 14)
+                    .accessibilityHidden(true)
                 Text(name)
                     .font(.system(size: 13))
                     .foregroundColor(.primary.opacity(0.7))
@@ -339,14 +370,17 @@ private struct DeviceRow: View {
                 if let tag {
                     Text(tag)
                         .font(.system(size: 10))
-                        .foregroundColor(.primary.opacity(0.25))
+                        .foregroundColor(.primary.opacity(0.35))
+                        .accessibilityHidden(true)
                 }
             }
             .contentShape(Rectangle())
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.vertical, 7)
         }
         .buttonStyle(MenuRowStyle())
+        .accessibilityLabel(tag.map { "\(name), \($0)" } ?? name)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 
@@ -379,14 +413,18 @@ private struct MenuRow: View {
                 if let shortcut {
                     Text(shortcut)
                         .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundColor(.primary.opacity(isEnabled ? 0.3 : 0.15))
+                        .foregroundColor(.primary.opacity(isEnabled ? 0.4 : 0.2))
+                        .accessibilityHidden(true)
                 }
             }
             .contentShape(Rectangle())
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.vertical, 7)
         }
         .buttonStyle(MenuRowStyle())
+        .accessibilityLabel(title)
+        .accessibilityHint(shortcut.map { "Shortcut \($0)" } ?? "")
+        .accessibilityInputLabels([title])
     }
 }
 
