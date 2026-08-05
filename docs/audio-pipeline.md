@@ -35,13 +35,27 @@ bazel test //:TranscriberIntegrationTests --test_output=all
 | `AudioCorpusPipelineTests` | Generate → pipe → score → assert budgets (manual) |
 | `LiveTotalPipelineTests` | Common speech → stream peeks (**live**) + flush (**total**) scored (manual) |
 | `VoiceConditionPipelineTests` | Soft / muffled / noisy / harsh-desk → **graded** ceilings (manual regression) |
+| `NormalSpeechFixtureTests` | **Real human** LibriSpeech + LDC93S1 WAVs → WER (normal + soft gain) |
 
 ```
 # Live + total (peek during stream, score both; manual tag):
 bazel test //:LiveTotalPipelineTests --test_output=all
 # Acoustic conditions (soft/muffled/noise) with tighten-only budgets:
 bazel test //:VoiceConditionPipelineTests --test_output=all
+# Real speech fixtures (LibriSpeech CC BY 4.0 + LDC93S1):
+bazel test //:NormalSpeechFixtureTests --test_output=all
 ```
+
+### Real speech fixtures (`Tests/ChirpTests/fixtures/`)
+
+| File | Source | Notes |
+|------|--------|--------|
+| `normal_ldc93s1.wav` | LDC93S1 smoke | “She had your dark suit…” |
+| `librispeech_5694_*.wav` | LibriSpeech dev-clean-2 | Short dialogue-like lines |
+| `librispeech_3000_0000.wav` | LibriSpeech | Title-style short phrase |
+| `librispeech_84_*.wav` | LibriSpeech | Longer read poetry (~8s) |
+
+License notes: `fixtures/LICENSE.txt` (CC BY 4.0 for LibriSpeech).
 
 ### Voice condition regression (only improve)
 

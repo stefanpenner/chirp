@@ -386,7 +386,9 @@ final class AudioRecorder: AudioRecording {
                     inputSampleRate: snap.inputSampleRate,
                     outputRate: snap.outputRate
                 ) {
-                    onSamples(chunk)
+                    // Quiet talk / far mic: soft AGC so VAD + energy gate see usable levels.
+                    // Loud speech and near-silence left unchanged (DecodePolicy.softInputGain).
+                    onSamples(DecodePolicy.softInputGain(chunk))
                 }
             }
 

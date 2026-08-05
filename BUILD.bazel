@@ -231,15 +231,51 @@ swift_test(
         "Tests/ChirpTests/FixtureASRTests.swift",
         "Tests/ChirpTests/SpeechAudioGenerator.swift",
         "Tests/ChirpTests/TranscriptionScoring.swift",
+        "Tests/ChirpTests/SpeechFixtures.swift",
     ],
     data = [
         "Tests/ChirpTests/hello_world.wav",
+        "Tests/ChirpTests/fixtures/LICENSE.txt",
+        "Tests/ChirpTests/fixtures/normal_ldc93s1.wav",
+        "Tests/ChirpTests/fixtures/librispeech_5694_0000.wav",
+        "Tests/ChirpTests/fixtures/librispeech_5694_0001.wav",
+        "Tests/ChirpTests/fixtures/librispeech_3000_0000.wav",
+        "Tests/ChirpTests/fixtures/librispeech_84_0000.wav",
+        "Tests/ChirpTests/fixtures/librispeech_84_0001.wav",
         "@silero_vad//file",
     ],
     deps = [":ChirpLib"],
     copts = ["-swift-version", "6"],
     env_inherit = ["HOME"],
     local = True,
+)
+
+# Real human speech (LibriSpeech CC-BY + LDC93S1) → WER budgets.
+# bazel test //:NormalSpeechFixtureTests --test_output=all
+swift_test(
+    name = "NormalSpeechFixtureTests",
+    srcs = [
+        "Tests/ChirpTests/NormalSpeechFixtureTests.swift",
+        "Tests/ChirpTests/SpeechFixtures.swift",
+        "Tests/ChirpTests/SpeechAudioGenerator.swift",
+        "Tests/ChirpTests/TranscriptionScoring.swift",
+    ],
+    data = [
+        "Tests/ChirpTests/fixtures/LICENSE.txt",
+        "Tests/ChirpTests/fixtures/normal_ldc93s1.wav",
+        "Tests/ChirpTests/fixtures/librispeech_5694_0000.wav",
+        "Tests/ChirpTests/fixtures/librispeech_5694_0001.wav",
+        "Tests/ChirpTests/fixtures/librispeech_3000_0000.wav",
+        "Tests/ChirpTests/fixtures/librispeech_84_0000.wav",
+        "Tests/ChirpTests/fixtures/librispeech_84_0001.wav",
+        "@silero_vad//file",
+    ],
+    deps = [":ChirpLib"],
+    copts = ["-swift-version", "6"],
+    env_inherit = ["HOME"],
+    local = True,
+    # Real ASR + model; skip when model missing (tests self-skip).
+    tags = ["manual"],
 )
 
 swift_test(

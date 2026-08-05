@@ -49,7 +49,8 @@ enum DecodePolicy {
 
     /// Fixed / minimum RMS threshold for "speech-like" energy.
     /// Also used when too few frames exist to estimate a noise floor.
-    static let energyThreshold: Float = 0.01
+    /// 0.005 (was 0.01): quiet talk without VP AGC often sits ~0.01–0.03 peak.
+    static let energyThreshold: Float = 0.005
 
     /// Alias for adaptive floor lower bound (same value as energyThreshold).
     static let energyMinFloor: Float = energyThreshold
@@ -60,10 +61,52 @@ enum DecodePolicy {
     /// Adaptive threshold = max(minFloor, noiseFloor * multiplier).
     /// Raises the gate above room noise so DecodeReject silence rejection
     /// is not weakened by noisy rooms counting as speech frames.
-    static let energyFloorMultiplier: Float = 2.5
+    /// 2.0 (was 2.5): less harsh on soft continuous speech.
+    static let energyFloorMultiplier: Float = 2.0
+
+    /// Cap adaptive thr at this fraction of peak frame RMS so soft, fairly
+    /// uniform speech is not wiped (noiseFloor≈speech → thr > speech).
+    static let energyPeakCapFraction: Float = 0.55
 
     /// Minimum frame count before adaptive floor estimation is trusted.
     static let energyFloorMinFrames = 2
+
+    // MARK: - Soft input gain (quiet talk / far mic)
+
+    /// Peaks below this are treated as silence (no boost).
+    static let softGainMinPeak: Float = 0.004
+    /// Peaks at or above this are already loud enough (no boost).
+    static let softGainLoudGate: Float = 0.12
+    /// Target peak after soft gain.
+    static let softGainTargetPeak: Float = 0.28
+    /// Cap amplification so silence/noise is not exploded.
+    static let softGainMax: Float = 10
+
+    /// Min peak/RMS (crest) before soft gain — rejects flat DC/room hiss.
+    static let softGainMinCrest: Float = 1.8
+
+    /// Boost soft (but non-silent) captures so VAD/energy/ASR see usable levels.
+    /// Loud speech, near-silence, and flat noise are left unchanged.
+    static func softInputGain(_ samples: [Float]) -> [Float] {
+        guard !samples.isEmpty else { return samples }
+        var peak: Float = 0
+        var sumSq: Float = 0
+        for s in samples {
+            let a = abs(s)
+            if a > peak { peak = a }
+            sumSq += s * s
+        }
+        guard peak >= softGainMinPeak, peak < softGainLoudGate else {
+            return samples
+        }
+        let rms = sqrtf(sumSq / Float(samples.count))
+        let crest = peak / max(rms, 1e-6)
+        // Flat hiss/DC has crest ≈ 1; speech envelopes are higher.
+        guard crest >= softGainMinCrest else { return samples }
+        let g = min(softGainMax, softGainTargetPeak / peak)
+        guard g > 1.01 else { return samples }
+        return samples.map { $0 * g }
+    }
 
     /// Estimate noise floor from frame RMS values (energyNoisePercentile).
     static func noiseFloor(frameRMS: [Float]) -> Float {
@@ -73,17 +116,28 @@ enum DecodePolicy {
         return sorted[max(0, min(idx, sorted.count - 1))]
     }
 
-    /// Adaptive energy threshold: max(minFloor, noiseFloor * multiplier).
+    /// Adaptive energy threshold: max(minFloor, noiseFloor * multiplier),
+    /// capped vs peak so soft continuous speech still has speech frames.
     /// Falls back to fixed energyThreshold when too few frames to estimate.
     static func adaptiveEnergyThreshold(
         frameRMS: [Float],
         minFloor: Float = energyMinFloor,
-        multiplier: Float = energyFloorMultiplier
+        multiplier: Float = energyFloorMultiplier,
+        peakCapFraction: Float = energyPeakCapFraction
     ) -> Float {
         guard frameRMS.count >= energyFloorMinFrames else {
             return energyThreshold
         }
-        return max(minFloor, noiseFloor(frameRMS: frameRMS) * multiplier)
+        let floor = noiseFloor(frameRMS: frameRMS)
+        var thr = max(minFloor, floor * multiplier)
+        let peak = frameRMS.max() ?? 0
+        // Soft speech with limited headroom over floor: uncapped thr (floor*mult)
+        // can sit above every frame. Cap only when peak rises above the floor
+        // (dynamic speech), not for flat noise (peak ≈ floor).
+        if peak > floor * 1.5, peakCapFraction > 0, peakCapFraction < 1 {
+            thr = min(thr, peak * peakCapFraction)
+        }
+        return max(minFloor, thr)
     }
 
     /// Real-time chunk size used by audio capture / tests (~85ms).

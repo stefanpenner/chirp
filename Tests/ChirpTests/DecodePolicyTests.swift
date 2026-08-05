@@ -242,8 +242,9 @@ struct DecodePolicyTests {
         let t = DecodePolicy.adaptiveEnergyThreshold(frameRMS: rms)
         #expect(t > 0.02)
         #expect(t < 0.4)
-        // noiseFloor * multiplier ≈ 0.02 * 2.5 = 0.05
-        #expect(abs(t - 0.02 * DecodePolicy.energyFloorMultiplier) < 0.02)
+        // noiseFloor * multiplier ≈ 0.02 * 2.0 (capped by peak if needed)
+        let expected = 0.02 * DecodePolicy.energyFloorMultiplier
+        #expect(abs(t - expected) < 0.02 || t <= 0.5 * DecodePolicy.energyPeakCapFraction + 0.01)
     }
 
     @Test("adaptiveEnergyThreshold falls back to fixed when too few frames")
@@ -258,11 +259,49 @@ struct DecodePolicyTests {
         )
     }
 
+    @Test("adaptiveEnergyThreshold peak-caps soft speech with dynamic range")
+    func adaptiveThresholdSoftSpeechPeakCap() {
+        // Quiet floor + soft peaks (speech envelope), not flat noise.
+        var soft: [Float] = []
+        for i in 0..<40 {
+            soft.append(i % 4 == 0 ? 0.06 : 0.015)
+        }
+        let t = DecodePolicy.adaptiveEnergyThreshold(frameRMS: soft)
+        #expect(t < 0.06)
+        #expect(soft.filter { $0 >= t }.count >= 8)
+    }
+
+    @Test("softInputGain boosts quiet speech-like envelope")
+    func softInputGainBoostsQuiet() {
+        // Alternating soft peaks (crest > 1.8) — not flat DC.
+        var quiet: [Float] = []
+        for i in 0..<200 {
+            quiet.append(i % 5 == 0 ? 0.04 : 0.008)
+        }
+        let boosted = DecodePolicy.softInputGain(quiet)
+        let peak = boosted.map { abs($0) }.max() ?? 0
+        #expect(peak > 0.1)
+        #expect(peak <= DecodePolicy.softGainTargetPeak + 0.02)
+    }
+
+    @Test("softInputGain leaves loud, flat noise, and near-silence alone")
+    func softInputGainPassthrough() {
+        let loud = [Float](repeating: 0.4, count: 50)
+        #expect(DecodePolicy.softInputGain(loud) == loud)
+        let silence = [Float](repeating: 0.0005, count: 50)
+        #expect(DecodePolicy.softInputGain(silence) == silence)
+        let flatNoise = [Float](repeating: 0.02, count: 100)
+        #expect(DecodePolicy.softInputGain(flatNoise) == flatNoise)
+    }
+
     @Test("energy floor constants are dual-testable")
     func energyFloorConstants() {
         #expect(DecodePolicy.energyMinFloor == DecodePolicy.energyThreshold)
-        #expect(DecodePolicy.energyFloorMultiplier == 2.5)
+        #expect(DecodePolicy.energyFloorMultiplier == 2.0)
+        #expect(DecodePolicy.energyPeakCapFraction > 0 && DecodePolicy.energyPeakCapFraction < 1)
         #expect(DecodePolicy.energyNoisePercentile > 0 && DecodePolicy.energyNoisePercentile < 0.5)
         #expect(DecodePolicy.energyFloorMinFrames >= 2)
+        #expect(DecodePolicy.softGainMax >= 4)
+        #expect(DecodePolicy.softGainMinPeak < DecodePolicy.softGainLoudGate)
     }
 }

@@ -1,0 +1,24 @@
+# Speech fixtures — licenses & attribution
+
+These files are **not** Chirp-original. They are redistributed for offline ASR
+regression tests under their original licenses.
+
+## normal_ldc93s1.wav
+
+- Source: NIST / TIMIT-derived “LDC93S1” smoke utterance, widely distributed
+  (e.g. Mozilla DeepSpeech `data/smoke_test/LDC93S1.wav`).
+- Transcript: “She had your dark suit in greasy wash water all year.”
+- Converted to 16 kHz mono IEEE float32 WAV for Chirp’s pipeline.
+
+## librispeech_*.wav
+
+- Source: [LibriSpeech](https://www.openslr.org/12) (and mini_librispeech
+  [OpenSLR-31](https://www.openslr.org/31/)) read speech from LibriVox audiobooks.
+- License: **CC BY 4.0** — https://creativecommons.org/licenses/by/4.0/
+- Citation: Panayotov et al., “Librispeech: An ASR corpus based on public domain
+  audio books,” ICASSP 2015.
+- Files extracted from `dev-clean-2`, converted to 16 kHz mono IEEE float32 WAV.
+- Official transcripts are uppercase; tests normalize before WER scoring.
+
+Do not replace with proprietary recordings. Prefer OpenSLR / LibriSpeech /
+CC0 Common Voice when adding more.
