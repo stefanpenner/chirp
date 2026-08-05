@@ -65,7 +65,10 @@ Scale 1–5. Higher = better for Chirp’s product.
 4. **FluidAudio ANE DEFERRED** (`yodel-ckb`): SPM package is fine (MIT/Apache + binary NemoTextProcessing), but Chirp **ships via Bazel** (`ChirpLib` + vendored sherpa/ORT). Pulling FluidAudio means rules_swift remote package **or** vendored framework + multi‑GB CoreML model manager + code-sign story — larger than a trial slice. Modeled in `EngineMode.tla` (`fluid` → offline when `fluidOk=FALSE`); product has no picker case yet. Revisit when re-bench shows ANE energy win on Chirp peek cadence.
 5. **Streaming EOU DEFERRED** (`yodel-88e`): design + TLA shipped — product stays **peekOnly** (offline re-decode cadence). True streaming/EOU needs a streaming ASR (e.g. FluidAudio EOU 120m EN-only) and would auto-commit on EOU; that path is isolated in `StreamingPartial.tla` / `StreamingPartialDecision` and is **not** selectable. Un-defer only with: streaming engine behind optional mode + dual tests + re-bench latency/WER vs peek-only.
 5b. **Empty-total vs live peeks**: **fixed** — flush promotes last non-empty peek when re-decode empty (`DecodePolicy.shouldPromotePeekOnEmptyFlush` / `PeekCommitHyp` PromoteEmpty).
-6. **Re-bench infra shipped** (`yodel-go0` partial): `TranscriptionScoring` live/total + grades; `VoiceCondition`; manual `//:LiveTotalPipelineTests` / `//:VoiceConditionPipelineTests`. Residual: hardware RTF/battery log vs optional engines.
+6. **Re-bench default path DONE** (`yodel-go0`, 2026-08-05, **Apple M4 Pro**): Parakeet TDT 0.6b **v3** int8 + sherpa CPU + Silero.
+   - LiveTotal (`//:LiveTotalPipelineTests`, TTS→stream peeks+flush, n=8 phrases): mean **TOTAL majorWER=0.0%**, TOTAL WER≈2.1%, LIVE major≈3.1%; RTF≈**0.07–0.11** (decode/audio); live peek phrase rate 100%.
+   - Voice conditions (`//:VoiceConditionPipelineTests`): clean/soft/muffled/noisyRoom12 **grade A** (0% major); harshDesk **grade B** mean major 6.2% (PASS under 60% ceiling).
+   - Battery vs FluidAudio/SpeechAnalyzer: **N/A** until those engines ship as selectable modes (no ANE dual path to measure). KEEP default stands.
 7. **Engine mode rigor**: `EngineMode.tla` + `EngineModeDecision` — optional engines fall back to offline; mid-session select defers (with `PipelineRebuild`).
 8. **Partial path rigor**: `StreamingPartial.tla` — peekOnly default; EOU auto-commit only in streamingEOU; partials only in session.
 
@@ -76,6 +79,7 @@ Scale 1–5. Higher = better for Chirp’s product.
 - Prefer smaller decode work per peek (PeekCache / speech-window).
 - Avoid eager VP aggregate devices when idle (lazy prepare + park teardown).
 - ANE trial paths matter most for **battery/thermal** on continuous peek, not one-shot RTF.
+- **M4 Pro log (2026-08-05):** default offline RTF ≪ 1 on short dictation phrases; quality budgets green (see re-bench above).
 
 ## Hostile / adversarial notes
 
@@ -83,9 +87,10 @@ Scale 1–5. Higher = better for Chirp’s product.
 |----|--------|--------|
 | yodel-adv1 | Unbounded `AsyncStream` + RT-thread convert | **fixed**: `bufferingNewest(AudioCapturePolicy.streamBufferChunks)`; convert hops on `chirp.audio.convert` with `ConvertBacklog` |
 | yodel-adv2 | Mid-session config change → stale converter in tap | **fixed**: live `AudioConverterSlot`; convert uses **tap-time snapshot** (not hop re-read) so in-flight buffers keep matching rate/converter |
-| yodel-adv3 | SOTA notes + optional engine trial | **decision + systemSpeech trial shipped**; FluidAudio **deferred** (Bazel); EOU **design/TLA done** (peekOnly kept); re-bench residual |
+| yodel-adv3 | SOTA notes + optional engine trial | **decision + systemSpeech trial shipped**; FluidAudio **deferred** (Bazel); EOU **design/TLA done**; M4 Pro re-bench **logged** |
 | yodel-adv4 | Rejoin dual-consumer without gen cancel | **fixed** (SessionMachine + `consumerGeneration` gate) |
-| clean-pass | Adversarial on audio/status/session/engine | **clean** (2026-08-05): no new material bugs; TLC AppStatus/SessionMachine/EngineMode/PeekCommitHyp green; residual = deferred Fluid/EOU/energy only |
+| yodel-go0 | Re-bench RTF/WER on M4/M5 | **done** (default path M4 Pro 2026-08-05); optional-engine energy N/A until trial ships |
+| clean-pass | Adversarial on audio/status/session/engine | **clean**: no open critical bugs; TLC core machines green; residual = deferred Fluid/EOU engine trials only |
 
 ## Refs
 
