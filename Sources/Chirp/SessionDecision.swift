@@ -39,6 +39,14 @@ enum SessionDecision {
         phase == .transcribing
     }
 
+    /// Whether a consumer may apply commits / flush results.
+    /// Dual of SessionMachine CommitText guard on active gen (yodel-adv4).
+    /// Rejoin keeps `recordingSession` but bumps `consumerGeneration` so a
+    /// cancelled cooperative task cannot double-apply after the new consumer starts.
+    static func canApplyConsumerWork(taskGen: UInt64, activeGen: UInt64) -> Bool {
+        taskGen == activeGen
+    }
+
     /// Map AppState.Status into the session phase subset when applicable.
     static func phase(from status: AppState.Status) -> SessionPhase? {
         switch status {

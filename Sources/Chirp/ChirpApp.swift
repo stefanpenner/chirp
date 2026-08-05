@@ -124,6 +124,11 @@ public final class AppState {
     /// work from a previous recording session.
     private var recordingSession: UInt64 = 0
 
+    /// Bumped on start, rejoin, and cancel. Rejoin keeps `recordingSession`
+    /// (text preserved) but must still kill in-flight consumer commits
+    /// (yodel-adv4 / SessionMachine consumerGen).
+    private var consumerGeneration: UInt64 = 0
+
     /// How long the overlay lingers after final text before hiding (nanoseconds).
     /// Injectable for tests.
     var lingerDuration: UInt64 = 800_000_000
@@ -805,11 +810,13 @@ public final class AppState {
         wordNavIndex = nil
         wordSelectionActive = false
         recordingSession &+= 1
+        consumerGeneration &+= 1
         let session = recordingSession
+        let consumerGen = consumerGeneration
         status = .recording
         hotkeyManager?.sessionActive = true
 
-        startConsumerAndAudio(session: session)
+        startConsumerAndAudio(session: session, consumerGen: consumerGen)
         startPeeking()
 
         overlayPanel?.showOverlay()
@@ -826,16 +833,18 @@ public final class AppState {
         audioRecorder.stopRecording()
 
         let session = recordingSession  // same session — no bump
+        consumerGeneration &+= 1        // kill in-flight apply/flush (yodel-adv4)
+        let consumerGen = consumerGeneration
         status = .recording
         hotkeyManager?.sessionActive = true
 
-        startConsumerAndAudio(session: session)
+        startConsumerAndAudio(session: session, consumerGen: consumerGen)
         startPeeking()
     }
 
     /// Shared setup: creates a new audio stream, starts the recorder,
-    /// and spawns the consumer task for the given session.
-    private func startConsumerAndAudio(session: UInt64) {
+    /// and spawns the consumer task for the given session + consumer gen.
+    private func startConsumerAndAudio(session: UInt64, consumerGen: UInt64) {
         let (stream, continuation) = AsyncStream<[Float]>.makeStream()
         audioContinuation = continuation
 
@@ -857,10 +866,16 @@ public final class AppState {
 
                 let segments = await pipeline.feedAudio(samples: samples)
 
-                // Session guard is sufficient — status may be .transcribing if
-                // stopRecording() ran mid-feedAudio, and we must still process
-                // those results (the VAD already popped them).
-                guard let self, self.recordingSession == session else { break }
+                // Session + consumer gen: rejoin keeps session but bumps gen so
+                // a cancelled dual consumer cannot apply after the new one starts.
+                // Status may be .transcribing if stopRecording() ran mid-feedAudio;
+                // we must still process those results (the VAD already popped them).
+                guard let self,
+                      self.recordingSession == session,
+                      SessionDecision.canApplyConsumerWork(
+                          taskGen: consumerGen,
+                          activeGen: self.consumerGeneration
+                      ) else { break }
 
                 self.audioLevel = level
                 for text in segments {
@@ -874,13 +889,22 @@ public final class AppState {
             // Stream ended (stopRecording finished the continuation).
             // Flush any remaining audio the VAD hasn't emitted yet.
             guard !Task.isCancelled else { return }
-            guard let self, self.recordingSession == session else { return }
+            guard let self,
+                  self.recordingSession == session,
+                  SessionDecision.canApplyConsumerWork(
+                      taskGen: consumerGen,
+                      activeGen: self.consumerGeneration
+                  ) else { return }
 
             let remaining = await pipeline.flush { [weak self] in
                 Task { @MainActor in self?.processingPhase = .fixing }
             }
             guard !Task.isCancelled else { return }
-            guard self.recordingSession == session else { return }
+            guard self.recordingSession == session,
+                  SessionDecision.canApplyConsumerWork(
+                      taskGen: consumerGen,
+                      activeGen: self.consumerGeneration
+                  ) else { return }
             self.processingPhase = .none
             self.speculativeText = ""
             if !remaining.isEmpty {
@@ -1230,8 +1254,17 @@ public final class AppState {
             if !self.transcribedText.isEmpty {
                 try? await Task.sleep(nanoseconds: self.lingerDuration)
                 guard !Task.isCancelled else { return }
-                guard self.recordingSession == session else { return }
+                guard self.recordingSession == session,
+                      SessionDecision.canApplyConsumerWork(
+                          taskGen: consumerGen,
+                          activeGen: self.consumerGeneration
+                      ) else { return }
             }
+            // Rejoin may have started a new consumer; do not force ready.
+            guard SessionDecision.canApplyConsumerWork(
+                taskGen: consumerGen,
+                activeGen: self.consumerGeneration
+            ) else { return }
             self.status = .ready
             self.overlayPanel?.hideOverlay()
             if self.pipelineNeedsRebuild {
@@ -3855,6 +3888,7 @@ public final class AppState {
         audioRecorder.stopRecording()
 
         recordingSession &+= 1  // discard in-flight async work
+        consumerGeneration &+= 1
         transcribedText = ""
         speculativeText = ""
         editStack.clear()

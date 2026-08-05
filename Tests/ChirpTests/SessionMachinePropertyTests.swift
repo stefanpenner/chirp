@@ -87,6 +87,25 @@ struct SessionMachinePropertyTests {
         #expect(state.transcribedText == "hello world")
     }
 
+    @Test("Rejoin mid-transcribe does not clear text; consumer gen gate rejects stale")
+    func rejoinStaleConsumerGen() {
+        // Pure dual of SessionMachine: rejoin bumps consumer gen; stale task cannot apply.
+        let stale: UInt64 = 1
+        let activeAfterRejoin: UInt64 = 2
+        #expect(SessionDecision.canApplyConsumerWork(taskGen: stale, activeGen: activeAfterRejoin) == false)
+        #expect(SessionDecision.canApplyConsumerWork(taskGen: activeAfterRejoin, activeGen: activeAfterRejoin))
+
+        let state = makeReadyState()
+        state.status = .transcribing
+        state.transcribedText = "keep me"
+        state.startRecording()
+        guard case .recording = state.status else {
+            Issue.record("expected recording after rejoin")
+            return
+        }
+        #expect(state.transcribedText == "keep me")
+    }
+
     // MARK: - Cancel (recording|transcribing → ready, text cleared)
 
     @Test("Cancel from recording clears text and returns ready")

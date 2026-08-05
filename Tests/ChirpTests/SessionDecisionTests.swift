@@ -27,6 +27,14 @@ struct SessionDecisionTests {
         #expect(!SessionDecision.canRejoin(.recording))
     }
 
+    @Test("Consumer gen gate: only matching gen may apply (yodel-adv4)")
+    func consumerGenGate() {
+        #expect(SessionDecision.canApplyConsumerWork(taskGen: 3, activeGen: 3))
+        #expect(!SessionDecision.canApplyConsumerWork(taskGen: 2, activeGen: 3))
+        #expect(!SessionDecision.canApplyConsumerWork(taskGen: 4, activeGen: 3))
+        #expect(SessionDecision.canApplyConsumerWork(taskGen: 0, activeGen: 0))
+    }
+
     @Test("Cancel from recording or transcribing")
     func cancel() {
         #expect(SessionDecision.canCancel(.recording))
