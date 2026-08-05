@@ -22,8 +22,15 @@ struct ChirpApp: App {
     @State private var isMicPickerExpanded = false
     @State private var isAIPickerExpanded = false
 
+    private var statusKind: AppStatusKind {
+        AppStatusDecision.kind(from: appState.status)
+    }
+
     var body: some Scene {
-        MenuBarExtra("Chirp", systemImage: "waveform") {
+        MenuBarExtra(
+            AppStatusDecision.menuBarAccessibilityLabel(statusKind),
+            systemImage: AppStatusDecision.menuBarSystemImage(statusKind)
+        ) {
             VStack(spacing: 0) {
                 statusSection
                 hotkeySection
@@ -98,6 +105,7 @@ struct ChirpApp: App {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
+                .accessibilityLabel("Loading speech model")
             SectionDivider()
         case .error:
             if case .error(let message) = appState.status {
@@ -110,6 +118,7 @@ struct ChirpApp: App {
                     .padding(.horizontal, 12)
                     .padding(.top, 6)
                     .padding(.bottom, 2)
+                    .accessibilityLabel("Setup error: \(message)")
             }
             MenuRow("Retry Setup") { appState.retryDownload() }
             SectionDivider()

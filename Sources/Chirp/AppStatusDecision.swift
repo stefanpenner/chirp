@@ -83,4 +83,33 @@ enum AppStatusDecision {
         case .ready, .recording, .transcribing: return nil
         }
     }
+
+    /// SF Symbol for MenuBarExtra — glanceable boot/session/error without opening the menu.
+    static func menuBarSystemImage(_ kind: AppStatusKind) -> String {
+        switch kind {
+        case .error:
+            return "exclamationmark.triangle.fill"
+        case .needsModel, .downloading, .loadingModel:
+            return "arrow.down.circle"
+        case .recording:
+            return "waveform.circle.fill"
+        case .transcribing:
+            return "ellipsis.circle"
+        case .ready:
+            return "waveform"
+        }
+    }
+
+    /// Accessibility label for the menu bar extra.
+    static func menuBarAccessibilityLabel(_ kind: AppStatusKind) -> String {
+        switch kind {
+        case .needsModel: return "Chirp — speech model required"
+        case .downloading: return "Chirp — downloading speech model"
+        case .loadingModel: return "Chirp — loading speech model"
+        case .error: return "Chirp — setup error, open menu to retry"
+        case .recording: return "Chirp — recording"
+        case .transcribing: return "Chirp — transcribing"
+        case .ready: return "Chirp"
+        }
+    }
 }

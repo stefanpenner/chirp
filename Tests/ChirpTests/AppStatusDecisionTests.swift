@@ -82,4 +82,18 @@ struct AppStatusDecisionTests {
         #expect(AppStatusDecision.statusLabel(.ready) == nil)
         #expect(AppStatusDecision.statusLabel(.recording) == nil)
     }
+
+    @Test("Menu bar symbol distinct for error vs ready vs session")
+    func menuBarSymbols() {
+        let ready = AppStatusDecision.menuBarSystemImage(.ready)
+        let error = AppStatusDecision.menuBarSystemImage(.error)
+        let recording = AppStatusDecision.menuBarSystemImage(.recording)
+        let downloading = AppStatusDecision.menuBarSystemImage(.downloading)
+        #expect(ready == "waveform")
+        #expect(error != ready)
+        #expect(recording != ready)
+        #expect(downloading != ready)
+        #expect(AppStatusDecision.menuBarAccessibilityLabel(.error).contains("error"))
+        #expect(AppStatusDecision.menuBarAccessibilityLabel(.ready) == "Chirp")
+    }
 }

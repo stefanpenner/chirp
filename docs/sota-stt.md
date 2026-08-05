@@ -84,6 +84,7 @@ Scale 1–5. Higher = better for Chirp’s product.
 | yodel-adv2 | Mid-session config change → stale converter in tap | **fixed**: live `AudioConverterSlot`; convert uses **tap-time snapshot** (not hop re-read) so in-flight buffers keep matching rate/converter |
 | yodel-adv3 | SOTA notes + optional engine trial | **decision + systemSpeech trial shipped**; FluidAudio **deferred** (Bazel); EOU/re-bench residual |
 | yodel-adv4 | Rejoin dual-consumer without gen cancel | **fixed** (SessionMachine + `consumerGeneration` gate) |
+| clean-pass | Adversarial on audio/status/session/engine | **clean** (2026-08-05): no new material bugs; TLC AppStatus/SessionMachine/EngineMode/PeekCommitHyp green; residual = deferred Fluid/EOU/energy only |
 
 ## Refs
 
