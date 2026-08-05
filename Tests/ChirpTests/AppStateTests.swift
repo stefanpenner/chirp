@@ -135,9 +135,10 @@ struct AppStateTests {
         // level = min(0.1 * 6, 1) = 0.6
         recorder.lastOnSamples?([0.1, 0.1, 0.1, 0.1])
 
-        for _ in 0..<30 {
+        // Wait for consumer to apply level (not only feedAudio) — CI can be slow.
+        for _ in 0..<50 {
             try await Task.sleep(nanoseconds: 100_000_000)
-            if await mock.feedAudioCallCount > 0 { break }
+            if abs(state.audioLevel - 0.6) < 0.01 { break }
         }
 
         #expect(abs(state.audioLevel - 0.6) < 0.01)
@@ -5878,35 +5879,37 @@ struct AppStateTests {
         let recorder = MockAudioRecorder()
         let inserter = MockTextInserter()
         let (state, _, _, _) = makeAppState(transcriber: mock, recorder: recorder, inserter: inserter)
-        state.lingerDuration = 500_000_000 // 500ms
+        // Long linger so CI can't race past the window before we observe it.
+        state.lingerDuration = 2_000_000_000 // 2s
 
         state.status = .ready
         state.startRecording()
 
-        for _ in 0..<30 {
+        for _ in 0..<50 {
             try await Task.sleep(nanoseconds: 100_000_000)
             if await mock.resetVADCalled { break }
         }
 
         state.stopRecording()
 
-        // Wait for flush to complete but not the linger
-        for _ in 0..<30 {
+        // Wait until flush applied text and we are still lingering as .transcribing.
+        var sawTranscribing = false
+        for _ in 0..<50 {
             try await Task.sleep(nanoseconds: 50_000_000)
-            if await mock.flushCalled { break }
+            if case .transcribing = state.status, !state.transcribedText.isEmpty {
+                sawTranscribing = true
+                break
+            }
         }
-        // Give a moment for flush result to be processed
-        try await Task.sleep(nanoseconds: 50_000_000)
 
-        // Status should still be .transcribing during linger
-        guard case .transcribing = state.status else {
-            Issue.record("Expected .transcribing during linger, got \(state.status)")
+        guard sawTranscribing, case .transcribing = state.status else {
+            Issue.record("Expected .transcribing during linger, got \(state.status) text=\"\(state.transcribedText)\"")
             return
         }
         #expect(state.transcribedText == "Hello")
 
         // Wait for linger to expire
-        for _ in 0..<30 {
+        for _ in 0..<50 {
             try await Task.sleep(nanoseconds: 100_000_000)
             if case .ready = state.status { break }
         }
