@@ -7,8 +7,9 @@
 // startRecording/stopRecording only install/remove the tap — near-instant.
 //
 // yodel-adv1: convert hops off the I/O thread; AsyncStream is bounded at the
-// consumer. yodel-adv2: converter lives in a slot the tap re-reads each buffer
-// so mid-session rebuildConverter is visible without reinstalling the tap.
+// consumer. yodel-adv2: converter lives in a slot; each tap snapshots the slot
+// so rebuildConverter is visible on the next buffer without reinstalling the
+// tap, and in-flight hops keep the format that matched their mono copy.
 
 @preconcurrency import AVFoundation
 import CoreAudio
@@ -371,15 +372,19 @@ final class AudioRecorder: AudioRecording {
             // Buffer is only valid inside this callback — copy before hop.
             guard let monoSource = Self.copyMonoSource(buffer) else { return }
 
-            // Shared convert body: re-read slot each hop (yodel-adv2).
+            // Snapshot at tap time so convert matches *this* buffer's format.
+            // Re-reading the slot on the hop queue races rebuildConverter and can
+            // pair an old mono copy with a new converter/rate (yodel-adv2 residual).
+            // Subsequent taps still see live rebuilds via a fresh snapshot.
+            let snap = slot.snapshot()
+
             let convertAndDeliver: @Sendable () -> Void = {
-                let live = slot.snapshot()
                 if let chunk = Self.convertToTarget(
                     source: monoSource,
-                    converter: live.converter,
-                    targetFormat: live.targetFormat,
-                    inputSampleRate: live.inputSampleRate,
-                    outputRate: live.outputRate
+                    converter: snap.converter,
+                    targetFormat: snap.targetFormat,
+                    inputSampleRate: snap.inputSampleRate,
+                    outputRate: snap.outputRate
                 ) {
                     onSamples(chunk)
                 }

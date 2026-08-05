@@ -272,4 +272,49 @@ struct AudioRecorderTapBlockTests {
         #expect(received.samples[0].count > 1400)
         #expect(backlog.pending == 0)
     }
+
+    @Test("In-flight hop keeps tap-time snapshot after mid-queue rebuild (yodel-adv2)")
+    func inFlightHopKeepsTapSnapshot() async {
+        let (conv48, dst) = Self.makeFormats(srcRate: 48000, dstRate: 16000, srcChannels: 1)
+        let slot = AudioConverterSlot(
+            converter: conv48,
+            targetFormat: dst,
+            inputSampleRate: 48000,
+            outputRate: 16000
+        )
+        let gate = DispatchSemaphore(value: 0)
+        let queue = DispatchQueue(label: "test.chirp.convert.gate")
+        let received = SampleCollector()
+        let tap = AudioRecorder.makeTapBlock(
+            slot: slot,
+            convertQueue: queue,
+            backlog: ConvertBacklog(maxPending: 8),
+            onSamples: { received.append($0) }
+        )
+
+        // Block the convert queue so the hop stays in-flight.
+        queue.async { gate.wait() }
+
+        tap(Self.sineBuffer(sampleRate: 48000, frameCount: 4800), Self.dummyTime)
+
+        // Rebuild slot while hop is queued (would poison convert if re-read live).
+        let (conv24, _) = Self.makeFormats(srcRate: 24000, dstRate: 16000, srcChannels: 1)
+        slot.update(
+            converter: conv24,
+            targetFormat: dst,
+            inputSampleRate: 24000,
+            outputRate: 16000
+        )
+
+        gate.signal()
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            queue.async { cont.resume() }
+        }
+
+        #expect(received.count == 1)
+        // 4800 @ 48 kHz → ~1600; wrong (24 kHz) math would yield ~3200.
+        let count = received.samples[0].count
+        #expect(count > 1400 && count < 1800,
+                "In-flight buffer must use 48 kHz snapshot; got \(count)")
+    }
 }

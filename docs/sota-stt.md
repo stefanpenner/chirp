@@ -62,7 +62,10 @@ Scale 1–5. Higher = better for Chirp’s product.
 3. **TRIAL shipped**: `TranscriptionMode.systemSpeech` → `SystemSpeechClient` + `SystemSpeechAvailability`.
    - AI mode picker: “Apple Speech (trial)”. Flush via SpeechAnalyzer file path; peek still Parakeet.
    - Fallback to offline if OS &lt; 26. Pillars: SOTA↑ optional, local (on-device OS model), default path untouched.
-4. **Still open**: FluidAudio ANE energy path; true streaming EOU partials; re-bench RTF/WER/battery on M4/M5 before any default swap.
+4. **Still open**: FluidAudio ANE energy path (`yodel-ckb`); true streaming EOU partials (`yodel-88e`); full M4/M5 energy numbers before any default swap.
+5. **Re-bench infra shipped** (`yodel-go0` partial): `TranscriptionScoring` live/total + grades; `VoiceCondition` soft/muffle/noise; manual suites
+   `//:LiveTotalPipelineTests`, `//:VoiceConditionPipelineTests` (TTS → stream peek + flush → WER ceilings).
+   Not yet: battery/RTF side-by-side vs FluidAudio/SpeechAnalyzer on M4/M5 hardware log.
 
 ## m4/m5 practical notes (Chirp)
 
@@ -77,7 +80,7 @@ Scale 1–5. Higher = better for Chirp’s product.
 | ID | Topic | Status |
 |----|--------|--------|
 | yodel-adv1 | Unbounded `AsyncStream` + RT-thread convert | **fixed**: `bufferingNewest(AudioCapturePolicy.streamBufferChunks)`; convert hops on `chirp.audio.convert` with `ConvertBacklog` |
-| yodel-adv2 | Mid-session config change → stale converter in tap | **fixed**: `AudioConverterSlot` re-read each buffer; `rebuildConverter` updates live slot |
+| yodel-adv2 | Mid-session config change → stale converter in tap | **fixed**: live `AudioConverterSlot`; convert uses **tap-time snapshot** (not hop re-read) so in-flight buffers keep matching rate/converter |
 | yodel-adv3 | SOTA notes + optional engine trial | **decision + systemSpeech trial shipped** (FluidAudio/EOU/re-bench open) |
 | yodel-adv4 | Rejoin dual-consumer without gen cancel | **fixed** (SessionMachine + `consumerGeneration` gate) |
 

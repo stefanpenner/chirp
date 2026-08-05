@@ -802,7 +802,8 @@ public final class AppState {
             triggerDownloadNudge()
             return
         }
-        if AppStatusDecision.shouldStartDownloadOnHotkey(kind) {
+        // needsModel | error → download/retry (AppStatus StartDownload dual)
+        if AppStatusDecision.canRetryDownload(kind) {
             ensureModel()
             return
         }

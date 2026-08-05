@@ -46,9 +46,10 @@ enum AppStatusDecision {
         kind == .downloading || kind == .loadingModel
     }
 
-    /// Hotkey with no model → kick ensureModel / download.
+    /// Hotkey with no model or after error → kick ensureModel / download.
+    /// Same gate as `canRetryDownload` (AppStatus StartDownload dual).
     static func shouldStartDownloadOnHotkey(_ kind: AppStatusKind) -> Bool {
-        kind == .needsModel
+        canRetryDownload(kind)
     }
 
     /// ready → recording only.

@@ -44,11 +44,12 @@ struct AppStatusDecisionTests {
         #expect(!AppStatusDecision.shouldNudgeInsteadOfRecord(.needsModel))
     }
 
-    @Test("Hotkey starts download only from needsModel")
+    @Test("Hotkey starts download/retry from needsModel or error")
     func hotkeyDownload() {
         #expect(AppStatusDecision.shouldStartDownloadOnHotkey(.needsModel))
-        #expect(!AppStatusDecision.shouldStartDownloadOnHotkey(.error))
+        #expect(AppStatusDecision.shouldStartDownloadOnHotkey(.error))
         #expect(!AppStatusDecision.shouldStartDownloadOnHotkey(.ready))
+        #expect(!AppStatusDecision.shouldStartDownloadOnHotkey(.downloading))
     }
 
     @Test("Session entry only from ready; rejoin from transcribing")
