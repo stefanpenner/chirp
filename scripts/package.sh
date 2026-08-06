@@ -80,6 +80,29 @@ main() {
     # Copy entitlements (needed for signing step)
     local entitlements="$root/Sources/Chirp/Chirp.entitlements"
 
+    # Bazel zip → unzip drops +x on Sparkle helpers (Autoupdate, Updater, XPCs).
+    # launchd then fails with errno 13 and Sparkle shows:
+    #   "An error occurred while running the updater... may not have executable permissions"
+    if [[ -d "$frameworks/Sparkle.framework" ]]; then
+        echo "==> Restoring Sparkle helper execute bits..."
+        # Known helper binaries
+        find "$frameworks/Sparkle.framework" -type f \( \
+            -name 'Autoupdate' -o -name 'Sparkle' -o -name 'Updater' \
+            -o -name 'Installer' -o -name 'Downloader' \
+            -o -path '*/MacOS/*' \
+        \) -exec chmod a+x {} +
+        # Fail package if Autoupdate is still not executable
+        local autoupdate="$frameworks/Sparkle.framework/Versions/B/Autoupdate"
+        if [[ -f "$autoupdate" && ! -x "$autoupdate" ]]; then
+            echo "ERROR: $autoupdate is not executable after chmod"
+            ls -la "$autoupdate"
+            exit 1
+        fi
+        if [[ -f "$autoupdate" ]]; then
+            echo "    Autoupdate mode: $(stat -f '%Sp' "$autoupdate")"
+        fi
+    fi
+
     echo "==> Cleaning rpaths on binary..."
     # Remove build-time toolchain rpaths, keep only @executable_path/../Frameworks
     for rp in $(otool -l "$macos/Chirp" | grep -A2 "cmd LC_RPATH" | grep "^\s*path" | awk '{print $2}'); do
@@ -135,8 +158,13 @@ main() {
         codesign --force --sign "$signing_identity" --timestamp --options runtime \
             "${preserve[@]}" "$frameworks/Sparkle.framework"
 
-        # Sanity: Autoupdate must still carry an application-identifier entitlement
+        # Sanity: Autoupdate must stay executable + keep application-identifier
         if [[ -f "$sparkle_b/Autoupdate" ]]; then
+            if [[ ! -x "$sparkle_b/Autoupdate" ]]; then
+                echo "ERROR: Sparkle Autoupdate is not executable after signing"
+                ls -la "$sparkle_b/Autoupdate"
+                exit 1
+            fi
             local ents
             ents="$(codesign -d --entitlements :- "$sparkle_b/Autoupdate" 2>/dev/null || true)"
             if [[ "$ents" != *"application-identifier"* && "$signing_identity" != "-" ]]; then
@@ -144,7 +172,7 @@ main() {
                 echo "$ents"
                 exit 1
             fi
-            echo "    Sparkle Autoupdate entitlements preserved"
+            echo "    Sparkle Autoupdate: executable + entitlements OK"
         fi
     fi
 
