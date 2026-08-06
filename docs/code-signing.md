@@ -376,11 +376,22 @@ Sign inside-out — innermost binaries first, then the outer bundle:
 # 1. Dylibs — timestamp only, no hardened runtime needed
 codesign --force --sign "$IDENTITY" --timestamp libfoo.dylib
 
-# 2. Framework executables, then the framework itself
+# 2. Sparkle helpers (inside-out) — MUST preserve entitlements
+#    Stripping Autoupdate entitlements breaks in-app updates with:
+#    "An error occurred while running the updater"
+SPARKLE=Sparkle.framework/Versions/B
+for xpc in "$SPARKLE"/XPCServices/*.xpc; do
+  codesign --force --sign "$IDENTITY" --timestamp --options runtime \
+    --preserve-metadata=entitlements,flags,runtime "$xpc"
+done
 codesign --force --sign "$IDENTITY" --timestamp --options runtime \
-    Sparkle.framework/Versions/B/Sparkle
-codesign --force --sign "$IDENTITY" --timestamp --options runtime --deep \
-    Sparkle.framework
+  --preserve-metadata=entitlements,flags,runtime "$SPARKLE/Autoupdate"
+codesign --force --sign "$IDENTITY" --timestamp --options runtime \
+  --preserve-metadata=entitlements,flags,runtime "$SPARKLE/Updater.app"
+codesign --force --sign "$IDENTITY" --timestamp --options runtime \
+  --preserve-metadata=entitlements,flags,runtime "$SPARKLE/Sparkle"
+codesign --force --sign "$IDENTITY" --timestamp --options runtime \
+  --preserve-metadata=entitlements,flags,runtime Sparkle.framework
 
 # 3. App bundle — with entitlements and hardened runtime
 codesign --force --sign "$IDENTITY" --timestamp --options runtime \

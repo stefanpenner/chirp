@@ -101,35 +101,51 @@ main() {
     codesign --force --sign "$signing_identity" --timestamp \
         "$frameworks/libsherpa-onnx-c-api.dylib"
 
-    # Sign Sparkle.framework inside-out. Autoupdate + XPC live outside */MacOS/*
-    # — a path-only find misses them and leaves helpers with broken team linkage
-    # for in-app updates ("An error occurred while running the updater").
+    # Sign Sparkle.framework inside-out (Sparkle 2 docs).
+    # CRITICAL: --preserve-metadata=entitlements — bare re-sign strips Autoupdate's
+    # application-identifier and XPC entitlements, which surfaces as:
+    #   "An error occurred while running the updater. Please try again later."
     if [[ -d "$frameworks/Sparkle.framework" ]]; then
         local sparkle_b
         sparkle_b="$frameworks/Sparkle.framework/Versions/B"
-        # XPC services first
+        local preserve=(--preserve-metadata=entitlements,flags,runtime)
+
+        # XPC services first (innermost)
         if [[ -d "$sparkle_b/XPCServices" ]]; then
             find "$sparkle_b/XPCServices" -name '*.xpc' -type d | while read -r xpc; do
-                codesign --force --sign "$signing_identity" --timestamp --options runtime "$xpc"
+                codesign --force --sign "$signing_identity" --timestamp --options runtime \
+                    "${preserve[@]}" "$xpc"
             done
         fi
-        # Autoupdate binary (not under MacOS/)
+        # Autoupdate binary (not under MacOS/) — must keep app-id entitlement
         if [[ -f "$sparkle_b/Autoupdate" ]]; then
             codesign --force --sign "$signing_identity" --timestamp --options runtime \
-                "$sparkle_b/Autoupdate"
+                "${preserve[@]}" "$sparkle_b/Autoupdate"
         fi
         # Updater.app
         if [[ -d "$sparkle_b/Updater.app" ]]; then
             codesign --force --sign "$signing_identity" --timestamp --options runtime \
-                "$sparkle_b/Updater.app"
+                "${preserve[@]}" "$sparkle_b/Updater.app"
         fi
-        # Framework binary + bundle
+        # Framework binary + outer framework bundle
         if [[ -f "$sparkle_b/Sparkle" ]]; then
             codesign --force --sign "$signing_identity" --timestamp --options runtime \
-                "$sparkle_b/Sparkle"
+                "${preserve[@]}" "$sparkle_b/Sparkle"
         fi
         codesign --force --sign "$signing_identity" --timestamp --options runtime \
-            "$frameworks/Sparkle.framework"
+            "${preserve[@]}" "$frameworks/Sparkle.framework"
+
+        # Sanity: Autoupdate must still carry an application-identifier entitlement
+        if [[ -f "$sparkle_b/Autoupdate" ]]; then
+            local ents
+            ents="$(codesign -d --entitlements :- "$sparkle_b/Autoupdate" 2>/dev/null || true)"
+            if [[ "$ents" != *"application-identifier"* && "$signing_identity" != "-" ]]; then
+                echo "ERROR: Sparkle Autoupdate lost entitlements after re-sign (updater will fail)"
+                echo "$ents"
+                exit 1
+            fi
+            echo "    Sparkle Autoupdate entitlements preserved"
+        fi
     fi
 
     # Sign the app bundle with entitlements and hardened runtime
