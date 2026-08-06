@@ -2,6 +2,7 @@
 // Renders the menu bar extra (hotkey, quit).
 // All logic lives in AppState; this file is just the SwiftUI shell.
 
+import AppKit
 import Chirp
 import Combine
 @preconcurrency import Sparkle
@@ -19,6 +20,13 @@ private final class ChirpUpdaterDelegate: NSObject, SPUUpdaterDelegate, @uncheck
               ns.domain as NSString,
               ns.code,
               String(describing: ns.userInfo) as NSString)
+        // Permission denied on Autoupdate (errno 13) → open downloads.
+        let desc = error.localizedDescription.lowercased()
+        if desc.contains("executable permissions") || desc.contains("autoupdate") {
+            DispatchQueue.main.async {
+                NSWorkspace.shared.open(CheckForUpdatesViewModel.manualDownloadURL)
+            }
+        }
     }
 
     func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: Error) {
@@ -506,13 +514,47 @@ final class CheckForUpdatesViewModel: ObservableObject {
     @Published var canCheckForUpdates = false
     private let updater: SPUUpdater
 
+    /// Manual install page when embedded Sparkle Autoupdate cannot run.
+    static let manualDownloadURL = URL(string: "https://github.com/stefanpenner/chirp/releases/latest")!
+
     init(updater: SPUUpdater) {
         self.updater = updater
         updater.publisher(for: \.canCheckForUpdates)
             .assign(to: &$canCheckForUpdates)
     }
 
+    /// Sparkle Autoupdate helper path (nil if framework missing).
+    static var autoupdateURL: URL? {
+        Bundle.main.privateFrameworksURL?
+            .appendingPathComponent("Sparkle.framework/Versions/B/Autoupdate")
+    }
+
+    /// launchd needs X_OK on Autoupdate; zip packaging used to drop +x.
+    static var isAutoupdateExecutable: Bool {
+        guard let url = autoupdateURL else { return false }
+        return FileManager.default.isExecutableFile(atPath: url.path)
+    }
+
     func checkForUpdates() {
+        if !Self.isAutoupdateExecutable {
+            NSLog("Chirp: Sparkle Autoupdate missing or not executable at %@",
+                  Self.autoupdateURL?.path ?? "(nil)")
+            let alert = NSAlert()
+            alert.messageText = "Update helper is damaged"
+            alert.informativeText = """
+                This install of Chirp cannot update itself (Sparkle Autoupdate is not executable).
+
+                Install the latest build from GitHub Releases, or:
+                brew upgrade --cask stefanpenner/chirp/chirp
+                """
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Open Download Page")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(Self.manualDownloadURL)
+            }
+            return
+        }
         updater.checkForUpdates()
     }
 }
