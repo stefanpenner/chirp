@@ -189,19 +189,45 @@ main() {
     echo "==> Creating DMG..."
     rm -f "$dist/$dmg_name"
 
-    # Create a temporary directory for DMG contents
-    local dmg_stage="$dist/dmg-stage"
-    rm -rf "$dmg_stage"
-    mkdir -p "$dmg_stage"
+    # Stage on /tmp (often more free space than workspace on CI runners)
+    local dmg_stage
+    dmg_stage="$(mktemp -d /tmp/chirp-dmg-XXXXXX)"
     cp -R "$app" "$dmg_stage/"
+    # Re-assert execute bits after copy (cp can drop them on some volumes)
+    if [[ -d "$dmg_stage/Chirp.app/Contents/Frameworks/Sparkle.framework" ]]; then
+        find "$dmg_stage/Chirp.app/Contents/Frameworks/Sparkle.framework" -type f \( \
+            -name 'Autoupdate' -o -name 'Sparkle' -o -name 'Updater' \
+            -o -name 'Installer' -o -name 'Downloader' -o -path '*/MacOS/*' \
+        \) -exec chmod a+x {} +
+    fi
     ln -s /Applications "$dmg_stage/Applications"
 
+    # UDZO is smaller than uncompressed; write to /tmp then move into dist
+    local dmg_tmp="$dmg_stage/../Chirp-v${version}-macOS.dmg"
+    dmg_tmp="$(mktemp /tmp/Chirp-XXXXXX.dmg)"
+    rm -f "$dmg_tmp"
     hdiutil create -volname "Chirp" \
         -srcfolder "$dmg_stage" \
         -ov -format UDZO \
-        "$dist/$dmg_name"
+        -imagekey zlib-level=9 \
+        "$dmg_tmp"
+    mv "$dmg_tmp" "$dist/$dmg_name"
 
+    # Final gate: Autoupdate must be executable inside the DMG
+    local mnt
+    mnt="$(mktemp -d /tmp/chirp-mnt-XXXXXX)"
+    hdiutil attach "$dist/$dmg_name" -readonly -nobrowse -mountpoint "$mnt" >/dev/null
+    if [[ ! -x "$mnt/Chirp.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate" ]]; then
+        echo "ERROR: Autoupdate not executable inside DMG"
+        ls -la "$mnt/Chirp.app/Contents/Frameworks/Sparkle.framework/Versions/B/" || true
+        hdiutil detach "$mnt" >/dev/null 2>&1 || true
+        exit 1
+    fi
+    echo "    DMG Autoupdate is executable"
+    hdiutil detach "$mnt" >/dev/null
+    rmdir "$mnt" 2>/dev/null || true
     rm -rf "$dmg_stage"
+
 
     # Notarize if configured
     if [[ -n "$notarize_profile" ]]; then

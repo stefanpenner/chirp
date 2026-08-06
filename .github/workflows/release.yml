@@ -117,6 +117,16 @@ jobs:
           echo "number=$BUILD" >> "$GITHUB_OUTPUT"
           echo "Build number: $BUILD (from semver $VERSION)"
 
+      - name: Free disk space
+        run: |
+          # macOS runners fill up during bazel + notarize; free non-essential caches
+          df -h /
+          rm -rf "$HOME/Library/Caches/Homebrew"/* 2>/dev/null || true
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"/* 2>/dev/null || true
+          # Drop old bazel outputs if present (rebuild already done after)
+          rm -rf /tmp/Sparkle* /tmp/sparkle* 2>/dev/null || true
+          df -h /
+
       - name: Build and package
         run: scripts/package.sh ${{ steps.version.outputs.version }} ${{ steps.build.outputs.number }}
 
