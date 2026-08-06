@@ -120,14 +120,24 @@ main() {
     local appcast="$root/appcast.xml"
     local size date url item ed_sig
 
-    size=$(stat -f%z "$dmg_path")
+    # Prefer Sparkle zip (preserves +x, simpler install). Fall back to DMG path arg.
+    local archive_path="$dmg_path"
+    local archive_name="Chirp-v${version}-macOS.zip"
+    local zip_candidate
+    zip_candidate="$(dirname "$dmg_path")/$archive_name"
+    if [[ -f "$zip_candidate" ]]; then
+        archive_path="$zip_candidate"
+    fi
+    local ext="${archive_path##*.}"
+
+    size=$(stat -f%z "$archive_path")
     date=$(date -R)
-    url="https://github.com/stefanpenner/chirp/releases/download/v${version}/Chirp-v${version}-macOS.dmg"
-    ed_sig="$(sparkle_ed_signature "$dmg_path")"
+    url="https://github.com/stefanpenner/chirp/releases/download/v${version}/Chirp-v${version}-macOS.${ext}"
+    ed_sig="$(sparkle_ed_signature "$archive_path")"
 
     item="$(generate_appcast_item "$version" "$build_number" "$url" "$size" "$date" "$ed_sig")"
     insert_appcast_item "$appcast" "$item"
-    echo "Appcast item: v${version} build ${build_number} edSig=${ed_sig:+yes}${ed_sig:-no}"
+    echo "Appcast item: v${version} build ${build_number} archive=${ext} edSig=${ed_sig:+yes}${ed_sig:-no}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

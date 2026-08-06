@@ -141,7 +141,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: dist/Chirp-v${{ steps.version.outputs.version }}-macOS.dmg
+          files: |
+            dist/Chirp-v${{ steps.version.outputs.version }}-macOS.dmg
+            dist/Chirp-v${{ steps.version.outputs.version }}-macOS.zip
           tag_name: v${{ steps.version.outputs.version }}
 
       - name: Update Sparkle appcast
@@ -149,6 +151,7 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+          # Prefer zip for Sparkle (update-appcast picks zip next to dmg if present)
           DMG_PATH="dist/Chirp-v${VERSION}-macOS.dmg"
           # Checkout main so we can push (tag builds run on detached HEAD)
           git fetch origin main

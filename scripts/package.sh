@@ -64,6 +64,18 @@ main() {
     local macos="$contents/MacOS"
     local frameworks="$contents/Frameworks"
     local dmg_name="Chirp-v${version}-macOS.dmg"
+    # Zip is the preferred Sparkle update archive (preserves +x; simpler install).
+    local zip_name="Chirp-v${version}-macOS.zip"
+
+    restore_sparkle_executables() {
+        local root_fw="$1"
+        [[ -d "$root_fw" ]] || return 0
+        find "$root_fw" -type f \( \
+            -name 'Autoupdate' -o -name 'Sparkle' -o -name 'Updater' \
+            -o -name 'Installer' -o -name 'Downloader' \
+            -o -path '*/MacOS/*' \
+        \) -exec chmod a+x {} +
+    }
 
     echo "==> Building Chirp with Bazel..."
     cd "$root"
@@ -85,13 +97,7 @@ main() {
     #   "An error occurred while running the updater... may not have executable permissions"
     if [[ -d "$frameworks/Sparkle.framework" ]]; then
         echo "==> Restoring Sparkle helper execute bits..."
-        # Known helper binaries
-        find "$frameworks/Sparkle.framework" -type f \( \
-            -name 'Autoupdate' -o -name 'Sparkle' -o -name 'Updater' \
-            -o -name 'Installer' -o -name 'Downloader' \
-            -o -path '*/MacOS/*' \
-        \) -exec chmod a+x {} +
-        # Fail package if Autoupdate is still not executable
+        restore_sparkle_executables "$frameworks/Sparkle.framework"
         local autoupdate="$frameworks/Sparkle.framework/Versions/B/Autoupdate"
         if [[ -f "$autoupdate" && ! -x "$autoupdate" ]]; then
             echo "ERROR: $autoupdate is not executable after chmod"
@@ -186,24 +192,47 @@ main() {
     codesign --verify --deep --strict "$app"
     echo "    Signature OK"
 
+    # --- Sparkle update archive (zip) — preferred by Sparkle 2 ---
+    echo "==> Creating update zip (Sparkle)..."
+    rm -f "$dist/$zip_name"
+    # ditto preserves execute bits; plain zip often does not.
+    (cd "$dist" && ditto -c -k --keepParent "Chirp.app" "$zip_name")
+    local zip_check
+    zip_check="$(mktemp -d /tmp/chirp-zipchk-XXXXXX)"
+    unzip -q -j "$dist/$zip_name" \
+        "Chirp.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate" \
+        -d "$zip_check" || true
+    if [[ ! -x "$zip_check/Autoupdate" ]]; then
+        echo "    Autoupdate not +x after unzip; re-chmod app and re-zip"
+        restore_sparkle_executables "$frameworks/Sparkle.framework"
+        chmod a+x "$frameworks/Sparkle.framework/Versions/B/Autoupdate" 2>/dev/null || true
+        rm -f "$dist/$zip_name"
+        (cd "$dist" && ditto -c -k --keepParent "Chirp.app" "$zip_name")
+        rm -rf "$zip_check"
+        zip_check="$(mktemp -d /tmp/chirp-zipchk-XXXXXX)"
+        unzip -q -j "$dist/$zip_name" \
+            "Chirp.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate" \
+            -d "$zip_check"
+        if [[ ! -x "$zip_check/Autoupdate" ]]; then
+            echo "ERROR: Autoupdate still not executable inside update zip"
+            ls -la "$zip_check" || true
+            exit 1
+        fi
+    fi
+    rm -rf "$zip_check"
+    echo "    ZIP Autoupdate is executable ($(stat -f%z "$dist/$zip_name") bytes)"
+
+    # --- DMG for manual / Homebrew install ---
     echo "==> Creating DMG..."
     rm -f "$dist/$dmg_name"
 
-    # Stage on /tmp (often more free space than workspace on CI runners)
     local dmg_stage
     dmg_stage="$(mktemp -d /tmp/chirp-dmg-XXXXXX)"
-    cp -R "$app" "$dmg_stage/"
-    # Re-assert execute bits after copy (cp can drop them on some volumes)
-    if [[ -d "$dmg_stage/Chirp.app/Contents/Frameworks/Sparkle.framework" ]]; then
-        find "$dmg_stage/Chirp.app/Contents/Frameworks/Sparkle.framework" -type f \( \
-            -name 'Autoupdate' -o -name 'Sparkle' -o -name 'Updater' \
-            -o -name 'Installer' -o -name 'Downloader' -o -path '*/MacOS/*' \
-        \) -exec chmod a+x {} +
-    fi
+    ditto "$app" "$dmg_stage/Chirp.app"
+    restore_sparkle_executables "$dmg_stage/Chirp.app/Contents/Frameworks/Sparkle.framework"
     ln -s /Applications "$dmg_stage/Applications"
 
-    # UDZO is smaller than uncompressed; write to /tmp then move into dist
-    local dmg_tmp="$dmg_stage/../Chirp-v${version}-macOS.dmg"
+    local dmg_tmp
     dmg_tmp="$(mktemp /tmp/Chirp-XXXXXX.dmg)"
     rm -f "$dmg_tmp"
     hdiutil create -volname "Chirp" \
@@ -213,7 +242,6 @@ main() {
         "$dmg_tmp"
     mv "$dmg_tmp" "$dist/$dmg_name"
 
-    # Final gate: Autoupdate must be executable inside the DMG
     local mnt
     mnt="$(mktemp -d /tmp/chirp-mnt-XXXXXX)"
     hdiutil attach "$dist/$dmg_name" -readonly -nobrowse -mountpoint "$mnt" >/dev/null
@@ -228,33 +256,47 @@ main() {
     rmdir "$mnt" 2>/dev/null || true
     rm -rf "$dmg_stage"
 
-
-    # Notarize if configured
+    # Notarize if configured (zip for Sparkle + DMG for humans)
     if [[ -n "$notarize_profile" ]]; then
-        echo "==> Notarizing DMG..."
+        echo "==> Notarizing update zip..."
         local notarize_output
-        notarize_output=$(xcrun notarytool submit "$dist/$dmg_name" \
+        notarize_output=$(xcrun notarytool submit "$dist/$zip_name" \
             --keychain-profile "$notarize_profile" \
             --wait 2>&1)
         echo "$notarize_output"
-
         if echo "$notarize_output" | grep -q "status: Invalid"; then
             local submission_id
             submission_id=$(echo "$notarize_output" | grep "id:" | head -1 | awk '{print $2}')
-            echo "ERROR: Notarization failed. Fetching details..."
+            echo "ERROR: Zip notarization failed."
             xcrun notarytool log "$submission_id" \
                 --keychain-profile "$notarize_profile" 2>&1 || true
             exit 1
         fi
 
-        echo "==> Stapling notarization ticket..."
+        echo "==> Notarizing DMG..."
+        notarize_output=$(xcrun notarytool submit "$dist/$dmg_name" \
+            --keychain-profile "$notarize_profile" \
+            --wait 2>&1)
+        echo "$notarize_output"
+        if echo "$notarize_output" | grep -q "status: Invalid"; then
+            local submission_id
+            submission_id=$(echo "$notarize_output" | grep "id:" | head -1 | awk '{print $2}')
+            echo "ERROR: DMG notarization failed."
+            xcrun notarytool log "$submission_id" \
+                --keychain-profile "$notarize_profile" 2>&1 || true
+            exit 1
+        fi
+
+        echo "==> Stapling notarization ticket on DMG..."
         xcrun stapler staple "$dist/$dmg_name"
+        # Zip cannot be stapled; Gatekeeper fetches ticket online.
     fi
 
     echo ""
     echo "Done! Outputs:"
     echo "  App: $app"
-    echo "  DMG: $dist/$dmg_name"
+    echo "  ZIP (Sparkle): $dist/$zip_name"
+    echo "  DMG (manual):  $dist/$dmg_name"
     echo ""
     echo "Verify with:"
     echo "  otool -l $macos/Chirp | grep -A2 LC_RPATH"
